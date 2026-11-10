@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { getString } from '../../lib/i18n/index';
 import { Topbar } from './Topbar';
 import { Sidebar } from './Sidebar';
@@ -18,7 +18,6 @@ export function PageWrapper() {
   const isWatchSidebarOpen = useUiStore((s) => s.isWatchSidebarOpen);
   const setWatchSidebarOpen = useUiStore((s) => s.setWatchSidebarOpen);
   const isWatchPage = location.pathname.startsWith('/watch/');
-  const [isWatchScrolled, setIsWatchScrolled] = useState(false);
   const isSettingsPage = location.pathname.startsWith('/settings');
   const isPlaylistDetailsPage =
     location.pathname.startsWith('/playlist/') ||
@@ -48,18 +47,6 @@ export function PageWrapper() {
     main.addEventListener('scroll', onScroll, { passive: true });
     return () => main.removeEventListener('scroll', onScroll);
   }, []);
-
-  useEffect(() => {
-    const main = mainRef.current;
-    if (!main) return;
-    const handleScroll = () => {
-      const scrolled = isWatchPage && main.scrollTop > 20;
-      setIsWatchScrolled((prev) => (prev !== scrolled ? scrolled : prev));
-    };
-    handleScroll();
-    main.addEventListener('scroll', handleScroll, { passive: true });
-    return () => main.removeEventListener('scroll', handleScroll);
-  }, [isWatchPage]);
 
   // Back, Forward and tab switches return to where the page was left; anything new starts at the top.
   const pagePath = location.pathname + location.search;
@@ -97,7 +84,7 @@ export function PageWrapper() {
 
   return (
     <div className="flex h-full flex-col bg-background text-chrome-zinc-100 overflow-hidden font-sans">
-      <Topbar isWatchPage={isWatchPage} isScrolled={isWatchScrolled} />
+      <Topbar />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
         <main

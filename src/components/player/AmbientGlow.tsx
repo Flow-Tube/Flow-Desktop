@@ -24,8 +24,7 @@ export function AmbientGlow({ videoRef, intensity, spread }: AmbientGlowProps) {
     <div
       aria-hidden="true"
       data-player-ambient
-      style={spread ? { opacity: Math.max(0.1, Math.min(1, intensity / 100)) } : undefined}
-      className={`pointer-events-none absolute z-0 ${spread ? "ambient-glow-spread transition-opacity duration-150" : "inset-0 overflow-hidden"}`}
+      className={`pointer-events-none absolute z-0 ${spread ? "ambient-glow-spread" : "inset-0 overflow-hidden"}`}
     >
       <canvas ref={canvasRef} width={DISPLAY_W} height={DISPLAY_H} className="block h-full w-full" />
     </div>

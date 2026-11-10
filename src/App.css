@@ -895,7 +895,7 @@
   all the way to zero: Android stops at a screen edge, this one ends on the page.
 */
 .ambient-glow-spread {
-  --ambient-spread: 150px;
+  --ambient-spread: 160px;
   --ambient-fade: rgb(0 0 0 / 0) 0, rgb(0 0 0 / 0.086) calc(var(--ambient-spread) * 0.125),
     rgb(0 0 0 / 0.237) calc(var(--ambient-spread) * 0.25), rgb(0 0 0 / 0.415) calc(var(--ambient-spread) * 0.375),
     rgb(0 0 0 / 0.595) calc(var(--ambient-spread) * 0.5), rgb(0 0 0 / 0.757) calc(var(--ambient-spread) * 0.625),

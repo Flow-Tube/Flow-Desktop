@@ -9,7 +9,6 @@ import { useGridStyle } from '../../lib/useGridColumns';
 import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
 import { useMusicArtistHidden, useMusicHiddenFilter } from '../../store/useMusicActionsStore';
 import { episodeAsSong } from '../../lib/searchResults';
-import { getString } from '../../lib/i18n/index';
 import type { SongItem, YTItem } from '../../types/music';
 
 export default function MusicBrowsePage() {
@@ -26,13 +25,7 @@ export default function MusicBrowsePage() {
     title, browseId, params: browseParams, orderBy: 0,
   } : null, [browseId, browseParams, title]);
   const { items, sections, loading, loadingMore, error, reload, loadMore, hasMore } = useMusicChipFilter(chip);
-  const isPodcastPage = Boolean(
-    title.toLowerCase().includes('podcast') ||
-    (browseParams && browseParams.toLowerCase().includes('podcast')) ||
-    title === t('music_mood_podcasts') ||
-    title === getString('music_mood_podcasts')
-  );
-  const shown = (list: YTItem[]) => list.filter((item) => (isPodcastPage ? true : item.type !== 'podcast' && item.type !== 'episode'))
+  const shown = (list: YTItem[]) => list
     .filter((item) => item.type === 'song' ? !isHidden(item)
       : item.type === 'artist' ? !isArtistHidden(item) : true);
   const visible = shown(items);

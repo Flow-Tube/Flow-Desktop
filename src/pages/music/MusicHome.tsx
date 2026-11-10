@@ -34,8 +34,6 @@ import type { AlbumItem, ArtistItem, MoodAndGenreItem, MusicHomeChip, PlaylistIt
 const songsOf = (items: YTItem[]): SongItem[] =>
   items.flatMap((i) => (i.type === 'song' ? [i] : i.type === 'episode' ? [episodeAsSong(i)] : []));
 
-const renderable = (item: YTItem) => item.type !== 'episode' && item.type !== 'podcast';
-
 const NO_CHIPS: MusicHomeChip[] = [];
 
 // Three full rows of tiles on the widest layout.
@@ -206,13 +204,7 @@ export default function MusicHome() {
     }
 
     if (activeChip) {
-      const isPodcastChip = Boolean(
-        activeChip.title?.toLowerCase().includes('podcast') ||
-        activeChip.params?.toLowerCase().includes('podcast') ||
-        activeMood?.toLowerCase().includes('podcast') ||
-        activeChip.title === getString('music_mood_podcasts')
-      );
-      const items = visible(chipFilter.items.filter((item) => (isPodcastChip ? true : renderable(item))));
+      const items = visible(chipFilter.items);
       const songContext = songsOf(items);
       if (chipFilter.error && items.length === 0) {
         return <div className="flex flex-col items-center gap-3 py-20 text-center">
@@ -264,7 +256,7 @@ export default function MusicHome() {
     };
 
     const renderShelf = (section: MusicFeedSection) => {
-      const items = visible(section.items.filter(renderable)).slice(0, 20);
+      const items = visible(section.items).slice(0, 20);
       if (items.length === 0) return null;
       const songContext = songsOf(items);
       if (section.id === 'speed-dial') {

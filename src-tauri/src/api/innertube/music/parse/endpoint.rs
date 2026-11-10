@@ -28,7 +28,7 @@ pub fn browse_params(nav: &Value) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
-/// The 4-way `videoId` fallback chain used by every song/episode parser.
+/// The `videoId` fallback chain used by every song/episode parser.
 #[must_use]
 pub fn video_id(r: &Value) -> Option<String> {
     r["playlistItemData"]["videoId"]

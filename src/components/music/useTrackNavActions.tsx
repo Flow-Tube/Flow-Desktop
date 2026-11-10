@@ -23,33 +23,18 @@ export function useTrackNavActions(
     }
   }
 
-  if (artistsWithId.length === 1) {
-    const artist = artistsWithId[0];
-    if (artist) {
-      actions.push({
-        id: 'view-artist',
-        label: getString('music_view_artist'),
-        icon: <User size={16} />,
-        group: 'go',
-        onSelect: () => {
-          options?.onNavigate?.();
-          navigate(`/music/artist/${artist.id}`);
-        },
-      });
-    }
-  } else if (artistsWithId.length > 1) {
-    for (const artist of artistsWithId) {
-      actions.push({
-        id: `view-artist-${artist.id}`,
-        label: `${getString('music_view_artist')}: ${artist.name}`,
-        icon: <User size={16} />,
-        group: 'go',
-        onSelect: () => {
-          options?.onNavigate?.();
-          navigate(`/music/artist/${artist.id}`);
-        },
-      });
-    }
+  const named = artistsWithId.length > 1;
+  for (const artist of artistsWithId) {
+    actions.push({
+      id: named ? `view-artist-${artist.id}` : 'view-artist',
+      label: named ? getString('music_view_artist_named', artist.name) : getString('music_view_artist'),
+      icon: <User size={16} />,
+      group: 'go',
+      onSelect: () => {
+        options?.onNavigate?.();
+        navigate(`/music/artist/${artist.id}`);
+      },
+    });
   }
 
   const albumId = track.album?.id ?? null;

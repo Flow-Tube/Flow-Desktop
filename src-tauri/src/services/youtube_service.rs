@@ -59,7 +59,6 @@ impl YoutubeService {
     pub async fn get_video_storyboard(&self, video_id: &str) -> AppResult<Vec<StoryboardLevel>> {
         self.extractor.get_video_storyboard(video_id).await
     }
-    }
 
     pub async fn get_video_category(&self, video_id: &str) -> AppResult<Option<String>> {
         self.extractor.get_video_category(video_id).await

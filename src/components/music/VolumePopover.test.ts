@@ -53,7 +53,7 @@ describe("VolumePopover wheel", () => {
   });
 });
 
-describe("VolumePopover auto-dismissal", () => {
+describe("VolumePopover closing by itself", () => {
   let host: HTMLDivElement;
   let root: Root;
 
@@ -62,6 +62,7 @@ describe("VolumePopover auto-dismissal", () => {
     host = document.createElement("div");
     document.body.append(host);
     root = createRoot(host);
+    useMusicPlayerStore.setState({ volume: 0.5, isMuted: false });
   });
 
   afterEach(() => {
@@ -70,82 +71,47 @@ describe("VolumePopover auto-dismissal", () => {
     vi.useRealTimers();
   });
 
-  it("calls onClose after the inactivity delay", () => {
+  const openWith = (onClose: () => void) => {
+    act(() => root.render(createElement(VolumePopover, { open: true, onClose })));
+    return host.querySelector<HTMLElement>(".bg-surface-container")!;
+  };
+  const wait = (ms: number) => act(() => vi.advanceTimersByTime(ms));
+
+  it("closes after 2.8 seconds untouched", () => {
     const onClose = vi.fn();
-    act(() => {
-      root.render(createElement(VolumePopover, { open: true, onClose, autoDismissDelayMs: 2800 }));
-    });
+    openWith(onClose);
 
+    wait(2799);
     expect(onClose).not.toHaveBeenCalled();
-
-    act(() => {
-      vi.advanceTimersByTime(2800);
-    });
-
+    wait(1);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("pauses auto-dismissal when hovered and resumes after pointer leaves", () => {
+  it("stays open while the pointer is on it, then waits at least 1.5 seconds", () => {
     const onClose = vi.fn();
-    act(() => {
-      root.render(createElement(VolumePopover, { open: true, onClose, autoDismissDelayMs: 2800 }));
-    });
+    const popover = openWith(onClose);
 
-    const popover = host.querySelector(".bg-surface-container")!;
-
-    // Hover before 2800ms elapses
-    act(() => {
-      vi.advanceTimersByTime(1500);
-      popover.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
-    });
-
-    // Advance past 2800ms while hovered
-    act(() => {
-      vi.advanceTimersByTime(2000);
-    });
+    wait(2000);
+    act(() => popover.dispatchEvent(new PointerEvent("pointerover", { bubbles: true })));
+    wait(10_000);
     expect(onClose).not.toHaveBeenCalled();
 
-    // Pointer leaves: should trigger 1400ms resume delay
-    act(() => {
-      popover.dispatchEvent(new PointerEvent("pointerout", { bubbles: true }));
-    });
-
-    act(() => {
-      vi.advanceTimersByTime(1399);
-    });
+    act(() => popover.dispatchEvent(new PointerEvent("pointerout", { bubbles: true })));
+    wait(1499);
     expect(onClose).not.toHaveBeenCalled();
-
-    act(() => {
-      vi.advanceTimersByTime(1);
-    });
+    wait(1);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("pauses auto-dismissal when focused inside", () => {
+  it("starts counting again when the volume changes", () => {
     const onClose = vi.fn();
-    act(() => {
-      root.render(createElement(VolumePopover, { open: true, onClose, autoDismissDelayMs: 2800 }));
-    });
+    openWith(onClose);
 
-    const popover = host.querySelector(".bg-surface-container")!;
-    const muteButton = popover.querySelector("button")!;
-
-    act(() => {
-      muteButton.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
-    });
-
-    act(() => {
-      vi.advanceTimersByTime(5000);
-    });
+    wait(2000);
+    act(() => useMusicPlayerStore.setState({ volume: 0.6 }));
+    wait(2000);
     expect(onClose).not.toHaveBeenCalled();
-
-    act(() => {
-      muteButton.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
-    });
-
-    act(() => {
-      vi.advanceTimersByTime(1400);
-    });
+    wait(800);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

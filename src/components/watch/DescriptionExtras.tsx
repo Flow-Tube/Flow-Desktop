@@ -4,6 +4,7 @@ import { usePlayMusicCard } from "../../lib/usePlayMusicCard";
 import { useRichTargetHandler } from "../../lib/useRichTargetHandler";
 import { getString } from "../../lib/i18n/index";
 import type { DescriptionExtras as Extras } from "../../types/video";
+import { joinIsolated } from "../../lib/direction";
 
 function SongCard({ song, onPlay }: { song: Extras["music"][number]; onPlay: () => void }) {
   const thumbnail = useProxiedImageUrl(song.thumbnailUrl ?? null);
@@ -20,9 +21,9 @@ function SongCard({ song, onPlay }: { song: Extras["music"][number]; onPlay: () 
         {thumbnail ? <img src={thumbnail} alt="" className="h-full w-full object-cover" /> : <Music2 size={18} />}
       </span>
       <span className="min-w-0">
-        <span className="block truncate font-medium text-chrome-neutral-100">{song.title}</span>
+        <span dir="auto" className="block truncate font-medium text-chrome-neutral-100">{song.title}</span>
         <span className="block truncate text-xs text-chrome-neutral-400">
-          {[song.artist, song.album].filter(Boolean).join(" • ")}
+          {joinIsolated([song.artist, song.album])}
         </span>
       </span>
     </button>
@@ -64,7 +65,7 @@ export function DescriptionExtras({ extras }: { extras: Extras }) {
       {extras.links.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {extras.links.map((link) => (
-            <button
+            <button dir="auto"
               key={link.url}
               type="button"
               onClick={(event) => {

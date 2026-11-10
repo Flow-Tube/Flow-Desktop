@@ -164,7 +164,7 @@ export function CommentsSection({
                   )}
 
                   {thread.expanded[c.id] && (
-                    <div className="mt-4 space-y-4 border-l-2 border-chrome-neutral-800 ps-4">
+                    <div className="mt-4 space-y-4 border-s-2 border-chrome-neutral-800 ps-4">
                       {thread.replies[c.id]?.map((reply, rIdx) => (
                         <CommentItem key={reply.id || `reply-${rIdx}`} comment={reply} reply />
                       ))}

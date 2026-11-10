@@ -271,7 +271,7 @@ export const SubtitleCustomizer: React.FC = () => {
         >
           <span
             className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-chrome-white shadow ring-0 transition duration-200 ease-in-out ${
-              subtitleStyle.isBold ? "translate-x-5" : "translate-x-0"
+              subtitleStyle.isBold ? "translate-x-5 rtl:-translate-x-5" : "translate-x-0"
             }`}
           />
         </button>

@@ -325,6 +325,7 @@ export function GlobalVideoPlayer() {
             : "fixed z-30 rounded-xl bg-chrome-black"
         }
         style={frameStyle}
+        dir="ltr"
         {...dragBinds}
       >
         {isFloating && (

@@ -26,7 +26,7 @@ export function ContinueWatchingMini() {
   };
 
   return (
-    <div className="fixed bottom-6 right-6 z-40 flex w-[min(360px,calc(100vw-32px))] items-center gap-3 rounded-xl border border-outline-variant bg-surface-container p-2">
+    <div className="fixed bottom-6 end-6 z-40 flex w-[min(360px,calc(100vw-32px))] items-center gap-3 rounded-xl border border-outline-variant bg-surface-container p-2">
       <button type="button" onClick={playInMiniPlayer} className="relative aspect-video w-24 shrink-0 overflow-hidden rounded-lg bg-chrome-black">
         {thumbnail && <img src={thumbnail} alt="" className="h-full w-full object-cover" />}
         <span className="absolute inset-0 grid place-items-center bg-chrome-black/30 text-chrome-white">
@@ -35,7 +35,7 @@ export function ContinueWatchingMini() {
       </button>
       <div className="min-w-0 flex-1">
         <p className="text-xs font-semibold text-chrome-neutral-500">{getString("player_continue_watching_label")}</p>
-        <p className="truncate text-sm font-medium text-chrome-neutral-100">{video.title}</p>
+        <p dir="auto" className="truncate text-sm font-medium text-chrome-neutral-100">{video.title}</p>
         {video.viewCountText && <p className="truncate text-xs tabular-nums text-chrome-neutral-400">{video.viewCountText}</p>}
       </div>
       <button type="button" aria-label={getString("player_continue_watching_open")} title={getString("player_continue_watching_open")} onClick={openWatchPage} className={ICON_BUTTON}>

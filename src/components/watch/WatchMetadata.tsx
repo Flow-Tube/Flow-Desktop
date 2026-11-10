@@ -78,6 +78,7 @@ export function WatchMetadata({
           {hashtags.map((tag) => (
             <button
               key={tag}
+              dir="auto"
               onClick={() => navigate(`/search?q=${encodeURIComponent(tag)}`)}
               className="text-primary transition-opacity hover:opacity-80"
             >
@@ -94,14 +95,14 @@ export function WatchMetadata({
             className="grid cursor-default text-xl font-bold leading-snug tracking-tight text-chrome-neutral-100"
           >
             {/* Both titles are stacked; only the visible one may be selected, or a copy pastes both. */}
-            <span
+            <span dir="auto"
               className={`col-start-1 row-start-1 transition-opacity duration-200 ease-out ${
                 showingOriginal ? "select-none opacity-0" : "select-text opacity-100"
               }`}
             >
               {primaryTitle}
             </span>
-            <span
+            <span dir="auto"
               aria-hidden
               className={`col-start-1 row-start-1 transition-opacity duration-200 ease-out ${
                 showingOriginal ? "select-text opacity-100" : "select-none opacity-0"
@@ -111,7 +112,7 @@ export function WatchMetadata({
             </span>
           </h1>
         ) : primaryTitle ? (
-          <h1 className="select-text text-xl font-bold leading-snug tracking-tight text-chrome-neutral-100">{primaryTitle}</h1>
+          <h1 dir="auto" className="select-text text-xl font-bold leading-snug tracking-tight text-chrome-neutral-100">{primaryTitle}</h1>
         ) : (
           // A cold open starts playback from the video id alone; the title lands
           // a moment later. A placeholder bar reads better than an empty heading.

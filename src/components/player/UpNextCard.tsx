@@ -58,7 +58,7 @@ export function UpNextCard({ video, secondsLeft, onCancel, onRestart, onPlayNow 
         )}
         <div className="min-w-0">
           <p className="line-clamp-2 text-sm font-medium">{video.title || getString("player_up_next")}</p>
-          {video.channelName && <p className="truncate text-xs text-chrome-neutral-400">{video.channelName}</p>}
+          {video.channelName && <p dir="auto" className="truncate text-xs text-chrome-neutral-400">{video.channelName}</p>}
         </div>
       </div>
       <div className="mt-3 flex justify-end gap-1">

@@ -78,7 +78,7 @@ function ChatRow({ message }: { message: LiveChatMessage }) {
         style={{ backgroundColor: background || "rgba(245, 158, 11, 0.15)" }}
       >
         <div className={`flex items-center justify-between gap-2 text-xs font-bold ${darkText ? "text-chrome-black" : "text-chrome-white"}`}>
-          <span className="truncate">{message.author}</span>
+          <span dir="auto" className="truncate">{message.author}</span>
           {message.superChatAmount && <span className="shrink-0">{message.superChatAmount}</span>}
         </div>
         {message.message && (
@@ -92,9 +92,9 @@ function ChatRow({ message }: { message: LiveChatMessage }) {
 
   if (message.messageType === "membership") {
     return (
-      <div className="rounded-lg border-l-2 border-chrome-emerald-500/50 bg-chrome-emerald-500/10 px-3 py-2">
+      <div className="rounded-lg border-s-2 border-chrome-emerald-500/50 bg-chrome-emerald-500/10 px-3 py-2">
         <div className="flex items-center gap-1.5 text-xs font-bold text-chrome-emerald-400">
-          <span className="truncate">{message.author}</span>
+          <span dir="auto" className="truncate">{message.author}</span>
           <AuthorBadges message={message} />
         </div>
         {message.message && (
@@ -118,7 +118,7 @@ function ChatRow({ message }: { message: LiveChatMessage }) {
         <div className="mt-0.5 h-6 w-6 shrink-0 rounded-full bg-surface-container-high" />
       )}
       <p className="min-w-0 break-words text-sm leading-snug text-chrome-neutral-200">
-        <span
+        <span dir="auto"
           className={`me-1.5 inline-flex items-center gap-1 align-middle text-xs font-semibold ${authorNameClass(message)}`}
         >
           {message.author}

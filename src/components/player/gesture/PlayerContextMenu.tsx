@@ -1,6 +1,7 @@
 import { Fragment, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useExitGhost } from "../../../lib/useExitGhost";
 import { PLAYER_MENU_ATTR } from "../../../lib/playerMenuDismiss";
+import { interfaceDir } from "../../../lib/direction";
 
 export interface PlayerContextMenuItem {
   label: string;
@@ -50,6 +51,7 @@ export function PlayerContextMenu({
       ref={ref}
       {...{ [PLAYER_MENU_ATTR]: "" }}
       role="menu"
+      dir={interfaceDir()}
       style={style}
       className="animate-menu-in absolute z-50 w-[280px] overflow-hidden rounded-xl border border-chrome-white/10 bg-chrome-popover/95 p-1.5 text-chrome-white"
       onClick={(event) => event.stopPropagation()}
@@ -63,7 +65,7 @@ export function PlayerContextMenu({
               key={item.label}
               type="button"
               role="menuitem"
-              className="flex h-10 w-full items-center gap-3 rounded-lg px-2.5 text-left text-sm font-medium text-chrome-zinc-100 transition-colors duration-200 ease-out hover:bg-chrome-white/10"
+              className="flex h-10 w-full items-center gap-3 rounded-lg px-2.5 text-start text-sm font-medium text-chrome-zinc-100 transition-colors duration-200 ease-out hover:bg-chrome-white/10"
               onClick={() => onSelect(item)}
             >
               <span className="grid h-5 w-5 shrink-0 place-items-center text-chrome-zinc-300">{item.icon}</span>

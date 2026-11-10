@@ -27,7 +27,7 @@ export function TitleBar() {
 
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-40">
           {text && (
-            <span
+            <span dir="auto"
               className={cx(
                 "max-w-full truncate text-center text-xs",
                 section

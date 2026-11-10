@@ -97,8 +97,8 @@ export function ConfirmDialog({
                   />
                 )}
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-chrome-neutral-100">{item.title}</p>
-                  {item.subtitle && <p className="truncate text-xs text-chrome-neutral-500">{item.subtitle}</p>}
+                  <p dir="auto" className="truncate text-sm font-medium text-chrome-neutral-100">{item.title}</p>
+                  {item.subtitle && <p dir="auto" className="truncate text-xs text-chrome-neutral-500">{item.subtitle}</p>}
                 </div>
               </div>
             )}

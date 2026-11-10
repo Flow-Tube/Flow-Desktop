@@ -72,7 +72,7 @@ export const TrackCard: React.FC<TrackCardProps> = ({
 
       {/* Title & Artist info */}
       <div className="flex-grow min-w-0">
-        <h4
+        <h4 dir="auto"
           onClick={() => onPlay(track)}
           className={`text-sm font-semibold truncate cursor-pointer hover:text-chrome-red-400 transition-colors ${
             isActive ? "text-chrome-red-400" : "text-chrome-zinc-100"
@@ -80,7 +80,7 @@ export const TrackCard: React.FC<TrackCardProps> = ({
         >
           {track.title}
         </h4>
-        <p 
+        <p dir="auto" 
           onClick={(e) => {
             if (track.channelId) {
               e.stopPropagation();

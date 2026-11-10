@@ -48,7 +48,7 @@ export function Toast({ title, message, variant, image, imageShape = "landscape"
         </span>
       )}
       <div className="min-w-0 flex-1">
-        {title ? <p className="truncate font-medium text-chrome-neutral-100">{title}</p> : null}
+        {title ? <p dir="auto" className="truncate font-medium text-chrome-neutral-100">{title}</p> : null}
         <p className={title ? "truncate text-chrome-neutral-300" : "line-clamp-2 text-chrome-neutral-200"}>{message}</p>
       </div>
       <div className="flex shrink-0 items-center gap-0.5">

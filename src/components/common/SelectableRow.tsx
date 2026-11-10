@@ -36,7 +36,7 @@ export function SelectableRow({
       <div className="pointer-events-none">{children}</div>
       <span
         className={`absolute z-10 grid h-6 w-6 place-items-center rounded-full border transition-colors ${
-          card ? "right-2 top-2" : "right-3 top-1/2 -translate-y-1/2"
+          card ? "end-2 top-2" : "end-3 top-1/2 -translate-y-1/2"
         } ${
           selected
             ? "border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-on-primary)]"

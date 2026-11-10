@@ -13,7 +13,7 @@ export interface RichTextProps {
 /** Text with its links and custom emoji. Line breaks in the text are kept. */
 export function RichText({ value, onActivate, imageSrc, className }: RichTextProps) {
   return (
-    <span className={`whitespace-pre-wrap break-words ${className ?? ""}`}>
+    <span dir="auto" className={`whitespace-pre-wrap break-words ${className ?? ""}`}>
       {richSegments(value).map((segment, index) => {
         if (segment.emoji) {
           return (

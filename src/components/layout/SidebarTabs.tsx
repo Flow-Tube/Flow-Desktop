@@ -16,6 +16,7 @@ import { TabRailItem } from '../ui/TabRailItem';
 import { SidebarNavIcon } from '../ui/SidebarNavIcon';
 import { ShortsIcon } from '../ui/ShortsIcon';
 import { AnchoredPortalMenu, type MenuAnchor } from '../ui/AnchoredPortalMenu';
+import { growFromPoint } from '../../lib/direction';
 
 function TabImage({ src, round }: { src: string | undefined; round: boolean }) {
   const proxied = useProxiedImageUrl(src);
@@ -82,7 +83,7 @@ function TabRow({ tab, collapsed, onNavigate, onOpenMenu }: {
         onNavigate?.();
       }}
       onClose={() => closeTabWithPlayback(tab.id)}
-      onOpenMenu={(point) => onOpenMenu(tab.id, { top: point.y, left: point.x })}
+      onOpenMenu={(point) => onOpenMenu(tab.id, { top: point.y, ...growFromPoint(point.x) })}
     />
   );
 }

@@ -43,7 +43,7 @@ export function SectionHeader({
   const inner = (
     <>
       <span>{label}</span>
-      <ChevronRight className="w-4 h-4 text-chrome-neutral-400 transition-transform group-hover:translate-x-0.5" />
+      <ChevronRight className="w-4 h-4 text-chrome-neutral-400 transition-transform group-hover:translate-x-0.5 rtl:group-hover:-translate-x-0.5 rtl:-scale-x-100" />
     </>
   );
 
@@ -83,7 +83,7 @@ export function SectionHeader({
           className="me-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-chrome-neutral-400 transition-colors hover:bg-surface-container-low hover:text-chrome-neutral-100"
         >
           <ChevronDown
-            className={`h-4 w-4 transition-transform duration-200 ease-out ${collapsed ? '-rotate-90' : ''}`}
+            className={`h-4 w-4 transition-transform duration-200 ease-out ${collapsed ? '-rotate-90 rtl:rotate-90' : ''}`}
           />
         </button>
       )}

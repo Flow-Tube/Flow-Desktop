@@ -237,6 +237,12 @@ export interface PlayerState {
   /** The player's controls are showing; the mini player's own buttons fade with them. */
   isPlayerChromeShown: boolean;
   setIsPlayerChromeShown: (shown: boolean) => void;
+  /** The ambient glow spreads past the player, so the watch page's top bar can let it through. */
+  isAmbientSpreadShown: boolean;
+  setIsAmbientSpreadShown: (shown: boolean) => void;
+  /** The docked player's top is at or below the top bar's bottom edge. */
+  isPlayerBelowTopbar: boolean;
+  setIsPlayerBelowTopbar: (below: boolean) => void;
   setIsLiveChatAvailable: (available: boolean) => void;
   /** The watch page shows comments, so the fullscreen panel can too. */
   isCommentsAvailable: boolean;
@@ -291,6 +297,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   fullscreenPanel: null,
   isLiveChatAvailable: false,
   isPlayerChromeShown: true,
+  isAmbientSpreadShown: false,
+  isPlayerBelowTopbar: false,
   isCommentsAvailable: false,
   isLiveChatOpen: true,
 
@@ -848,6 +856,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   }),
   setIsLiveChatAvailable: (isLiveChatAvailable) => set({ isLiveChatAvailable }),
   setIsPlayerChromeShown: (isPlayerChromeShown) => set({ isPlayerChromeShown }),
+  setIsAmbientSpreadShown: (isAmbientSpreadShown) => set({ isAmbientSpreadShown }),
+  setIsPlayerBelowTopbar: (isPlayerBelowTopbar) => set({ isPlayerBelowTopbar }),
   setIsCommentsAvailable: (isCommentsAvailable) => set({ isCommentsAvailable }),
   setIsLiveChatOpen: (isLiveChatOpen) => set((state) => ({
     isLiveChatOpen,

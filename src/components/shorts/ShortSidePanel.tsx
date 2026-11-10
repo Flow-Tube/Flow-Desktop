@@ -7,6 +7,7 @@ import { formatCount } from "../../lib/utils";
 import type { ShortItem, ShortsPanelState } from "../../types/shorts";
 import type { VideoDetails } from "../../types/video";
 import type { RydData } from "../../lib/api/foss";
+import { useOriginalTitle } from "../../lib/useOriginalTitle";
 
 interface ShortSidePanelProps {
   short: ShortItem;
@@ -41,7 +42,7 @@ export function ShortSidePanel({
         </div>
         <button
           type="button"
-          aria-label="Close panel"
+          aria-label={getString('shorts_close_panel')}
           onClick={onClose}
           className="grid h-8 w-8 place-items-center rounded-full text-chrome-neutral-400 transition-colors hover:bg-surface-container-highest hover:text-chrome-neutral-100"
         >
@@ -77,7 +78,8 @@ function ShortDescription({
   const { details: fetchedDetails, loading } = useShortDetails(short.id, !details);
   const resolvedDetails = details ?? fetchedDetails;
   const description = resolvedDetails?.description?.trim();
-  const title = short.title.trim() && short.title !== "Short" ? short.title : resolvedDetails?.title || short.title;
+  const originalTitle = useOriginalTitle(short.id);
+  const title = originalTitle || (short.title.trim() && short.title !== "Short" ? short.title : resolvedDetails?.title || short.title);
   const likes = rydData
     ? formatCount(rydData.likes)
     : formatCount(short.likeCountText ?? resolvedDetails?.likeCountText) || "-";
@@ -86,10 +88,10 @@ function ShortDescription({
   const comments = formatCount(commentCountText ?? short.commentCountText) || "-";
 
   return (
-    <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto">
+    <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="grid grid-cols-2 gap-2 p-4">
         <StatPill label={getString("shorts_stat_likes")} value={likes} />
-        <StatPill label="Dislikes" value={dislikes} />
+        <StatPill label={getString('shorts_dislikes')} value={dislikes} />
         <StatPill label={getString("shorts_stat_views")} value={views} />
         <StatPill label={getString("shorts_comments_title")} value={comments} />
       </div>
@@ -113,7 +115,7 @@ function StatPill({ label, value }: { label: string; value: string }) {
 function ShortComments({ videoId }: { videoId: string }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4">
         <CommentsSection videoId={videoId} hideHeader />
       </div>
     </div>

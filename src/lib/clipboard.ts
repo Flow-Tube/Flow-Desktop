@@ -39,3 +39,14 @@ export async function shareLink(title: string, url: string): Promise<"shared" | 
   }
   return (await copyText(url)) ? "copied" : "failed";
 }
+
+/** Copies a PNG. Takes a promise so the write stays inside the click that asked for it, as WebKit requires. */
+export async function copyPng(image: Blob | Promise<Blob>): Promise<boolean> {
+  try {
+    if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") return false;
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": image })]);
+    return true;
+  } catch {
+    return false;
+  }
+}

@@ -13,6 +13,7 @@ pub enum Purpose {
     Live,
     Lan,
     Chain,
+    Store,
 }
 
 impl Purpose {
@@ -25,6 +26,7 @@ impl Purpose {
             Self::Live => "live",
             Self::Lan => "lan",
             Self::Chain => "chain",
+            Self::Store => "store",
         }
     }
 }

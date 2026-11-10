@@ -35,7 +35,8 @@ function checkRouting(ctx: AudioContext): Promise<boolean | null> {
 /**
  * The equalizer for one video player: its <video> element and the separate <audio> element
  * adaptive playback uses. Elements are routed through WebAudio only once the equalizer changes
- * the sound, and each gets its source node exactly once in its life, as WebAudio requires.
+ * the sound or the volume goes above 100%, and each gets its source node exactly once in its life,
+ * as WebAudio requires.
  */
 export class MediaEqEngine {
   private chain: EqChain | null = null;
@@ -43,8 +44,13 @@ export class MediaEqEngine {
   private sources = new WeakMap<HTMLMediaElement, MediaElementAudioSourceNode>();
   private watched = new WeakSet<HTMLMediaElement>();
   private spec: EqGraphSpec = EQ_GRAPH_OFF;
-  private engaged = false;
+  private eqEngaged = false;
+  private boost = 1;
   private routing = false;
+
+  private get engaged(): boolean {
+    return this.eqEngaged || this.boost > 1;
+  }
 
   /** The player's current media elements; an element that left is let go. */
   setElements(elements: (HTMLMediaElement | null)[]): void {
@@ -70,9 +76,15 @@ export class MediaEqEngine {
 
   setEq(spec: EqGraphSpec, engaged: boolean): void {
     this.spec = spec;
-    this.engaged = engaged;
-    if (engaged) void this.route();
+    this.eqEngaged = engaged;
+    if (this.engaged) void this.route();
     this.chain?.apply(spec);
+  }
+
+  setBoost(gain: number): void {
+    this.boost = gain;
+    if (this.engaged) void this.route();
+    this.chain?.setBoost(gain);
   }
 
   dispose(): void {
@@ -95,6 +107,7 @@ export class MediaEqEngine {
         this.chain = new EqChain(ctx);
         this.chain.output.connect(ctx.destination);
         this.chain.apply(this.spec);
+        this.chain.setBoost(this.boost);
       }
       for (const el of this.elements) this.connect(ctx, this.chain, el);
     } catch (error) {

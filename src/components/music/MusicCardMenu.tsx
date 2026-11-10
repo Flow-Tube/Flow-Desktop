@@ -1,6 +1,7 @@
 import React, { useCallback, useRef, useState } from 'react';
 import type { MenuAnchor } from '../ui/AnchoredPortalMenu';
 import { MediaMenu, type MediaMenuAction, type MediaMenuHeader } from '../ui/MediaMenu';
+import { alignToEnd, growFromPoint } from '../../lib/direction';
 
 export type MusicMenuAction = MediaMenuAction;
 
@@ -17,7 +18,7 @@ export function useMusicContextMenu(enabled = true) {
       event.preventDefault();
       event.stopPropagation();
       const rect = event.currentTarget.getBoundingClientRect();
-      setAnchor({ top: rect.bottom + 4, right: rect.right });
+      setAnchor({ top: rect.bottom + 4, ...alignToEnd(rect) });
       setShowMenu((current) => !current);
     },
     [enabled],
@@ -28,7 +29,7 @@ export function useMusicContextMenu(enabled = true) {
       if (!enabled) return;
       event.preventDefault();
       event.stopPropagation();
-      setAnchor({ top: event.clientY, left: event.clientX });
+      setAnchor({ top: event.clientY, ...growFromPoint(event.clientX) });
       setShowMenu(true);
     },
     [enabled],

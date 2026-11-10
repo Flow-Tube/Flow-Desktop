@@ -1,5 +1,7 @@
-// Word/character-sync providers first, plain text last (Android's default order).
+// YouTube Music's own lines first, since they can't belong to another song; then word and
+// character sync (Android's default order).
 export const DEFAULT_PROVIDER_ORDER: readonly string[] = [
+  "YouTube",
   "BetterLyrics",
   "LrcRed",
   "LyricsPlus",
@@ -8,7 +10,9 @@ export const DEFAULT_PROVIDER_ORDER: readonly string[] = [
   "Paxsenix",
   "LrcLib",
   "Unison",
-  "YouTube",
+  "NetEase",
+  "AMLL",
+  "YouTubeSubtitle",
 ];
 
 /**

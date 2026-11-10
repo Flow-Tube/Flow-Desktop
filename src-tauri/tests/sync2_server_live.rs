@@ -40,6 +40,7 @@ async fn desktop_talks_to_a_real_server() {
             member_subject(&recovery.sig_public, &recovery.kem_public, Role::Recovery),
         ]),
         remove: None,
+        cut: None,
         epoch: Some(epoch_draft(
             &epoch_key,
             &group,
@@ -64,7 +65,7 @@ async fn desktop_talks_to_a_real_server() {
     assert_eq!(entries, [genesis]);
 
     let wrap = store
-        .key(0, &hex::encode(device.did))
+        .key(0, "", &hex::encode(device.did))
         .await
         .unwrap()
         .unwrap();
@@ -181,9 +182,16 @@ async fn a_group_is_created_paired_with_and_restored_through_the_server() {
 
     let restored = member_secrets(random_bytes(), random_bytes());
     let pool_c = pool().await;
-    let next_words = restore_group(&pool_c, &url, &words, &restored, &meta("C"))
-        .await
-        .unwrap();
+    let next_words = restore_group(
+        &pool_c,
+        &url,
+        &words,
+        &restored,
+        &meta("C"),
+        &[hex::encode(a.did), hex::encode(b.did)],
+    )
+    .await
+    .unwrap();
     assert_ne!(next_words, words);
     let restored_record = load_group(&pool_c).await.unwrap().unwrap();
     assert_eq!(restored_record.group_id, joined_record.group_id);
@@ -210,6 +218,7 @@ async fn a_group_is_created_paired_with_and_restored_through_the_server() {
             &words,
             &member_secrets(random_bytes(), random_bytes()),
             &meta("D"),
+            &[],
         )
         .await
         .is_err()

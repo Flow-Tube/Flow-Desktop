@@ -30,7 +30,7 @@ export function FullscreenPanelHost() {
       inert={!open}
       style={{ width: open ? FULLSCREEN_PANEL_WIDTH_PX : 0 }}
       className={`h-full shrink-0 overflow-hidden bg-background transition-[width] duration-[var(--motion-panel)] ease-[var(--motion-ease)] ${
-        open ? "border-l border-chrome-neutral-800" : ""
+        open ? "border-s border-chrome-neutral-800" : ""
       }`}
     >
       <div ref={setFullscreenPanelHost} style={{ width: FULLSCREEN_PANEL_WIDTH_PX }} className="h-full p-3" />

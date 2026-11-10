@@ -1,7 +1,7 @@
 import type { LyricsEntry, LyricsProvider } from "../types";
 import { lyricsGetJson, enc } from "../http";
-import { parseLyrics } from "../lyricsUtils";
-import { ranked, type MatchSong } from "../matching";
+import { isInstrumentalNotice, parseLyrics } from "../lyricsUtils";
+import { cleanArtist, ranked, type MatchSong } from "../matching";
 
 const SONG_SEARCH = "https://mobileservice.kugou.com/api/v3/search/song";
 const LYRIC_SEARCH = "https://lyrics.kugou.com/search";
@@ -83,21 +83,35 @@ function decodeBase64Utf8(b64: string): string {
   return new TextDecoder("utf-8").decode(bytes);
 }
 
-/**
- * Hits that name the same recording, best first. KuGou has answered without names before; then
- * only the duration can be checked, as Android does.
- */
-export function matchKuGou<T>(
-  hits: T[],
-  request: MatchSong,
-  describe: (hit: T) => MatchSong,
-): T[] {
-  const named = hits.filter((hit) => describe(hit).title.trim());
-  if (named.length > 0) return ranked(named, request, describe);
-  return hits.filter((hit) => {
-    const duration = describe(hit).durationSec;
-    return request.durationSec <= 0 || Math.abs(duration - request.durationSec) <= DURATION_TOLERANCE_SEC;
-  });
+// A lyric search by keyword states the length in seconds, one by hash in milliseconds.
+const LONGEST_DURATION_IN_SECONDS = 10_000;
+
+const closeInLength = (seconds: number, request: MatchSong): boolean =>
+  request.durationSec <= 0 || seconds <= 0 || Math.abs(seconds - request.durationSec) <= DURATION_TOLERANCE_SEC;
+
+/** The song rows naming the requested song, best first. A close length alone proves nothing. */
+export function matchingRows(rows: KuGouSong[], request: MatchSong): KuGouSong[] {
+  return ranked(
+    rows.filter((row) => closeInLength(row.duration ?? 0, request)),
+    request,
+    (row) => ({ title: stripTags(row.songname), artist: stripTags(row.singername), durationSec: row.duration ?? 0 }),
+  );
+}
+
+const candidateSeconds = (candidate: LyricCandidate): number => {
+  const duration = candidate.duration ?? 0;
+  return Math.round(duration > LONGEST_DURATION_IN_SECONDS ? duration / 1000 : duration);
+};
+
+/** A hash can list another song's lyric first, so each candidate is checked on its own names. */
+export function bestLyric(candidates: LyricCandidate[], request: MatchSong): LyricCandidate | null {
+  return (
+    ranked(
+      candidates.filter((c) => c.id && c.accesskey && closeInLength(candidateSeconds(c), request)),
+      request,
+      (c) => ({ title: stripTags(c.song), artist: stripTags(c.singer), durationSec: candidateSeconds(c) }),
+    )[0] ?? null
+  );
 }
 
 async function download(id: number, accesskey: string): Promise<string | null> {
@@ -111,9 +125,8 @@ async function download(id: number, accesskey: string): Promise<string | null> {
   }
 }
 
-async function firstCandidate(url: string): Promise<LyricCandidate | null> {
-  const res = await lyricsGetJson<LyricSearch>(url);
-  return res.candidates?.find((c) => c.id && c.accesskey) ?? null;
+async function lyricSearch(url: string): Promise<LyricCandidate[]> {
+  return (await lyricsGetJson<LyricSearch>(url)).candidates ?? [];
 }
 
 async function fromCandidate(candidate: LyricCandidate | null): Promise<LyricsEntry[]> {
@@ -126,34 +139,24 @@ export const kugouProvider: LyricsProvider = {
   name: "KuGou",
   async getLyrics(_id, title, artist, durationSec, album): Promise<LyricsEntry[]> {
     const request: MatchSong = { title, artist, durationSec };
-    const keyword = `${normalizeTitle(title)} - ${normalizeArtist(artist)}${album ? ` ${album}` : ""}`.trim();
+    const keyword = `${normalizeTitle(title)} - ${normalizeArtist(cleanArtist(artist))}${album ? ` ${album}` : ""}`.trim();
 
     // A hash from the song search names the exact recording, so it is tried first.
     const songs = await lyricsGetJson<SongSearch>(
       `${SONG_SEARCH}?version=9108&plat=0&pagesize=${PAGE_SIZE}&showtype=0&keyword=${enc(keyword)}`,
     ).catch(() => null);
-    const matches = matchKuGou(songs?.data?.info ?? [], request, (song) => ({
-      title: stripTags(song.songname),
-      artist: stripTags(song.singername),
-      durationSec: song.duration ?? 0,
-    }));
-    for (const song of matches) {
+    for (const song of matchingRows(songs?.data?.info ?? [], request)) {
       if (!song.hash) continue;
-      const entries = await fromCandidate(
-        await firstCandidate(`${LYRIC_SEARCH}?ver=1&man=yes&client=pc&hash=${enc(song.hash)}`),
-      );
-      if (entries.length > 0) return entries;
+      const candidates = await lyricSearch(`${LYRIC_SEARCH}?ver=1&man=yes&client=pc&hash=${enc(song.hash)}`);
+      const entries = await fromCandidate(bestLyric(candidates, request));
+      // The notice is KuGou's answer for this song; a later match could be a vocal version of it.
+      if (entries.length > 0) return isInstrumentalNotice(entries) ? [] : entries;
     }
 
     let url = `${LYRIC_SEARCH}?ver=1&man=yes&client=pc`;
     if (durationSec > 0) url += `&duration=${durationSec * 1000}`;
     url += `&keyword=${enc(keyword)}`;
-    const search = await lyricsGetJson<LyricSearch>(url);
-    const candidates = matchKuGou(
-      (search.candidates ?? []).filter((c) => c.id && c.accesskey),
-      request,
-      (c) => ({ title: stripTags(c.song), artist: stripTags(c.singer), durationSec: Math.round((c.duration ?? 0) / 1000) }),
-    );
-    return fromCandidate(candidates[0] ?? null);
+    const entries = await fromCandidate(bestLyric(await lyricSearch(url), request));
+    return isInstrumentalNotice(entries) ? [] : entries;
   },
 };

@@ -18,6 +18,11 @@ pub struct ShortItem {
     pub comment_count_text: Option<String>,
     pub published_text: Option<String>,
     pub sequence_params: Option<String>,
+    /// The full video the Short links to.
+    #[serde(default)]
+    pub linked_video_id: Option<String>,
+    #[serde(default)]
+    pub linked_video_title: Option<String>,
 }
 
 /// A page of Shorts plus the continuation token for the next batch.
@@ -73,6 +78,8 @@ impl ShortItem {
             comment_count_text: None,
             published_text: video.published_text,
             sequence_params: None,
+            linked_video_id: None,
+            linked_video_title: None,
         }
     }
 }

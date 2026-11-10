@@ -51,7 +51,7 @@ export function LinkPanel({ link, joining }: { link: LinkPhase; joining: boolean
               <QRCodeSVG value={link.code} size={232} level="M" marginSize={1} />
             </div>
             {!joining && (
-              <div className="flex w-full max-w-sm flex-col gap-3 text-left">
+              <div className="flex w-full max-w-sm flex-col gap-3 text-start">
                 <p className="text-sm text-chrome-neutral-400">{getString("linked_scan_theirs")}</p>
                 <CodeEntry />
               </div>

@@ -1,7 +1,7 @@
 use crate::errors::{AppError, AppResult};
 use sqlx::{Row, SqlitePool};
 
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NotificationRecord {
     pub id: i64,
@@ -23,6 +23,7 @@ pub struct NewNotification {
     pub channel_name: String,
     pub thumbnail_url: Option<String>,
     pub published_text: Option<String>,
+    pub kind: &'static str,
     pub created_at: i64,
 }
 
@@ -33,7 +34,7 @@ pub async fn insert_notification(
     let result = sqlx::query(
         "INSERT INTO notifications
             (video_id, title, channel_id, channel_name, thumbnail_url, published_text, kind, is_read, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'NEW_VIDEO', 0, ?)",
+         VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)",
     )
     .bind(&notification.video_id)
     .bind(&notification.title)
@@ -41,6 +42,7 @@ pub async fn insert_notification(
     .bind(&notification.channel_name)
     .bind(&notification.thumbnail_url)
     .bind(&notification.published_text)
+    .bind(notification.kind)
     .bind(notification.created_at)
     .execute(pool)
     .await
@@ -103,6 +105,29 @@ pub async fn delete_notification(pool: &SqlitePool, id: i64) -> AppResult<()> {
         .execute(pool)
         .await
         .map_err(AppError::from)?;
+    Ok(())
+}
+
+/// Puts a removed notification back as it was, for Undo.
+pub async fn restore_notification(pool: &SqlitePool, record: &NotificationRecord) -> AppResult<()> {
+    sqlx::query(
+        "INSERT OR REPLACE INTO notifications
+            (id, video_id, title, channel_id, channel_name, thumbnail_url, published_text, kind, is_read, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(record.id)
+    .bind(&record.video_id)
+    .bind(&record.title)
+    .bind(&record.channel_id)
+    .bind(&record.channel_name)
+    .bind(&record.thumbnail_url)
+    .bind(&record.published_text)
+    .bind(&record.kind)
+    .bind(record.is_read)
+    .bind(record.created_at)
+    .execute(pool)
+    .await
+    .map_err(AppError::from)?;
     Ok(())
 }
 

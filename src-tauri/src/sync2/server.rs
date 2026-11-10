@@ -18,6 +18,7 @@ use super::http::{MAX_RESPONSE, Transport, read_body};
 use super::kdf::tag;
 use super::keys::MemberSecrets;
 use super::mailbox::Mailbox;
+use super::read_budget::ReadBudget;
 use super::roster::{Entry, parse_entry};
 use super::store::Store;
 
@@ -50,11 +51,46 @@ pub enum StoreError {
     Local(#[source] sqlx::Error),
     #[error("the server sent an invalid response")]
     Malformed,
+    #[error("the list of what the store holds is too long to read at once")]
+    TooLong,
+    #[error("the answer is larger than it may be")]
+    TooLarge,
     #[error(transparent)]
     Protocol(#[from] super::Error),
 }
 
+impl StoreError {
+    /// The store answered and turned a write down. A refused sign-in or a store that lost the
+    /// group isn't this: those end the run.
+    pub fn refused_write(&self) -> bool {
+        matches!(self, Self::Refused { status, code } if *status != 401 && code != "unclaimed")
+    }
+}
+
 pub type Result<T> = std::result::Result<T, StoreError>;
+
+impl StoreError {
+    /// Whether a read failed for the one item it asked for, and not because the store is out of
+    /// reach, wants a login or asks this device to slow down.
+    fn is_about_one_item(&self) -> bool {
+        match self {
+            Self::TooLarge => true,
+            Self::Refused { status, .. } => {
+                (400..500).contains(status) && !matches!(status, 401 | 407 | 408 | 429)
+            }
+            _ => false,
+        }
+    }
+}
+
+/// What `read` found, with an item that can't be read counted as absent, so it stops only its own
+/// log (spec/store.md, Contain one bad item).
+pub fn one_item(read: Result<Option<Vec<u8>>>) -> Result<Option<Vec<u8>>> {
+    match read {
+        Err(error) if error.is_about_one_item() => Ok(None),
+        read => read,
+    }
+}
 
 /// Whether an append landed, or lost to another device's append at the same head.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -367,6 +403,29 @@ impl Store for ServerStore {
             .map(parse_entry)
             .collect::<std::result::Result<_, _>>()?)
     }
+
+    /// The whole roster, page by page. A page that doesn't advance ends the read.
+    async fn roster_view(&self) -> Result<Vec<Entry>> {
+        let mut entries: Vec<Entry> = Vec::new();
+        let mut after = -1;
+        let mut budget = ReadBudget::default();
+        loop {
+            let page = self.roster_after(after).await?;
+            let Some(last) = page.last() else {
+                return Ok(entries);
+            };
+            let seq = i64::try_from(last.seq).map_err(|_| StoreError::Malformed)?;
+            if seq <= after {
+                return Err(StoreError::Malformed);
+            }
+            after = seq;
+            if !budget.take(page.len()) {
+                return Err(StoreError::Malformed);
+            }
+            entries.extend(page);
+        }
+    }
+
     async fn append_roster(
         &self,
         head: &str,
@@ -395,9 +454,12 @@ impl Store for ServerStore {
         }
         decode_empty(response).await.map(|()| Appended::Done)
     }
-    async fn key(&self, epoch: u32, name: &str) -> Result<Option<Vec<u8>>> {
-        self.get_bytes(&format!("v1/keys/{epoch:08x}/{name}.k"))
-            .await
+    /// The server names a wrap by epoch alone: only one entry can start an epoch there.
+    async fn key(&self, epoch: u32, _kc: &str, name: &str) -> Result<Option<Vec<u8>>> {
+        one_item(
+            self.get_bytes(&format!("v1/keys/{epoch:08x}/{name}.k"))
+                .await,
+        )
     }
     async fn put_object(&self, path: &str, bytes: Vec<u8>) -> Result<()> {
         let response = self
@@ -410,7 +472,7 @@ impl Store for ServerStore {
         decode_empty(response).await
     }
     async fn get_object(&self, path: &str) -> Result<Option<Vec<u8>>> {
-        self.get_bytes(&format!("v1/objects/{path}")).await
+        one_item(self.get_bytes(&format!("v1/objects/{path}")).await)
     }
     async fn delete_object(&self, path: &str) -> Result<bool> {
         let response = self

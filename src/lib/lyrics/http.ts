@@ -30,4 +30,15 @@ export async function lyricsGetJson<T>(
   return JSON.parse(await lyricsGetText(url, headers)) as T;
 }
 
+/** The answer, or null when the service says it has nothing here. Any other refusal is a failure. */
+export async function lyricsGetJsonOrMiss<T>(
+  url: string,
+  headers?: Record<string, string>,
+): Promise<T | null> {
+  const res = await lyricsHttpGet(url, headers);
+  if (res.status === 404) return null;
+  if (res.status < 200 || res.status >= 300) throw new Error(`HTTP ${res.status}`);
+  return JSON.parse(res.body) as T;
+}
+
 export const enc = (s: string): string => encodeURIComponent(s);

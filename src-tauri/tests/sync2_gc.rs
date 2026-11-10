@@ -4,7 +4,7 @@
 mod sync2_common;
 
 use flow_desktop_lib::sync2::engine::Session;
-use flow_desktop_lib::sync2::membership::remove_device;
+use flow_desktop_lib::sync2::membership::remove_devices;
 use flow_desktop_lib::sync2::paths::log_path;
 use sqlx::SqlitePool;
 use sync2_common::{MemoryStore, device_pool, exported, group};
@@ -87,7 +87,9 @@ async fn a_removed_device_s_log_another_device_already_collected_costs_one_reque
     a.write_snapshot(&pool_a, exported(&pool_a, "app-a").await)
         .await
         .unwrap();
-    remove_device(&a, &g.a, &b_did).await.unwrap();
+    remove_devices(&pool_a, &a, &g.a, std::slice::from_ref(&b_did))
+        .await
+        .unwrap();
     // The other remaining device got there first.
     for seq in 1..=written {
         g.store.take(&log_path(&b_did, seq));

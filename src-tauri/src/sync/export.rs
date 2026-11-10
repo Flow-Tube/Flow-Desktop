@@ -29,7 +29,9 @@ use crate::sync::changes::{self, Stamp};
 use crate::sync::error::SyncError;
 use crate::sync::mapping::{self, WatchRow};
 use crate::sync::merge::{MergedFlowNeuroBrain, MergedMusicBrain};
+use crate::sync::notes;
 use crate::sync::protocol::OutgoingCollection;
+use crate::sync::saved_shorts;
 use crate::sync::settings_map;
 use crate::sync::tombstones;
 
@@ -45,17 +47,40 @@ pub async fn export_collections(
     device_id: &str,
     collections: &[Collection],
 ) -> Result<Vec<OutgoingCollection>, SyncError> {
+    let with_saved_shorts = get_setting(pool, saved_shorts::PEER_KEEPS_LIST_SETTING_KEY)
+        .await?
+        .is_some();
+    export_with(pool, device_id, collections, with_saved_shorts).await
+}
+
+/// [`export_collections`] for a backup file, which keeps Saved Shorts whether or not a device has
+/// sent that list yet.
+pub async fn export_for_backup(
+    pool: &SqlitePool,
+    device_id: &str,
+    collections: &[Collection],
+) -> Result<Vec<OutgoingCollection>, SyncError> {
+    export_with(pool, device_id, collections, true).await
+}
+
+async fn export_with(
+    pool: &SqlitePool,
+    device_id: &str,
+    collections: &[Collection],
+    with_saved_shorts: bool,
+) -> Result<Vec<OutgoingCollection>, SyncError> {
     let mut out = Vec::with_capacity(collections.len());
     for &collection in collections {
         let ndjson = match collection {
             Collection::WatchHistory => export_watch_history(pool, device_id).await?,
             Collection::Likes => export_likes(pool, device_id).await?,
-            Collection::Playlists => export_playlists(pool, device_id).await?,
+            Collection::Playlists => export_playlists(pool, device_id, with_saved_shorts).await?,
             Collection::Settings => export_settings(pool, device_id).await?,
             Collection::FlowNeuroBrain => export_flow_neuro(pool, device_id).await?,
             Collection::MusicBrain => export_music(pool, device_id).await?,
             Collection::Subscriptions => export_subscriptions(pool, device_id).await?,
             Collection::SubscribedChannels => export_subscribed_channels(pool, device_id).await?,
+            Collection::Notes => export_notes(pool).await?,
         };
         out.push(OutgoingCollection { collection, ndjson });
     }
@@ -87,18 +112,28 @@ async fn export_likes(pool: &SqlitePool, device_id: &str) -> Result<Vec<u8>, Syn
     };
     let live: BTreeSet<String> = likes.iter().map(mapping::like_key).collect();
     let stamps = load_changes(pool, changes::LIKES).await?;
+    tombstones::raise_live_likes(&mut likes, &stamps, device_id);
     likes.extend(tombstones::likes(&stamps, &live, device_id));
     likes.sort_by(|a, b| mapping::like_key(a).cmp(&mapping::like_key(b)));
     Ok(to_ndjson(&likes))
 }
 
-async fn export_playlists(pool: &SqlitePool, device_id: &str) -> Result<Vec<u8>, SyncError> {
+async fn export_playlists(
+    pool: &SqlitePool,
+    device_id: &str,
+    with_saved_shorts: bool,
+) -> Result<Vec<u8>, SyncError> {
     let mut playlists = match get_setting(pool, mapping::PLAYLISTS_SETTING_KEY).await? {
         Some(raw) => mapping::parse_playlists_blob(&raw, device_id),
         None => Vec::new(),
     };
     if let Some(raw) = get_setting(pool, mapping::ALBUMS_SETTING_KEY).await? {
         playlists.extend(mapping::parse_albums_blob(&raw, device_id));
+    }
+    if with_saved_shorts
+        && let Some(raw) = get_setting(pool, saved_shorts::SAVED_SHORTS_SETTING_KEY).await?
+    {
+        playlists.push(saved_shorts::parse_library(&raw, device_id));
     }
     tombstones::playlists(
         &mut playlists,
@@ -209,6 +244,13 @@ async fn export_subscribed_channels(
         None => Vec::new(),
     };
     Ok(to_ndjson(&channels))
+}
+
+/// Notes plus the deletions still to be announced, in Android's byte form and order.
+async fn export_notes(pool: &SqlitePool) -> Result<Vec<u8>, SyncError> {
+    let mut conn = pool.acquire().await?;
+    let records = notes::local_notes(&mut conn).await?;
+    Ok(to_ndjson(&records))
 }
 
 async fn export_settings(pool: &SqlitePool, device_id: &str) -> Result<Vec<u8>, SyncError> {

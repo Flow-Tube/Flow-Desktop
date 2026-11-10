@@ -13,14 +13,16 @@ use flow_desktop_lib::sync::canonical::Collection;
 use flow_desktop_lib::sync::export::export_collections;
 use flow_desktop_lib::sync::protocol::OutgoingCollection;
 use flow_desktop_lib::sync2::entries::{Draft, build_entry, epoch_draft, member_subject};
-use flow_desktop_lib::sync2::keys::{MemberSecrets, member_secrets};
+use flow_desktop_lib::sync2::epoch::epoch_commitment;
+use flow_desktop_lib::sync2::keys::{MemberSecrets, group_id, member_secrets};
 use flow_desktop_lib::sync2::linking::WelcomeStore;
 use flow_desktop_lib::sync2::mailbox::Mailbox;
+use flow_desktop_lib::sync2::paths::kc_name;
 use flow_desktop_lib::sync2::roster::{Entry, Op, Role, RosterState, replay_roster};
 use flow_desktop_lib::sync2::sealed::random_bytes;
-use flow_desktop_lib::sync2::server::{Appended, ChangedObject, Result};
+use flow_desktop_lib::sync2::server::{Appended, ChangedObject, Result, StoreError};
 use flow_desktop_lib::sync2::state::{GroupRecord, add_roster_entries, save_group};
-use flow_desktop_lib::sync2::store::Store;
+use flow_desktop_lib::sync2::store::{Store, wraps_epoch};
 use flow_desktop_lib::sync2::wrap::wrap_epoch_key;
 use sqlx::SqlitePool;
 use sqlx::sqlite::SqlitePoolOptions;
@@ -30,11 +32,19 @@ pub const LINK: &str = "default-link";
 #[derive(Default)]
 pub struct Memory {
     pub roster: Vec<Entry>,
-    pub keys: BTreeMap<(u32, String), Vec<u8>>,
+    pub keys: BTreeMap<(u32, String, String), Vec<u8>>,
     pub objects: BTreeMap<String, (u64, Vec<u8>)>,
     pub mailbox: BTreeMap<String, Vec<u8>>,
     /// Every delete request made, found or not.
     pub deletes: Vec<String>,
+    /// Roster appends fail while set, as they do when a store stops answering.
+    pub refuse_appends: bool,
+    /// Objects per answer to `changes`, when set.
+    pub page: Option<usize>,
+    /// Paths that aren't log objects, added to every answer to `changes`.
+    pub padding: usize,
+    /// `changes` always answers, always with a later cursor.
+    pub endless: bool,
     cursor: u64,
 }
 
@@ -83,22 +93,26 @@ impl Store for &MemoryStore {
         chain: Option<&str>,
     ) -> Result<Appended> {
         let mut memory = self.0.lock().unwrap();
+        if memory.refuse_appends {
+            return Err(StoreError::Refused {
+                status: 503,
+                code: "unavailable".into(),
+            });
+        }
         let current = replay_roster(&memory.roster).unwrap().head;
         if current != head {
             return Ok(Appended::Conflict { head: current });
         }
-        let epoch = entry
-            .epoch
-            .as_ref()
-            .map_or_else(|| replay_roster(&memory.roster).unwrap().epoch, |e| e.n);
+        let (epoch, kc) = wraps_epoch(entry, &memory.roster)?;
         for (did, wrap) in wraps {
-            memory
-                .keys
-                .insert((epoch, did.clone()), URL_SAFE_NO_PAD.decode(wrap).unwrap());
+            memory.keys.insert(
+                (epoch, kc.clone(), did.clone()),
+                URL_SAFE_NO_PAD.decode(wrap).unwrap(),
+            );
         }
         if let Some(chain) = chain {
             memory.keys.insert(
-                (epoch, "chain".to_owned()),
+                (epoch, kc, "chain".to_owned()),
                 URL_SAFE_NO_PAD.decode(chain).unwrap(),
             );
         }
@@ -106,13 +120,13 @@ impl Store for &MemoryStore {
         Ok(Appended::Done)
     }
 
-    async fn key(&self, epoch: u32, name: &str) -> Result<Option<Vec<u8>>> {
+    async fn key(&self, epoch: u32, kc: &str, name: &str) -> Result<Option<Vec<u8>>> {
         Ok(self
             .0
             .lock()
             .unwrap()
             .keys
-            .get(&(epoch, name.to_owned()))
+            .get(&(epoch, kc.to_owned(), name.to_owned()))
             .cloned())
     }
 
@@ -139,6 +153,13 @@ impl Store for &MemoryStore {
 
     async fn changes(&self, cursor: u64) -> Result<(Vec<ChangedObject>, u64)> {
         let memory = self.0.lock().unwrap();
+        let pad = |n: u64| ChangedObject {
+            path: format!("pad/{n}"),
+            size: 0,
+        };
+        if memory.endless {
+            return Ok((vec![pad(cursor)], cursor + 1));
+        }
         let mut changes: Vec<(u64, &String, &Vec<u8>)> = memory
             .objects
             .iter()
@@ -146,14 +167,18 @@ impl Store for &MemoryStore {
             .map(|(p, (c, b))| (*c, p, b))
             .collect();
         changes.sort();
+        changes.truncate(memory.page.unwrap_or(usize::MAX));
         let next = changes.last().map_or(cursor, |(c, _, _)| *c);
-        let objects = changes
+        let mut objects: Vec<ChangedObject> = changes
             .into_iter()
             .map(|(_, path, bytes)| ChangedObject {
                 path: path.clone(),
                 size: bytes.len() as u64,
             })
             .collect();
+        if !objects.is_empty() {
+            objects.extend((0..memory.padding as u64).map(pad));
+        }
         Ok((objects, next))
     }
 }
@@ -191,6 +216,7 @@ pub fn draft(op: Op, signer: &MemberSecrets) -> Draft {
         signer: hex::encode(signer.did),
         add: None,
         remove: None,
+        cut: None,
         epoch: None,
         meta: None,
     }
@@ -207,7 +233,11 @@ pub async fn group() -> Group {
         member_secrets(random_bytes(), random_bytes()),
     );
     let recovery = member_secrets(random_bytes(), random_bytes());
-    let (group, epoch_key): ([u8; 16], [u8; 32]) = (random_bytes(), random_bytes());
+    let group = group_id(
+        (&a.sig_public, &a.kem_public),
+        (&recovery.sig_public, &recovery.kem_public),
+    );
+    let epoch_key: [u8; 32] = random_bytes();
     let store = MemoryStore::default();
     let mut genesis = draft(Op::Genesis, &a);
     genesis.add = Some(vec![
@@ -221,13 +251,14 @@ pub async fn group() -> Group {
         .unwrap()
         .roster
         .push(build_entry(&group, None, genesis, &[&a, &recovery]));
+    let kc = kc_name(&epoch_commitment(&epoch_key, &group, 0));
     for (did, wrap) in wraps(&group, 0, &epoch_key, &[&a, &recovery]).await {
         store
             .0
             .lock()
             .unwrap()
             .keys
-            .insert((0, did), URL_SAFE_NO_PAD.decode(wrap).unwrap());
+            .insert((0, kc.clone(), did), URL_SAFE_NO_PAD.decode(wrap).unwrap());
     }
     let mut add = draft(Op::Add, &a);
     add.add = Some(vec![member_subject(
@@ -255,6 +286,23 @@ pub async fn group() -> Group {
         b,
         recovery,
     }
+}
+
+/// A member adds `device` to the group.
+pub async fn add_device(group: &Group, device: &MemberSecrets) {
+    let mut add = draft(Op::Add, &group.a);
+    add.add = Some(vec![member_subject(
+        &device.sig_public,
+        &device.kem_public,
+        Role::Device,
+    )]);
+    let state = head(&group.store);
+    let entry = build_entry(&group.group, Some(&state), add, &[&group.a, device]);
+    let outcome = (&group.store)
+        .append_roster(&state.head, &entry, &BTreeMap::new(), None)
+        .await
+        .unwrap();
+    assert_eq!(outcome, Appended::Done);
 }
 
 /// The store a member of this fixture's group names in its welcome.

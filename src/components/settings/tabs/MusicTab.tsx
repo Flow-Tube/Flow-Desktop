@@ -1,7 +1,7 @@
 import { SettingsGroup } from '../SettingsGroup';
 import { MusicTraySetting } from '../MusicTraySetting';
 import { MusicAudioSettings } from '../music/MusicAudioSettings';
-import { MusicLyricsSettings } from '../music/MusicLyricsSettings';
+import { MusicHomeSettings } from '../music/MusicHomeSettings';
 import { MusicNowPlayingSettings } from '../music/MusicNowPlayingSettings';
 import { MusicPlaybackSettings } from '../music/MusicPlaybackSettings';
 import { ScrobblingSection } from '../../scrobbling/ScrobblingSection';
@@ -14,7 +14,7 @@ export function MusicTab() {
       <MusicPlaybackSettings />
       <MusicAudioSettings />
       <MusicNowPlayingSettings />
-      <MusicLyricsSettings />
+      <MusicHomeSettings />
       <SettingsGroup title={getString('settings_group_music_integrations')}>
         <MusicTraySetting />
       </SettingsGroup>

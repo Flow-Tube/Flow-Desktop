@@ -6,6 +6,7 @@ import { getSettingValue } from "../store/useAppSettingsStore";
 import { isTauriEnv } from "./api/env";
 import { reportListened, reportLove, reportNowPlaying, reportOnline, scrobbleTrack } from "./api/scrobble";
 import { isDeepFlowCurrentlyActive } from "./deepFlow";
+import { isLocalMediaId } from "./localMediaId";
 import { likeChange } from "./scrobble/likeChange";
 import { ListenTracker, type ListenEvent } from "./scrobble/listenTracker";
 import { SETTINGS, type SettingKey } from "./settings/schema";
@@ -18,7 +19,8 @@ function scrobblingAllowed(): boolean {
 }
 
 function send(event: ListenEvent): void {
-  if (!scrobblingAllowed()) return;
+  // Android asks before scrobbling files on the device; Desktop has no such setting yet.
+  if (!scrobblingAllowed() || isLocalMediaId(event.track.videoId ?? event.track.id)) return;
   const track = scrobbleTrack(event.track, event.durationMs);
   if (event.kind === "nowPlaying") {
     if (enabled(SETTINGS.SCROBBLE_NOW_PLAYING)) void reportNowPlaying(track);

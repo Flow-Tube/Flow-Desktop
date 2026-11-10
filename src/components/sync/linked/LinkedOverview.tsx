@@ -11,8 +11,10 @@ import { Spinner } from "../SyncParts";
 import { Card } from "./Card";
 import { DeviceList } from "./DeviceList";
 import { JoinRequests } from "./JoinRequests";
+import { LoginChange } from "./LoginChange";
 import { ConfirmedAction } from "./ConfirmedAction";
 import { ProfilesCard } from "./ProfilesCard";
+import { RecoveryNotices } from "./RecoveryNotices";
 
 function lastSyncText(status: LinkedStatus, syncing: boolean): string {
   if (syncing) return getString("linked_syncing");
@@ -30,7 +32,9 @@ export function LinkedOverview({ status }: { status: LinkedStatus }) {
   const syncing = useSyncActivityStore((state) => state.syncing);
   return (
     <div className="grid grid-cols-12 gap-4">
+      <RecoveryNotices status={status} devices={devices ?? []} />
       {status.kind === "server" && <JoinRequests />}
+      {status.kind === "webdav" && <LoginChange status={status} devices={devices ?? []} />}
       <Card title={getString(STORE_TITLES[status.kind ?? "server"])} className="col-span-12 lg:col-span-5">
         {status.kind === "lan" ? (
           <p className="text-sm text-chrome-neutral-400">{getString("linked_on_lan_body")}</p>
@@ -54,7 +58,15 @@ export function LinkedOverview({ status }: { status: LinkedStatus }) {
           label={getString("linked_replace_recovery")}
           confirm={getString("linked_replace_recovery_confirm")}
         />
-        <ConfirmedAction action="leave" label={getString("linked_leave")} confirm={getString("linked_leave_confirm")} />
+        <ConfirmedAction
+          action="leave"
+          label={getString("linked_leave")}
+          confirm={
+            devices?.some((device) => device.thisDevice && device.setRecoveryKey)
+              ? `${getString("linked_leave_confirm")} ${getString("linked_leave_stops_others")}`
+              : getString("linked_leave_confirm")
+          }
+        />
       </Card>
       <Card title={getString("linked_devices_label")} className="col-span-12 lg:col-span-7">
         {devicesError ? (

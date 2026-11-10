@@ -31,7 +31,7 @@ export function MusicBlockedArtists() {
             </div>
           </div>
 
-          <div className="text-right">
+          <div className="text-end">
             <p className="font-mono text-xl text-[var(--color-on-surface)]">{entries.length}</p>
             <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
               {getString("music_role_artist")}
@@ -48,9 +48,9 @@ export function MusicBlockedArtists() {
                     <Music2 className="h-4 w-4" />
                   </td>
                   <td className="px-0 py-3 text-[var(--color-on-surface)]">
-                    <span className="block truncate">{name}</span>
+                    <span dir="auto" className="block truncate">{name}</span>
                   </td>
-                  <td className="w-12 px-4 py-3 text-right">
+                  <td className="w-12 px-4 py-3 text-end">
                     <button
                       onClick={() => void unblockArtist(key)}
                       title={getString("persona_unblock_item", name)}

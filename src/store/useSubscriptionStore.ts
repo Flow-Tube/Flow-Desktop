@@ -24,6 +24,8 @@ export interface SubscriptionGroup {
 
 interface FollowOptions {
   learn?: boolean;
+  /** A music artist, which Flow for Android files apart from video channels. */
+  isMusic?: boolean;
 }
 
 /** What an unsubscribe took away, so Undo can put it back. */
@@ -162,7 +164,13 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
     }
     const updated = [
       ...subscriptions,
-      { id: cleanId, name: channelName, avatarUrl, subscribedAt: Date.now() },
+      {
+        id: cleanId,
+        name: channelName,
+        avatarUrl,
+        subscribedAt: Date.now(),
+        ...(options?.isMusic ? { isMusic: true } : {}),
+      },
     ];
     set({ subscriptions: updated });
     await persistSubscriptions(updated);

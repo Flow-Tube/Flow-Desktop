@@ -1,14 +1,16 @@
 import { useMemo } from 'react';
-import { useTranslation } from 'react-i18next';
 import { SettingsGroup } from '../SettingsGroup';
 import { SettingItem } from '../SettingItem';
 import { Select } from '../../ui/Select';
 import { ToggleSwitch } from '../../ui/ToggleSwitch';
 import { useBoolPref, usePreference } from '../../../lib/usePreference';
-import { getString } from '../../../lib/i18n/index';
+import { APP_LOCALE, getString } from '../../../lib/i18n/index';
 import { SETTINGS } from '../../../lib/settings/schema';
 import { isSettingDisabledUntilWired } from '../../../lib/settings/values';
 import { audioLanguageOptions } from '../../../lib/audioLanguages';
+import { deviceSupportsCodec, isCodecFailingOnDevice, type VideoCodecFamily } from '../../../lib/codecHealth';
+import { useCodecHealthStore } from '../../../store/useCodecHealthStore';
+import { Button } from '../../ui/Button';
 
 const QUALITY_OPTIONS = [
   { value: 'Auto', label: getString('quality_auto') }, { value: '4320p', label: '4320p (8K)' }, { value: '2160p', label: '2160p (4K)' },
@@ -17,17 +19,40 @@ const QUALITY_OPTIONS = [
   { value: '360p', label: '360p' }, { value: '240p', label: '240p' }, { value: '144p', label: '144p' },
 ];
 
+const CODECS: Array<{ value: string; family: VideoCodecFamily }> = [
+  { value: 'H.264', family: 'h264' },
+  { value: 'VP9', family: 'vp9' },
+  { value: 'AV1', family: 'av1' },
+];
+
 export function QualityTab() {
   const [qualityWifi, setQualityWifi] = usePreference(SETTINGS.DEFAULT_QUALITY_WIFI, '1080p');
   const [codec, setCodec] = usePreference(SETTINGS.DEFAULT_VIDEO_CODEC, 'H.264');
   const [fastSwitch, setFastSwitch] = useBoolPref(SETTINGS.FAST_QUALITY_SWITCH_ENABLED);
   const [shortsQuality, setShortsQuality] = usePreference(SETTINGS.SHORTS_QUALITY_WIFI, '720p');
   const [audioLang, setAudioLang] = usePreference(SETTINGS.PREFERRED_AUDIO_LANGUAGE, 'original');
-  const { i18n } = useTranslation();
+  const decodeFailures = useCodecHealthStore((state) => state.failures);
+  const clearCodecFailures = useCodecHealthStore((state) => state.clearFailures);
+  const codecs = useMemo(() => CODECS.map((item) => {
+    const unsupported = !deviceSupportsCodec(item.family);
+    const failing = !unsupported && isCodecFailingOnDevice(decodeFailures, item.family);
+    return { ...item, unsupported, failing, unavailable: unsupported || failing };
+  }), [decodeFailures]);
+  const codecOptions = useMemo(() => [
+    { value: 'Auto', label: getString('quality_auto') },
+    ...codecs.map((item) => ({
+      value: item.value,
+      disabled: item.unavailable,
+      label: item.unsupported
+        ? getString('settings_codec_unsupported', item.value)
+        : item.failing ? getString('settings_codec_failing', item.value) : item.value,
+    })),
+  ], [codecs]);
+  const chosenCodecUnavailable = codecs.some((item) => item.value === codec && item.unavailable);
   const languageOptions = useMemo(() => [
     { value: 'original', label: getString('settings_option_original') },
-    ...audioLanguageOptions(i18n.resolvedLanguage ?? 'en'),
-  ], [i18n.resolvedLanguage]);
+    ...audioLanguageOptions(APP_LOCALE),
+  ], []);
 
   return (
     <div className="space-y-6 pb-8">
@@ -35,12 +60,25 @@ export function QualityTab() {
         <SettingItem title={getString('settings_default_resolution')} description={getString('settings_default_resolution_desc')}>
           <Select value={qualityWifi} onChange={setQualityWifi} options={QUALITY_OPTIONS} />
         </SettingItem>
-        <SettingItem title={getString('settings_preferred_codec')} description={getString('settings_preferred_codec_desc')}>
-          <Select value={codec} onChange={setCodec} options={[
-            { value: 'Auto', label: getString('quality_auto') }, { value: 'H.264', label: 'H.264' },
-            { value: 'VP9', label: 'VP9' }, { value: 'AV1', label: 'AV1' },
-          ]} />
+        <SettingItem
+          title={getString('settings_preferred_codec')}
+          description={chosenCodecUnavailable
+            ? getString('settings_preferred_codec_unavailable', codec)
+            : getString('settings_preferred_codec_desc')}
+        >
+          <Select value={codec} onChange={setCodec} options={codecOptions} />
         </SettingItem>
+        {codecs.filter((item) => item.failing).map((item) => (
+          <SettingItem
+            key={item.family}
+            title={getString('settings_codec_failing_title', item.value)}
+            description={getString('settings_codec_failing_desc', item.value)}
+          >
+            <Button variant="secondary" size="sm" onClick={() => clearCodecFailures(item.family)}>
+              {getString('settings_codec_try_again')}
+            </Button>
+          </SettingItem>
+        ))}
         <SettingItem title={getString('settings_fast_quality_switch')} description={getString('settings_fast_quality_switch_desc')}>
           <ToggleSwitch checked={fastSwitch} onChange={setFastSwitch} />
         </SettingItem>

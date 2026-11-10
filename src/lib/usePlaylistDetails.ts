@@ -9,7 +9,7 @@ import {
   updateStoredPlaylistTracks,
   type StoredPlaylist,
 } from "./playlistLibrary";
-import { appendUniqueVideos, loadRemainingPlaylistVideos } from "./playlistPages";
+import { appendUniqueVideos, walkRemainingPlaylistPages } from "./playlistPages";
 import {
   applyVideoMetadata,
   ENRICHMENT_CHUNK_DELAY_MS,
@@ -42,7 +42,11 @@ export function usePlaylistDetails(playlistId: string | undefined) {
   const [nextPageToken, setNextPageToken] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadMoreFailed, setLoadMoreFailed] = useState(false);
-  const pagingRef = useRef(false);
+  // Read from YouTube and every page has arrived, so a count above what arrived means hidden videos.
+  const [remoteComplete, setRemoteComplete] = useState(false);
+  const pageRead = useRef<ReturnType<typeof getPlaylistDetails> | null>(null);
+  const walk = useRef<Promise<VideoSummary[]> | null>(null);
+  const playlistLoads = useRef(0);
 
   const load = useCallback(async () => {
     if (!playlistId) {
@@ -53,7 +57,11 @@ export function usePlaylistDetails(playlistId: string | undefined) {
 
     setLoading(true);
     setError(null);
+    playlistLoads.current += 1;
+    pageRead.current = null;
+    walk.current = null;
     setNextPageToken(null);
+    setRemoteComplete(false);
     setLoadMoreFailed(false);
     // Cleared so enrichment never pairs the old list with the new playlist.
     setVideos([]);
@@ -118,6 +126,7 @@ export function usePlaylistDetails(playlistId: string | undefined) {
 
       setVideos(resolvedVideos);
       setNextPageToken(usesRemote ? remoteNextPageToken : null);
+      setRemoteComplete(usesRemote && !remoteNextPageToken);
       const resolvedOwner = !isUnknownOwner(remoteChannel)
         ? remoteChannel
         : resolvedVideos[0]?.channelName ?? remoteChannel;
@@ -150,38 +159,66 @@ export function usePlaylistDetails(playlistId: string | undefined) {
   }, [load]);
 
   const loadMore = useCallback(async () => {
-    if (!playlistId || !nextPageToken || pagingRef.current) return;
-    pagingRef.current = true;
+    if (!playlistId || !nextPageToken || pageRead.current || walk.current) return;
     setLoadingMore(true);
     setLoadMoreFailed(false);
+    const read = getPlaylistDetails(playlistId, nextPageToken);
+    pageRead.current = read;
     try {
-      const page = await getPlaylistDetails(playlistId, nextPageToken);
+      const page = await read;
       setVideos((current) => appendUniqueVideos(current, page.videos ?? []));
       setNextPageToken(page.nextPageToken ?? null);
+      setRemoteComplete(!page.nextPageToken);
     } catch (pageError) {
       console.warn("Failed to load the next playlist page", pageError);
       setLoadMoreFailed(true);
     } finally {
-      pagingRef.current = false;
+      if (pageRead.current === read) pageRead.current = null;
       setLoadingMore(false);
     }
   }, [playlistId, nextPageToken]);
 
-  /** Every video of the playlist, reading the pages not loaded yet. */
-  const loadAllVideos = useCallback(async (): Promise<VideoSummary[]> => {
-    if (!playlistId || !nextPageToken || pagingRef.current) return videos;
-    pagingRef.current = true;
+  /** Every video of the playlist, reading the pages not loaded yet. Rejects if a page can't be read. */
+  const loadAllVideos = useCallback((): Promise<VideoSummary[]> => {
+    if (walk.current) return walk.current;
+    if (!playlistId || !nextPageToken) return Promise.resolve(videos);
+    const pending = pageRead.current;
+    const startedOn = playlistLoads.current;
     setLoadingMore(true);
-    try {
-      const all = await loadRemainingPlaylistVideos(playlistId, videos, nextPageToken);
-      setVideos(all);
-      setNextPageToken(null);
-      return all;
-    } finally {
-      pagingRef.current = false;
-      setLoadingMore(false);
-    }
+    walk.current = (async () => {
+      try {
+        // A page already being read decides where the walk starts.
+        const page = pending ? await pending.catch(() => null) : null;
+        const { videos: all, finished } = await walkRemainingPlaylistPages(
+          playlistId,
+          page ? appendUniqueVideos(videos, page.videos ?? []) : videos,
+          page ? page.nextPageToken : nextPageToken,
+        );
+        if (playlistLoads.current === startedOn) {
+          setVideos(all);
+          setNextPageToken(null);
+          setRemoteComplete(finished);
+        }
+        return all;
+      } finally {
+        if (playlistLoads.current === startedOn) walk.current = null;
+        setLoadingMore(false);
+      }
+    })();
+    return walk.current;
   }, [playlistId, nextPageToken, videos]);
+
+  /** Shows a saved rename, description or count without reading the playlist again. */
+  const applyDetails = useCallback((updated: StoredPlaylist) => {
+    setStoredPlaylist(updated);
+    setMeta((current) => current && {
+      ...current,
+      title: updated.name,
+      description: updated.description ?? null,
+      videoCount: updated.videoCount ?? current.videoCount,
+      videoCountText: updated.videoCountText ?? current.videoCountText,
+    });
+  }, []);
 
   // Per playlist, since this hook outlives a switch; a pass stops once its playlist leaves the screen.
   // Tracks this visit has dealt with, looked up or skipped, and how many lookups it has made.
@@ -263,7 +300,9 @@ export function usePlaylistDetails(playlistId: string | undefined) {
     videos,
     setVideos,
     reload: load,
+    applyDetails,
     hasMore: nextPageToken !== null,
+    hidesUnavailable: remoteComplete && meta !== null && meta.videoCount > videos.length,
     loadingMore,
     loadMoreFailed,
     loadMore,

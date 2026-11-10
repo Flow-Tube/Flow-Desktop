@@ -1,6 +1,12 @@
 import { create } from "zustand";
 
-import { clearWatchHistory, deleteWatchRecord, getWatchHistory } from "../lib/api/db";
+import {
+  clearWatchHistory,
+  deleteShortWatchRecords,
+  deleteWatchRecord,
+  getWatchHistory,
+  restoreWatchRecord,
+} from "../lib/api/db";
 import type { WatchHistoryRecord } from "../types/db";
 
 export const HISTORY_PAGE_SIZE = 200;
@@ -17,6 +23,9 @@ interface HistoryState {
   load: (force?: boolean) => Promise<void>;
   loadMore: () => Promise<void>;
   remove: (videoId: string) => Promise<void>;
+  /** Puts a removed row back where its watch date places it. */
+  restore: (record: WatchHistoryRecord) => Promise<void>;
+  removeShorts: () => Promise<void>;
   clear: () => Promise<void>;
 }
 
@@ -77,6 +86,25 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
       records: state.records.filter((item) => item.videoId !== videoId),
       offset: Math.max(0, state.offset - 1),
     }));
+  },
+  restore: async (record) => {
+    await restoreWatchRecord(record);
+    set((state) => {
+      if (state.records.some((item) => item.videoId === record.videoId)) return state;
+      const at = state.records.findIndex((item) => item.watchDate < record.watchDate);
+      // Older than every loaded page: a later page brings it back.
+      if (at === -1 && state.hasMore) return state;
+      const records = [...state.records];
+      records.splice(at === -1 ? records.length : at, 0, record);
+      return { records, offset: state.offset + 1 };
+    });
+  },
+  removeShorts: async () => {
+    await deleteShortWatchRecords();
+    set((state) => {
+      const records = state.records.filter((item) => !item.isShort);
+      return { records, offset: Math.max(0, state.offset - (state.records.length - records.length)) };
+    });
   },
   clear: async () => {
     await clearWatchHistory();

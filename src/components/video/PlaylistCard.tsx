@@ -3,7 +3,9 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Download, Library, ListVideo, MoreVertical } from 'lucide-react';
 import type { PlaylistSummary } from '../../types/video';
+import { confirmPlaylistRemoval } from '../../lib/confirmPlaylistRemoval';
 import {
+  isOwnedPlaylist,
   isPlaylistInLibrary,
   isProtectedPlaylistId,
   removePlaylistFromLibrary,
@@ -21,6 +23,7 @@ import { SoftBackdrop } from '../ui/SoftBackdrop';
 import { useHoverWashColor } from '../../lib/useHoverWashColor';
 import { backgroundTabClickProps, openedInBackgroundTab } from '../../lib/openTarget';
 import { openActions } from '../common/openActions';
+import { alignToEnd, growFromPoint } from '../../lib/direction';
 
 interface PlaylistCardProps {
   playlist: PlaylistSummary & {
@@ -33,16 +36,21 @@ interface PlaylistCardProps {
   onSaveToLibrary?: (playlist: PlaylistSummary) => void | boolean | Promise<void | boolean>;
   onRemoveFromLibrary?: (playlist: PlaylistSummary) => void | boolean | Promise<void | boolean>;
   onDownload?: (playlist: PlaylistSummary) => void;
+  /** Drawn over the thumbnail, such as a download's progress. */
+  thumbnailOverlay?: React.ReactNode;
+  appendActions?: MediaMenuAction[];
 }
 
-function StackedPlaylistThumbnail({
+export function StackedPlaylistThumbnail({
   thumbnailUrl,
   title,
   videoCountText,
+  overlay,
 }: {
   thumbnailUrl?: string | null;
   title: string;
   videoCountText: string;
+  overlay?: React.ReactNode;
 }) {
   const { src, onError } = useImageFallback([thumbnailUrl]);
 
@@ -52,10 +60,11 @@ function StackedPlaylistThumbnail({
         <div className="flex h-full w-full items-center justify-center text-chrome-neutral-500">
           <ListVideo size={32} />
         </div>
-        <div className="absolute bottom-1.5 right-1.5 flex items-center gap-1.5 rounded bg-chrome-black/80 px-1.5 py-0.5 text-[11px] font-semibold tracking-wide text-chrome-white">
+        <div className="absolute bottom-1.5 end-1.5 flex items-center gap-1.5 rounded bg-chrome-black/80 px-1.5 py-0.5 text-[11px] font-semibold tracking-wide text-chrome-white">
           <ListVideo size={14} />
           {videoCountText}
         </div>
+        {overlay}
       </div>
     );
   }
@@ -64,7 +73,7 @@ function StackedPlaylistThumbnail({
     <div className="relative w-full pt-2.5">
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute left-4 right-4 top-0 z-0 aspect-video overflow-hidden rounded-xl"
+        className="pointer-events-none absolute start-4 end-4 top-0 z-0 aspect-video overflow-hidden rounded-xl"
       >
         <SoftBackdrop src={src} detail={24} className="h-full w-full object-cover" />
         <div className="absolute inset-0 bg-chrome-black/55" />
@@ -72,7 +81,7 @@ function StackedPlaylistThumbnail({
 
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute left-2 right-2 top-1 z-[1] aspect-video overflow-hidden rounded-xl"
+        className="pointer-events-none absolute start-2 end-2 top-1 z-[1] aspect-video overflow-hidden rounded-xl"
       >
         <SoftBackdrop src={src} detail={40} className="h-full w-full object-cover" />
         <div className="absolute inset-0 bg-chrome-black/35" />
@@ -86,10 +95,11 @@ function StackedPlaylistThumbnail({
           className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
           loading="lazy"
         />
-        <div className="absolute bottom-1.5 right-1.5 flex items-center gap-1.5 rounded bg-chrome-black/80 px-1.5 py-0.5 text-[11px] font-semibold tracking-wide text-chrome-white">
+        <div className="absolute bottom-1.5 end-1.5 flex items-center gap-1.5 rounded bg-chrome-black/80 px-1.5 py-0.5 text-[11px] font-semibold tracking-wide text-chrome-white">
           <ListVideo size={14} />
           {videoCountText}
         </div>
+        {overlay}
       </div>
     </div>
   );
@@ -102,6 +112,8 @@ export function PlaylistCard({
   onSaveToLibrary,
   onRemoveFromLibrary,
   onDownload,
+  thumbnailOverlay,
+  appendActions = [],
 }: PlaylistCardProps) {
   const navigate = useNavigate();
   const [showMenu, setShowMenu] = useState(false);
@@ -124,14 +136,14 @@ export function PlaylistCard({
   const handleContextMenu = useCallback((event: React.MouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
-    setMenuAnchor({ top: event.clientY, left: event.clientX });
+    setMenuAnchor({ top: event.clientY, ...growFromPoint(event.clientX) });
     setShowMenu(true);
   }, []);
 
   const openMenuFromDots = useCallback((event: React.MouseEvent) => {
     event.stopPropagation();
     const rect = event.currentTarget.getBoundingClientRect();
-    setMenuAnchor({ top: rect.bottom + 4, right: rect.right });
+    setMenuAnchor({ top: rect.bottom + 4, ...alignToEnd(rect) });
     setShowMenu((current) => !current);
   }, []);
 
@@ -195,8 +207,11 @@ export function PlaylistCard({
     if (isProtected) return;
 
     try {
+      const owned = await isOwnedPlaylist(playlist.id);
+      if (!await confirmPlaylistRemoval(playlist, owned)) return;
       if (!await remove()) return;
-      showSaveToast({ destination: { kind: 'library' }, item: toastItem, removed: true, undo: save });
+      // Undo saves again from YouTube, which doesn't know a playlist made in Flow.
+      showSaveToast({ destination: { kind: 'library' }, item: toastItem, removed: true, undo: owned ? undefined : save });
     } catch (error) {
       console.error('Failed to remove playlist from library', error);
       showSaveFailedToast({ destination: { kind: 'library' }, item: toastItem, removed: true, retry: handleRemoveFromLibrary });
@@ -248,6 +263,7 @@ export function PlaylistCard({
       onSelect: () => navigate(playlistRoute),
     },
     ...openActions(playlistRoute),
+    ...appendActions,
   ];
 
   const renderMenu = () => {
@@ -286,11 +302,12 @@ export function PlaylistCard({
         thumbnailUrl={playlist.thumbnailUrl}
         title={playlist.title}
         videoCountText={videoCountText}
+        overlay={thumbnailOverlay}
       />
 
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="line-clamp-2 text-sm font-semibold leading-tight text-chrome-zinc-100 transition-colors group-hover:text-primary">
+          <h3 dir="auto" className="line-clamp-2 text-sm font-semibold leading-tight text-chrome-zinc-100 transition-colors group-hover:text-primary">
             {playlist.title}
           </h3>
           <p className="mt-1 line-clamp-1 text-xs font-medium text-chrome-zinc-400 transition-colors">
@@ -302,7 +319,7 @@ export function PlaylistCard({
           <button
             type="button"
             onClick={openMenuFromDots}
-            aria-label="Open playlist actions"
+            aria-label={getString('video_open_playlist_actions')}
             className="mt-0.5 rounded-full p-1 text-chrome-zinc-500 opacity-0 transition-all duration-150 hover:bg-chrome-zinc-800 hover:text-chrome-zinc-200 group-hover:opacity-100"
           >
             <MoreVertical size={18} />

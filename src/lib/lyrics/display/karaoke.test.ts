@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildKaraokeGeometry, drawKaraoke, type KaraokeFrame, type KaraokePaint } from "./karaoke";
+import { buildKaraokeGeometry, drawKaraoke, heldNoteGlowLevel, type KaraokeFrame, type KaraokePaint } from "./karaoke";
 import { layoutText, type TextMeasurer } from "./textLayout";
 import { wordCharRanges } from "./timing";
 
@@ -16,6 +16,7 @@ function recordingContext() {
     fillStyle: "" as unknown,
     shadowColor: "",
     shadowBlur: 0,
+    shadowOffsetX: 0,
     direction: "ltr",
     save: () => calls.push("save"),
     restore: () => calls.push("restore"),
@@ -33,8 +34,8 @@ const paint: KaraokePaint = {
   unsung: "UNSUNG",
   forward: "FORWARD",
   backward: "BACKWARD",
-  glowColors: Array.from({ length: 8 }, (_, i) => `glow${i}`),
-  glowBlurs: Array.from({ length: 8 }, (_, i) => i),
+  glowColors: Array.from({ length: 64 }, (_, i) => `glow${i}`),
+  glowBlur: 12,
 };
 
 const style = { size: 20, weight: 700, italic: false, family: "Inter", lineSpacing: 1.3 };
@@ -75,10 +76,23 @@ describe("karaoke drawing", () => {
   it("lights a held note's glow only while it is being sung", () => {
     const sungNow = recordingContext();
     drawKaraoke(sungNow.ctx, geometry, paint, frame({ position: 1200, liftClock: 1200 }));
-    expect(sungNow.calls.some((c) => c.includes(`"me" 50`))).toBe(true);
+    // Only the shadow of a copy drawn far to the left lands on the word, so the whole word glows.
+    expect(sungNow.calls.some((c) => c.includes(`"me" -9950`))).toBe(true);
     const shortWord = recordingContext();
     drawKaraoke(shortWord.ctx, geometry, paint, frame({ position: 200, liftClock: 200 }));
     expect(shortWord.calls.some((c) => c.includes(`"hold" `))).toBe(false);
+  });
+
+  it("rises and falls on one smooth curve, peaking halfway through the word", () => {
+    for (const outside of [-0.1, 0, 1, 1.1]) expect(heldNoteGlowLevel(outside)).toBe(-1);
+    expect(heldNoteGlowLevel(0.5)).toBe(63);
+    // At 120 Hz a 1.1 s note, the shortest that glows, moves about 0.76 % per frame.
+    const levels = Array.from({ length: 133 }, (_, i) => heldNoteGlowLevel(Math.min(0.9999, Math.max(0.0001, i / 132))));
+    const largestJump = Math.max(...levels.slice(1).map((level, i) => Math.abs(level - levels[i]!)));
+    expect(largestJump).toBeLessThanOrEqual(2);
+    for (let percent = 1; percent < 50; percent++) {
+      expect(Math.abs(heldNoteGlowLevel(percent / 100) - heldNoteGlowLevel(1 - percent / 100))).toBeLessThanOrEqual(1);
+    }
   });
 
   it("lifts a word as it starts", () => {

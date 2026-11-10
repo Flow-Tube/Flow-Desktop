@@ -35,9 +35,29 @@ fn view(state: &RosterState) -> Value {
     let members: Vec<Value> = state
         .members
         .iter()
-        .map(|(did, m)| json!({ "did": did, "role": if m.role == Role::Device { "device" } else { "recovery" }, "used": m.used }))
+        .map(|(did, m)| {
+            let mut view = json!({ "did": did, "role": if m.role == Role::Device { "device" } else { "recovery" }, "used": m.used });
+            if let Some(installer) = &m.installer {
+                view["installer"] = json!(installer);
+            }
+            view
+        })
         .collect();
-    json!({ "seq": state.seq, "head": state.head, "epoch": state.epoch, "rotate": state.rotate, "members": members })
+    let senders: Vec<Value> = state
+        .senders
+        .iter()
+        .map(|(did, s)| {
+            let mut view = json!({ "did": did, "role": if s.role == Role::Device { "device" } else { "recovery" }, "since": s.since });
+            if let Some(until) = s.until {
+                view["until"] = json!(until);
+            }
+            if let Some(cut) = &s.cut {
+                view["cut"] = json!({ "seq": cut.seq, "hash": cut.hash });
+            }
+            view
+        })
+        .collect();
+    json!({ "seq": state.seq, "head": state.head, "epoch": state.epoch, "rotate": state.rotate, "recoveryDue": state.recovery_due, "members": members, "senders": senders })
 }
 
 #[test]
@@ -92,6 +112,48 @@ fn invalid_entries_are_rejected_for_the_named_reason() {
 }
 
 #[test]
+fn an_entry_that_skipped_the_parser_is_refused_for_its_meta_too() {
+    let v = vectors();
+    let entries = entries(&v);
+    let named = |name: &&Value| name["name"].as_str().unwrap().contains("meta");
+    let negatives = v["negatives"].as_array().unwrap().iter().filter(named);
+    let mut seen = 0;
+    for n in negatives {
+        let Ok(entry) = serde_json::from_value::<Entry>(n["entry"].clone()) else {
+            continue;
+        };
+        let state = base(&entries, &n["base"]);
+        let error = apply_entry(Some(&state), &entry).unwrap_err();
+        assert_eq!(error.code(), n["error"].as_str().unwrap(), "{}", n["name"]);
+        seen += 1;
+    }
+    assert!(seen >= 6);
+}
+
+#[test]
+fn replaying_a_stored_chain_refuses_a_key_with_a_small_order_part() {
+    let v = vectors();
+    let negatives = v["negatives"].as_array().unwrap();
+    let n = negatives
+        .iter()
+        .find(|n| n["name"] == "mixed-order-key")
+        .unwrap();
+    let mut chain = entries(&v);
+    chain.truncate(1);
+    chain.push(parse_entry(&n["entry"]).unwrap());
+    assert_eq!(replay_roster(&chain).unwrap_err().code(), "roster-key");
+}
+
+#[test]
+fn a_genesis_must_match_its_group_id() {
+    for n in vectors()["geneses"].as_array().unwrap() {
+        let entry = parse_entry(&n["entry"]).unwrap();
+        let error = apply_entry(None, &entry).unwrap_err();
+        assert_eq!(error.code(), n["error"].as_str().unwrap());
+    }
+}
+
+#[test]
 fn forks_resolve_to_the_same_winner() {
     let v = vectors();
     let entries = entries(&v);
@@ -124,4 +186,36 @@ fn a_null_field_is_not_an_absent_one() {
     let mut with_null = v["entries"][1].clone();
     with_null["remove"] = Value::Null;
     assert_eq!(parse_entry(&with_null).unwrap_err().code(), "roster-format");
+}
+
+#[test]
+fn a_removal_replaces_a_recovery_key_set_by_a_device_that_is_gone() {
+    let v = vectors();
+    let entries = entries(&v);
+    for case in v["replacements"].as_array().unwrap() {
+        let mut state = match case.get("base") {
+            Some(count) => base(&entries, count),
+            None => replay_roster(&entries).unwrap(),
+        };
+        let steps: Vec<Entry> = case["steps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|step| parse_entry(step).unwrap())
+            .collect();
+        let (last, before) = steps.split_last().unwrap();
+        for step in before {
+            state = apply_entry(Some(&state), step).unwrap();
+        }
+        let applied = apply_entry(Some(&state), last);
+        match case.get("error") {
+            Some(error) => assert_eq!(
+                applied.unwrap_err().code(),
+                error.as_str().unwrap(),
+                "{}",
+                case["name"]
+            ),
+            None => assert_eq!(view(&applied.unwrap()), case["state"], "{}", case["name"]),
+        }
+    }
 }

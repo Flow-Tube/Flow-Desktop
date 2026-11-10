@@ -1,12 +1,16 @@
 import { useRef, useState, type ChangeEvent } from "react";
+import { SettingItem } from '../SettingItem';
+import { SettingsGroup } from '../SettingsGroup';
 import { Download, Plus, Upload } from "lucide-react";
 import { CustomThemeEditor } from "../../theme/CustomThemeEditor";
 import { ThemeFileSection } from "../../theme/ThemeFileSection";
 import { ThemePreview } from "../../theme/ThemePreview";
 import { Button } from "../../ui/Button";
 import { ToggleSwitch } from "../../ui/ToggleSwitch";
-import { useBoolPref } from "../../../lib/usePreference";
-import { SETTINGS } from "../../../lib/settings/schema";
+import { useBoolPref, usePreference } from "../../../lib/usePreference";
+import { NEW_SETTING_DAYS, SETTINGS } from "../../../lib/settings/schema";
+import { Select } from "../../ui/Select";
+import { confirmAction } from "../../../lib/dialogs";
 import { getString } from "../../../lib/i18n/index";
 import {
   BUILTIN_THEMES,
@@ -26,12 +30,21 @@ export function AppearanceTab() {
     themeId,
     variant,
     customThemes,
+    followSystem,
     setTheme,
     setVariant,
     saveCustomThemes,
   } = useTheme();
   const [editingTheme, setEditingTheme] = useState<CustomThemeDefinition | null>(null);
+  const [, setFollowSystem] = useBoolPref(SETTINGS.THEME_FOLLOW_SYSTEM, false);
+  const [lightThemeId, setLightThemeId] = usePreference(SETTINGS.THEME_LIGHT_ID, "default");
+  const [darkThemeId, setDarkThemeId] = usePreference(SETTINGS.THEME_DARK_ID, "default");
+  const [darkStyle, setDarkStyle] = usePreference(SETTINGS.THEME_DARK_STYLE, "dark");
+  const [appFont, setAppFont] = usePreference(SETTINGS.APP_FONT, "inter");
+  const themeOptions = [...BUILTIN_THEMES, ...customThemes].map((theme) => ({ value: theme.id, label: theme.name }));
   const [expressiveSliders, setExpressiveSliders] = useBoolPref(SETTINGS.EXPRESSIVE_SLIDERS_ENABLED, true);
+  const [highlightNew, setHighlightNew] = useBoolPref(SETTINGS.HIGHLIGHT_NEW_SETTINGS, false);
+  const [highlightDays, setHighlightDays] = usePreference(SETTINGS.HIGHLIGHT_NEW_SETTINGS_DAYS, "7");
   const { exportThemes, importThemes } = useThemeTransfer();
   const importInputRef = useRef<HTMLInputElement>(null);
   const usingThemeFile = themeId === THEME_FILE_ID;
@@ -59,7 +72,13 @@ export function AppearanceTab() {
   };
 
   const deleteTheme = async (theme: CustomThemeDefinition) => {
-    if (!window.confirm(getString("theme_delete_confirm", theme.name))) return;
+    const confirmed = await confirmAction({
+      title: getString("settings_custom_theme_delete_title", theme.name),
+      message: getString("settings_custom_theme_delete_body"),
+      confirmLabel: getString("delete"),
+      destructive: true,
+    });
+    if (!confirmed) return;
     const saved = await saveCustomThemes(customThemes.filter((item) => item.id !== theme.id));
     if (saved && themeId === theme.id) await setTheme("default");
   };
@@ -97,20 +116,65 @@ export function AppearanceTab() {
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
           {THEME_VARIANTS.map((item) => (
-            <Button key={item} variant={variant === item ? "primary" : "secondary"} onClick={() => void setVariant(item)} disabled={usingThemeFile}>
+            <Button key={item} variant={variant === item ? "primary" : "secondary"} onClick={() => void setVariant(item)} disabled={usingThemeFile || followSystem}>
               {getString(`theme_variant_${item}` as Parameters<typeof getString>[0])}
             </Button>
           ))}
         </div>
       </section>
 
-      <section className="mt-8 flex items-center justify-between gap-6 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5">
-        <div className="min-w-0">
-          <h2 className="text-base font-medium text-chrome-neutral-200">{getString("settings_expressive_sliders")}</h2>
-          <p className="mt-1 text-sm text-chrome-neutral-400">{getString("settings_expressive_sliders_desc")}</p>
-        </div>
-        <ToggleSwitch checked={expressiveSliders} onChange={setExpressiveSliders} />
-      </section>
+      <div className="mt-8">
+        <SettingsGroup>
+          <SettingItem title={getString("settings_theme_follow_system")} description={getString("settings_theme_follow_system_desc")}>
+            <ToggleSwitch checked={followSystem} onChange={setFollowSystem} />
+          </SettingItem>
+          {followSystem && (
+            <>
+              <SettingItem title={getString("settings_theme_light_mode")}>
+                <Select value={lightThemeId} onChange={setLightThemeId} options={themeOptions} />
+              </SettingItem>
+              <SettingItem title={getString("settings_theme_dark_mode")}>
+                <Select value={darkThemeId} onChange={setDarkThemeId} options={themeOptions} />
+              </SettingItem>
+              <SettingItem title={getString("settings_theme_dark_style")}>
+                <Select
+                  value={darkStyle}
+                  onChange={setDarkStyle}
+                  options={[
+                    { value: "dark", label: getString("theme_variant_dark") },
+                    { value: "amoled", label: getString("theme_variant_amoled") },
+                  ]}
+                />
+              </SettingItem>
+            </>
+          )}
+          <SettingItem title={getString("settings_app_font")} description={getString("settings_app_font_desc")}>
+            <Select
+              value={appFont}
+              onChange={setAppFont}
+              options={[
+                { value: "inter", label: "Inter" },
+                { value: "system", label: getString("settings_app_font_system") },
+              ]}
+            />
+          </SettingItem>
+          <SettingItem title={getString("settings_expressive_sliders")} description={getString("settings_expressive_sliders_desc")}>
+            <ToggleSwitch checked={expressiveSliders} onChange={setExpressiveSliders} />
+          </SettingItem>
+          <SettingItem title={getString("settings_highlight_new")} description={getString("settings_highlight_new_desc")}>
+            <ToggleSwitch checked={highlightNew} onChange={setHighlightNew} />
+          </SettingItem>
+          {highlightNew && (
+            <SettingItem title={getString("settings_highlight_new_days")}>
+              <Select
+                value={highlightDays}
+                onChange={setHighlightDays}
+                options={NEW_SETTING_DAYS.map((days) => ({ value: days, label: getString("settings_highlight_new_days_option", days) }))}
+              />
+            </SettingItem>
+          )}
+        </SettingsGroup>
+      </div>
 
       {IS_LINUX_RUNTIME && <GraphicsCompatibilitySection />}
 

@@ -1,4 +1,4 @@
-import { useTranslation } from "react-i18next";
+import { getString } from "../../lib/i18n/index";
 import { Copy, Minus, Square, X } from "lucide-react";
 import { IS_MACOS_RUNTIME } from "../../lib/platform";
 import { useNativeWindowTitle } from "../../lib/useNativeWindowTitle";
@@ -11,10 +11,9 @@ function cx(...classes: Array<string | false | null | undefined>) {
 }
 
 export function TitleBar() {
-  const { t } = useTranslation();
   const { text, section } = useResolvedWindowTitle();
   const { isMaximized, isFullscreen, minimize, toggleMaximize, close } = useWindowControls();
-  useNativeWindowTitle(text || t("appName"));
+  useNativeWindowTitle(text || getString('app_name'));
 
   if (IS_MACOS_RUNTIME) return null;
 
@@ -28,7 +27,7 @@ export function TitleBar() {
 
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-40">
           {text && (
-            <span
+            <span dir="auto"
               className={cx(
                 "max-w-full truncate text-center text-xs",
                 section
@@ -42,10 +41,10 @@ export function TitleBar() {
         </div>
 
         {/* Window controls */}
-        <div className="relative z-10 ml-auto flex h-full items-center">
+        <div className="relative z-10 ms-auto flex h-full items-center">
           <button
             type="button"
-            aria-label={t("windowMinimize")}
+            aria-label={getString('window_minimize')}
             onClick={minimize}
             className={`${controlBtn} hover:bg-on-surface/10 hover:text-on-surface`}
           >
@@ -53,7 +52,7 @@ export function TitleBar() {
           </button>
           <button
             type="button"
-            aria-label={t(isMaximized ? "windowRestore" : "windowMaximize")}
+            aria-label={getString(isMaximized ? 'window_restore' : 'window_maximize')}
             onClick={toggleMaximize}
             className={`${controlBtn} hover:bg-on-surface/10 hover:text-on-surface`}
           >
@@ -61,7 +60,7 @@ export function TitleBar() {
           </button>
           <button
             type="button"
-            aria-label={t("windowClose")}
+            aria-label={getString('window_close')}
             onClick={close}
             className={`${controlBtn} hover:bg-primary hover:text-chrome-white`}
           >

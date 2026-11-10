@@ -12,6 +12,7 @@ table	sync_changes	PROFILE	sync	Each profile that syncs records its own local ed
 table	sync2_sent	DEAD	-	Replaced by sync2_sent_links; still cleared when a group is forgotten
 table	sync2_group	DEVICE	-	The group's state, in Default's file whichever profile runs: the FLOW-SYNC/2 group and log positions
 table	sync2_roster	DEVICE	-	The group's state, in Default's file whichever profile runs: the verified FLOW-SYNC/2 roster
+table	sync2_roster_pins	DEVICE	-	The group's state, in Default's file whichever profile runs: the verified FLOW-SYNC/2 roster
 table	sync2_streams	DEVICE	-	The group's state, in Default's file whichever profile runs: how far each device's log was read
 table	sync2_snapshots	DEVICE	-	The group's state, in Default's file whichever profile runs: when each link last got a snapshot
 table	sync2_acks	DEVICE	-	The group's state, in Default's file whichever profile runs: each device's latest FLOW-SYNC/2 ack
@@ -31,9 +32,13 @@ table	sync2_profiles	DEVICE	-	The group's state, in Default's file whichever pro
 table	sync2_floors	DEVICE	-	The group's state, in Default's file whichever profile runs: how far a link read from a snapshot already goes
 table	sync2_reading	DEVICE	-	The group's state, in Default's file whichever profile runs: links still to be read from their snapshot
 table	watch_history	PROFILE	library	Video and music history (is_music)
+table	notes	PROFILE	library	The profile's notes on videos and channels; never copied to another profile
 table	notifications	PROFILE	library	New-upload inbox written by the poll loop for this profile's subscriptions
 table	recommendation_events	PROFILE	private	FlowNeuro event log
 table	seen_videos	PROFILE	private	Cards this viewer has seen
+table	recap_months	PROFILE	private	Recap ledger: what this viewer watched and listened to, per month
+table	recap_known	PROFILE	private	Recap ledger: channels and artists this viewer has met
+table	recap_state	PROFILE	private	Recap ledger: when it started for this viewer
 table	neuro_channel_categories	PROFILE	private	FlowNeuro v4 side store
 table	neuro_cowatch_sources	PROFILE	private	FlowNeuro v4 side store
 table	neuro_content_topics	PROFILE	private	FlowNeuro v4 side store
@@ -60,11 +65,19 @@ table	video_kind_checks	CACHE	-	Fact about a video; kept in each profile's file
 table	music_home_sections	DEAD	-	No code reads or writes it
 table	music_home_chips	DEAD	-	No code reads or writes it
 table	settings	PROFILE	settings	Mixed table: device keys are routed to Default's file by key
+table	local_media_files	PROFILE	library	Index of the folders this profile chose, kept with its other library data
+table	local_media_folders	PROFILE	library	The folders this profile chose for its local library
+table	local_media_plays	PROFILE	library	Resume and play counts for local files, kept out of the shared watch history
+table	local_media_subtitle_picks	PROFILE	library	Subtitle files picked for local videos
 setting	user_neuro_brain	PROFILE	private	FlowNeuro brain
 setting	user_neuro_brain_before_v14	PROFILE	private	Pre-migration copy, written for any brain that lacks one
 setting	user_music_brain	PROFILE	private	MusicBrain
 setting	music_brain_backfilled	PROFILE	private	Follows user_music_brain
 setting	liked_items	PROFILE	library	Likes
+setting	local_media_reading	DEVICE	-	Files a library scan is reading, so a crash on one is not repeated at every launch
+setting	saved_shorts_library	PROFILE	library	Saved Shorts; never copied to another profile
+setting	saved_shorts_peer_keeps_list	PROFILE	sync	A device has sent Saved Shorts, so this profile's may go out
+setting	sync2_notes_missed	DEFAULT_ONLY	sync	The group's state, in Default's file: notes other devices sent before this build kept them are still to be read
 setting	user_playlists	PROFILE	library	Playlists
 setting	saved_albums	PROFILE	library	Saved albums
 setting	subscription_groups	PROFILE	library	Channel groups
@@ -78,6 +91,13 @@ setting	home_max_video_age	PROFILE	settings	Home preference
 setting	hide_seen_videos	PROFILE	settings	Home preference
 setting	notifications_enabled	PROFILE	settings	New-upload alerts
 setting	notif_check_interval_minutes	PROFILE	settings	Android twin subscription_check_interval_minutes is per profile
+setting	notif_shorts_enabled	PROFILE	settings	Alerts for new Shorts
+setting	shorts_content_enabled	PROFILE	settings	Master Show Shorts switch, read when alerting
+setting	subscription_show_shorts	PROFILE	settings	Show Shorts in Subscriptions, read when alerting
+setting	upcoming_video_reminders	PROFILE	library	Remind me for upcoming videos and premieres
+setting	subscription_collaborations_enabled	PROFILE	settings	Pull collaborations into the subscription feed
+setting	subscription_collaborations_v1	PROFILE	library	Collaboration index for this profiles subscribed channels
+setting	home_subscriptions_enabled	PROFILE	settings	Show subscriptions on Home, as on Android
 setting	stable_volume_enabled	PROFILE	settings	Playback preference
 setting	sponsorblock_categories	PROFILE	settings	SponsorBlock preference
 setting	sponsorblock_enabled	PROFILE	settings	SponsorBlock preference
@@ -121,7 +141,14 @@ dir_site	src/linux_startup.rs	DEVICE	-	startup_state.json
 dir_site	src/services/win_notify.rs	DEVICE	-	toast logo
 setting	feed_actions_state_v1	PROFILE	private	Dismissed videos, blocked channels and keywords
 setting	homeSubsRotationCursor	PROFILE	private	Home subscriptions rotation cursor
+setting	auto_backup_frequency	DEVICE	-	One automatic backup schedule per install
+setting	auto_backup_type	DEVICE	-	One automatic backup schedule per install
+setting	auto_backup_folder	DEVICE	-	Where automatic backups go on this computer
+setting	auto_backup_last_run	DEVICE	-	When the automatic backup last ran
+setting	auto_backup_last_error	DEVICE	-	Why the automatic backup last failed
 file	profiles_registry.json	DEVICE	-	The list of profiles and the active one, in Android's JSON shape
 dir_site	src/profiles/mod.rs	PROFILE	-	The registry and each profile's folder
+dir_site	src/commands/local_media.rs	CACHE	-	local_covers, disposable covers read from local files
+dir_site	src/commands/cache.rs	CACHE	-	Reports and clears the disposable caches
 file	profiles_local.json	DEVICE	-	Desktop-only profile state: keychain deletes to retry
 file	profile_avatars	DEVICE	-	Profile photos, <id>.webp

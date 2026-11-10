@@ -7,13 +7,14 @@ import { changesSound } from "./eq/stateOps";
 import { MediaEqEngine } from "./mediaEqEngine";
 
 /**
- * Applies the shared equalizer to one video player. `audioKey` changes whenever the separate
+ * Applies the shared equalizer and the volume boost to one video player. `audioKey` changes whenever the separate
  * adaptive-playback <audio> element mounts, unmounts or changes, so the engine follows it.
  */
 export function useVideoEq(
   videoRef: RefObject<HTMLVideoElement | null>,
   audioRef: RefObject<HTMLAudioElement | null>,
   audioKey: string | null,
+  boostGain: number,
 ): void {
   const engineRef = useRef<MediaEqEngine | null>(null);
 
@@ -43,4 +44,8 @@ export function useVideoEq(
   useEffect(() => {
     engineRef.current?.setElements([videoRef.current, audioRef.current]);
   }, [videoRef, audioRef, audioKey]);
+
+  useEffect(() => {
+    engineRef.current?.setBoost(boostGain);
+  }, [boostGain]);
 }

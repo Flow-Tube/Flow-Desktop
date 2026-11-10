@@ -15,7 +15,7 @@ export const ChannelShelf: React.FC<ChannelShelfProps> = ({ title, channels, act
   return (
     <div className="relative flex flex-col gap-4 py-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold tracking-tight text-chrome-zinc-100">{title}</h2>
+        <h2 dir="auto" className="text-lg font-bold tracking-tight text-chrome-zinc-100">{title}</h2>
         {action}
       </div>
       <ShelfScroller className="-mx-3 flex gap-4 px-3 pb-3 pt-3">

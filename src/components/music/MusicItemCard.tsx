@@ -21,11 +21,14 @@ import { useSongMenuActions } from './useSongMenuActions';
 import { useDownloadStore } from '../../store/useDownloadStore';
 import { useImageFallback } from '../../lib/useImageFallback';
 import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
+import { useMusicCardWidth } from '../../lib/useMusicCardWidth';
 import { youtubeMusicAlbumUrl } from '../../lib/youtubeUrl';
 import { shareLink } from '../../lib/clipboard';
 import { ExplicitBadge } from './ExplicitBadge';
 import { PlayingWave } from './PlayingWave';
 import { MusicCardMenu, type MusicMenuAction, useMusicContextMenu } from './MusicCardMenu';
+import { isLocalMediaId } from '../../lib/localMediaId';
+import { joinIsolated } from '../../lib/direction';
 
 type BaseProps = {
   className?: string;
@@ -36,7 +39,7 @@ type BaseProps = {
 
 export type MusicItemCardProps = BaseProps &
   (
-    | { variant: 'album'; item: AlbumItem }
+    | { variant: 'album'; item: AlbumItem; thumbnailOverlay?: React.ReactNode; appendActions?: MusicMenuAction[] }
     | { variant: 'playlist'; item: PlaylistItem }
     | { variant: 'song'; item: SongItem }
     | { variant: 'video'; item: SongItem }
@@ -48,6 +51,8 @@ export type MusicItemCardProps = BaseProps &
         item: SongItem;
         onNavigate?: () => void;
         appendActions?: MusicMenuAction[];
+        /** Replaces the whole menu, for a track that isn't on YouTube. */
+        menuActions?: MusicMenuAction[];
       }
   );
 
@@ -147,7 +152,7 @@ function useSongLike(track: SongItem | null | undefined) {
 
 function albumSubtitle(item: AlbumItem): string {
   const artists = artistsText(item.artists);
-  if (artists && item.year) return `${artists} • ${item.year}`;
+  if (artists && item.year) return joinIsolated([artists, String(item.year)]);
   return artists || (item.year ? String(item.year) : '');
 }
 
@@ -236,6 +241,8 @@ function SquareCard({
   onOpen,
   className,
   fill,
+  thumbnailOverlay,
+  appendActions = [],
 }: {
   item?: AlbumItem | SongItem;
   menuKind?: 'album' | 'track';
@@ -246,6 +253,8 @@ function SquareCard({
   onOpen?: () => void;
   className?: string;
   fill?: boolean;
+  thumbnailOverlay?: React.ReactNode;
+  appendActions?: MusicMenuAction[];
 }) {
   const menu = useMusicContextMenu(Boolean(menuKind));
   const isTrack = menuKind === 'track' && item && 'videoId' in item;
@@ -260,6 +269,7 @@ function SquareCard({
   const openCollectionDownload = useDownloadStore((s) => s.openCollection);
   const washSrc = useProxiedImageUrl(upgradeMusicImageUrl(thumbnail, 320));
   const wash = useHoverWashColor(washSrc);
+  const cardWidth = useMusicCardWidth();
   const menuActions: MusicMenuAction[] = isTrack
     ? songActions
     : isAlbum
@@ -316,6 +326,7 @@ function SquareCard({
             group: 'quick',
             onSelect: () => void shareLink(item.title, youtubeMusicAlbumUrl(item.browseId)),
           },
+          ...appendActions,
         ]
       : [];
 
@@ -331,7 +342,7 @@ function SquareCard({
       onMouseLeave={wash.onMouseLeave}
       className={cx(
         `group ${COLOR_WASH_HOST} flex cursor-pointer flex-col gap-3`,
-        fill ? 'w-full' : 'w-40 md:w-48 lg:w-56',
+        fill ? 'w-full' : cardWidth,
         'rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]',
         className,
       )}
@@ -345,6 +356,7 @@ function SquareCard({
           className="h-full w-full ring-1 ring-chrome-neutral-800/50"
           iconSize="w-10 h-10"
         />
+        {thumbnailOverlay}
         {isTrack ? (
           <button
             type="button"
@@ -355,7 +367,7 @@ function SquareCard({
               void songLike.toggle();
             }}
             className={cx(
-              'absolute left-2 top-2 grid h-9 w-9 place-items-center rounded-full bg-chrome-black/80 text-chrome-white opacity-0 transition-all duration-200 ease-out hover:bg-chrome-black group-hover:opacity-100',
+              'absolute start-2 top-2 grid h-9 w-9 place-items-center rounded-full bg-chrome-black/80 text-chrome-white opacity-0 transition-all duration-200 ease-out hover:bg-chrome-black group-hover:opacity-100',
               songLike.liked ? 'text-[var(--color-primary)] opacity-100' : null,
             )}
           >
@@ -363,7 +375,7 @@ function SquareCard({
           </button>
         ) : null}
         {menuKind ? (
-          <div className="absolute right-2 top-2">
+          <div className="absolute end-2 top-2">
             <button
               type="button"
               aria-label={getString('music_more_options')}
@@ -381,7 +393,7 @@ function SquareCard({
             e.stopPropagation();
             onPlay?.();
           }}
-          className="absolute bottom-2 right-2 grid translate-y-1 place-items-center rounded-full bg-[var(--color-primary)] p-3 text-[var(--color-on-primary)] opacity-0 transition-all duration-200 ease-out group-hover:translate-y-0 group-hover:opacity-100 hover:scale-105"
+          className="absolute bottom-2 end-2 grid translate-y-1 place-items-center rounded-full bg-[var(--color-primary)] p-3 text-[var(--color-on-primary)] opacity-0 transition-all duration-200 ease-out group-hover:translate-y-0 group-hover:opacity-100 hover:scale-105"
         >
           <Play className="h-5 w-5" fill="currentColor" />
         </button>
@@ -394,8 +406,8 @@ function SquareCard({
         show={menu.showMenu}
       />
       <div className="flex flex-col gap-0.5">
-        <span className="line-clamp-1 font-medium text-chrome-neutral-100">{title}</span>
-        {subtitle && <span className="line-clamp-1 text-sm text-chrome-neutral-400">{subtitle}</span>}
+        <span dir="auto" className="line-clamp-1 font-medium text-chrome-neutral-100">{title}</span>
+        {subtitle && <span dir="auto" className="line-clamp-1 text-sm text-chrome-neutral-400">{subtitle}</span>}
       </div>
     </div>
   );
@@ -453,14 +465,14 @@ function VideoCard16x9({
             e.stopPropagation();
             onPlay?.();
           }}
-          className="absolute bottom-2 right-2 grid translate-y-1 place-items-center rounded-full bg-[var(--color-primary)] p-3 text-[var(--color-on-primary)] opacity-0 transition-all duration-200 ease-out group-hover:translate-y-0 group-hover:opacity-100 hover:scale-105"
+          className="absolute bottom-2 end-2 grid translate-y-1 place-items-center rounded-full bg-[var(--color-primary)] p-3 text-[var(--color-on-primary)] opacity-0 transition-all duration-200 ease-out group-hover:translate-y-0 group-hover:opacity-100 hover:scale-105"
         >
           <Play className="h-5 w-5" fill="currentColor" />
         </button>
       </div>
       <div className="flex flex-col gap-0.5">
-        <span className="line-clamp-2 font-medium text-chrome-neutral-100">{title}</span>
-        {subtitle && <span className="line-clamp-1 text-sm text-chrome-neutral-400">{subtitle}</span>}
+        <span dir="auto" className="line-clamp-2 font-medium text-chrome-neutral-100">{title}</span>
+        {subtitle && <span dir="auto" className="line-clamp-1 text-sm text-chrome-neutral-400">{subtitle}</span>}
       </div>
     </div>
   );
@@ -508,7 +520,7 @@ function CircleCard({
           iconSize="w-10 h-10"
         />
       </div>
-      <span className="line-clamp-2 text-center font-medium text-chrome-neutral-100">{title}</span>
+      <span dir="auto" className="line-clamp-2 text-center font-medium text-chrome-neutral-100">{title}</span>
     </div>
   );
 }
@@ -519,12 +531,14 @@ function ListRow({
   onPlay,
   onNavigate,
   appendActions,
+  menuActions: ownMenuActions,
   className,
 }: {
   item: SongItem;
   onPlay?: () => void;
   onNavigate?: () => void;
   appendActions?: MusicMenuAction[];
+  menuActions?: MusicMenuAction[];
   className?: string;
 }) {
   const trackId = videoIdOf(item);
@@ -545,7 +559,8 @@ function ListRow({
   const isPlayingTrack = !!currentTrack && videoIdOf(currentTrack) === trackId && playerIsPlaying;
   const isHighlighted = isHovered || isPlayingTrack;
   const activeColor = dominantColor ?? preloadedColor;
-  const menuActions: MusicMenuAction[] = [...songActions, ...(appendActions ?? [])];
+  const menuActions: MusicMenuAction[] = ownMenuActions ?? [...songActions, ...(appendActions ?? [])];
+  const canLike = !isLocalMediaId(trackId);
   const resolveColor = (img?: HTMLImageElement) => {
     const source = img ?? artworkRef.current;
     if (!source || !source.complete || source.naturalWidth === 0) {
@@ -610,38 +625,40 @@ function ListRow({
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <span className={cx('line-clamp-1 font-medium', isPlayingTrack ? 'text-chrome-neutral-50' : 'text-chrome-neutral-100')}>
+        <span dir="auto" className={cx('line-clamp-1 font-medium', isPlayingTrack ? 'text-chrome-neutral-50' : 'text-chrome-neutral-100')}>
           {title}
         </span>
         <span className="flex min-w-0 items-center gap-1.5">
           {explicit && <ExplicitBadge />}
-          {subtitle && <span className="line-clamp-1 text-sm text-chrome-neutral-400">{subtitle}</span>}
+          {subtitle && <span dir="auto" className="line-clamp-1 text-sm text-chrome-neutral-400">{subtitle}</span>}
         </span>
       </div>
 
       <div className="relative h-8 w-24 shrink-0">
-        <span className="absolute right-0 top-1/2 flex -translate-y-1/2 items-center gap-1.5 transition-opacity duration-200 ease-out group-hover:opacity-0">
+        <span className="absolute end-0 top-1/2 flex -translate-y-1/2 items-center gap-1.5 transition-opacity duration-200 ease-out group-hover:opacity-0">
           <TrackDownloadIndicator trackId={trackId} />
           {duration && (
             <span className="font-mono text-sm tabular-nums text-chrome-neutral-400">{duration}</span>
           )}
         </span>
-        <div className="absolute right-0 top-0 flex items-center gap-1 opacity-0 transition-opacity duration-200 ease-out group-hover:opacity-100">
-          <button
-            type="button"
-            aria-label={getString('music_like_track')}
-            aria-pressed={songLike.liked}
-            onClick={(event) => {
-              event.stopPropagation();
-              void songLike.toggle();
-            }}
-            className={cx(
-              'grid h-8 w-8 place-items-center rounded-full text-chrome-neutral-400 transition-colors duration-200 ease-out hover:bg-surface-container-high hover:text-chrome-neutral-100',
-              songLike.liked ? 'text-[var(--color-primary)]' : null,
-            )}
-          >
-            <Heart className="h-4 w-4" fill={songLike.liked ? 'currentColor' : 'none'} />
-          </button>
+        <div className="absolute end-0 top-0 flex items-center gap-1 opacity-0 transition-opacity duration-200 ease-out group-hover:opacity-100">
+          {canLike && (
+            <button
+              type="button"
+              aria-label={getString('music_like_track')}
+              aria-pressed={songLike.liked}
+              onClick={(event) => {
+                event.stopPropagation();
+                void songLike.toggle();
+              }}
+              className={cx(
+                'grid h-8 w-8 place-items-center rounded-full text-chrome-neutral-400 transition-colors duration-200 ease-out hover:bg-surface-container-high hover:text-chrome-neutral-100',
+                songLike.liked ? 'text-[var(--color-primary)]' : null,
+              )}
+            >
+              <Heart className="h-4 w-4" fill={songLike.liked ? 'currentColor' : 'none'} />
+            </button>
+          )}
           <div className="relative">
             <button
               type="button"
@@ -683,6 +700,8 @@ export function MusicItemCard(props: MusicItemCardProps) {
           onOpen={onOpen}
           className={className}
           fill={fill}
+          thumbnailOverlay={props.thumbnailOverlay}
+          appendActions={props.appendActions}
         />
       );
     case 'playlist':
@@ -764,6 +783,7 @@ export function MusicItemCard(props: MusicItemCardProps) {
           onPlay={onPlay}
           onNavigate={props.onNavigate}
           appendActions={props.appendActions}
+          menuActions={props.menuActions}
           className={className}
         />
       );

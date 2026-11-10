@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { selectedText, selectionTouches } from "./textSelection";
+import { growFromPoint } from "./direction";
 
 export interface SelectionMenuState {
-  anchor: { top: number; left: number };
+  anchor: { top: number } & ReturnType<typeof growFromPoint>;
   text: string;
 }
 
@@ -13,7 +14,7 @@ export function selectionMenuFor(event: RightClick, selection: Selection | null)
   if (event.defaultPrevented) return null;
   const text = selectedText(selection);
   if (!text || !selectionTouches(event.target as Node | null, selection)) return null;
-  return { anchor: { top: event.clientY, left: event.clientX }, text };
+  return { anchor: { top: event.clientY, ...growFromPoint(event.clientX) }, text };
 }
 
 /**

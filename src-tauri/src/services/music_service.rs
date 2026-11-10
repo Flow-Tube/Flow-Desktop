@@ -460,6 +460,10 @@ impl MusicService {
         self.client.music_lyrics_text(video_id).await
     }
 
+    pub async fn captions_lrc(&self, video_id: &str) -> AppResult<Option<String>> {
+        self.client.music_captions_lrc(video_id).await
+    }
+
     // --- Playback ---------------------------------------------------------
     pub async fn resolve_stream(
         &self,

@@ -1,8 +1,10 @@
+import { getString } from "../../lib/i18n/index";
 import { useState, type MouseEvent } from "react";
 import { Check, RotateCcw } from "lucide-react";
 import { Select } from "../ui/Select";
 import { AnchoredPortalMenu, type MenuAnchor } from "../ui/AnchoredPortalMenu";
 import type { SponsorBlockAction } from "../../store/useSettingsStore";
+import { alignToStart } from "../../lib/direction";
 
 const PRESET_COLORS = [
   "#00D400", "#FFFF00", "#0000FF", "#FF0000", "#FF7700", "#FF69B4",
@@ -12,15 +14,26 @@ const PRESET_COLORS = [
 ];
 
 const ACTION_OPTIONS: { value: SponsorBlockAction; label: string }[] = [
-  { value: "skip", label: "Auto-skip" },
-  { value: "mute", label: "Mute audio" },
-  { value: "notify", label: "Show skip button" },
-  { value: "ignore", label: "Ignore" },
+  { value: "skip", label: getString('sponsorblock_auto_skip') },
+  { value: "skip_once", label: getString('sponsorblock_skip_once') },
+  { value: "skip_button", label: getString('sponsorblock_show_skip_button') },
+  { value: "notify", label: getString('sponsorblock_notify') },
+  { value: "mute", label: getString('sponsorblock_mute_audio') },
+  { value: "ignore", label: getString('sponsorblock_show_in_seek_bar') },
+  { value: "disabled", label: getString('sponsorblock_disable') },
+];
+
+// A highlight is a point in the video, so it can't be skipped or muted.
+const HIGHLIGHT_ACTION_OPTIONS: { value: SponsorBlockAction; label: string }[] = [
+  { value: "ignore", label: getString('sponsorblock_show_in_seek_bar') },
+  { value: "skip_button", label: getString('sponsorblock_show_jump_button') },
+  { value: "disabled", label: getString('sponsorblock_disable') },
 ];
 
 export interface SponsorBlockCategoryRowProps {
   name: string;
   description: string;
+  isHighlight: boolean;
   color: string;
   action: SponsorBlockAction;
   defaultColor: string;
@@ -31,6 +44,7 @@ export interface SponsorBlockCategoryRowProps {
 export function SponsorBlockCategoryRow({
   name,
   description,
+  isHighlight,
   color,
   action,
   defaultColor,
@@ -41,7 +55,7 @@ export function SponsorBlockCategoryRow({
 
   const togglePicker = (event: MouseEvent<HTMLButtonElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
-    setAnchor((current) => (current ? null : { top: rect.bottom + 8, left: rect.left }));
+    setAnchor((current) => (current ? null : { top: rect.bottom + 8, ...alignToStart(rect) }));
   };
 
   return (
@@ -50,7 +64,7 @@ export function SponsorBlockCategoryRow({
         <button
           type="button"
           onClick={togglePicker}
-          aria-label={`Customize ${name} color`}
+          aria-label={getString("sponsorblock_category_color_customize", name)}
           className="h-6 w-6 shrink-0 rounded-full border border-chrome-neutral-700 transition-transform duration-200 ease-out hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
           style={{ backgroundColor: color }}
         />
@@ -63,7 +77,7 @@ export function SponsorBlockCategoryRow({
       <Select
         value={action}
         onChange={(value) => onActionChange(value as SponsorBlockAction)}
-        options={ACTION_OPTIONS}
+        options={isHighlight ? HIGHLIGHT_ACTION_OPTIONS : ACTION_OPTIONS}
         className="w-44"
       />
 

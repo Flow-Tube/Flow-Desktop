@@ -6,6 +6,7 @@ use tauri::{AppHandle, Manager};
 
 use super::device::DEVICE_KEYS;
 use super::engine::{EngineError, Result, Session};
+use super::forks::{Settlement, settle_roster};
 use super::group_store::GroupStore;
 use super::held::HeldStore;
 use super::hybrid::HybridStore;
@@ -14,21 +15,30 @@ use super::keys::MemberSecrets;
 use super::lan_peers::{met, nearby};
 use super::lan_runtime::spread_leave;
 use super::linking::DeviceMeta;
-use super::membership::{leave_group, remove_device, rename_device};
+use super::membership::{leave_group, remove_devices, rename_device};
 use super::names::device_names;
 use super::profile_links::{link_profile, reading};
-use super::recovery_flow::replace_recovery_key;
-use super::roster::Role;
+use super::recovery_flow::{RestoreDevice, replace_recovery_key};
+use super::recovery_notice::{RecoveryNotice, forget_recovery_notice, recovery_notice};
+use super::restore_removal::take_replaced_words;
+use super::roster::{Role, devices_added_by, entry_hash, recovery_member, replay_roster};
 use super::server::{ServerStore, StoreError};
-use super::service::{LastSync, is_syncing, last_sync, sync_soon};
+use super::service::{LastSync, is_syncing, last_sync, sync_now, sync_soon};
 use super::setup::{
-    create_group, create_lan_group, create_webdav_group, restore_group, restore_webdav_group,
+    create_group, create_lan_group, create_webdav_group, preview_restore_group,
+    preview_restore_webdav_group, restore_group, restore_webdav_group,
 };
 use super::snapshot::snapshot_soon;
-use super::state::{GroupRecord, StoreKind, forget_group, load_group};
+use super::state::{
+    GroupRecord, StoreKind, add_roster_pin, forget_group, load_group, roster_entries, roster_pins,
+};
 use super::store::Store;
+use super::store_login::{forget_login_change, forget_login_sent, login_due, login_waiting};
 use super::webdav::{WebDavLogin, WebDavStore};
-use super::webdav_login::{forget_login, load_login, save_login};
+use super::webdav_login::{
+    forget_login, forget_pending_login, load_login, load_pending_login, save_login,
+    save_pending_login,
+};
 use crate::db::settings::{get_setting, set_setting};
 use crate::services::profile_service::ProfileService;
 use crate::sync::{changes, ledger};
@@ -92,12 +102,9 @@ async fn server_store(local: &Local, record: &GroupRecord) -> Result<ServerStore
 }
 
 /// A session for this device, reading the links its profiles sync.
-pub async fn open_session<'a>(
-    local: &'a Local,
-    record: &GroupRecord,
-) -> Result<Session<'a, GroupStore>> {
+async fn store_of(local: &Local, record: &GroupRecord) -> Result<GroupStore> {
     let (pool, device) = (&local.pool, &local.device);
-    let store = match record.kind {
+    Ok(match record.kind {
         StoreKind::Server => {
             let server = server_store(local, record).await?;
             let me = hex::encode(device.did);
@@ -112,7 +119,15 @@ pub async fn open_session<'a>(
             .await?,
         )),
         StoreKind::Lan => GroupStore::Held(HeldStore::new(pool.clone())),
-    };
+    })
+}
+
+pub async fn open_session<'a>(
+    local: &'a Local,
+    record: &GroupRecord,
+) -> Result<Session<'a, GroupStore>> {
+    let (pool, device) = (&local.pool, &local.device);
+    let store = store_of(local, record).await?;
     let mut session = Session::open(pool, store, device).await?;
     let (running, default) = (&local.running_profile, &local.default_profile);
     session.set_reading(reading(pool, &record.link, running, default).await?);
@@ -137,12 +152,13 @@ pub async fn stopped(pool: &SqlitePool) -> Result<Option<String>> {
 }
 
 /// Stops syncing once the group shut this device out (spec/protocol.md, Removal). A roster that
-/// no longer lists it also forgets the group and its keys; a server that refuses it a token
-/// leaves that to the user, because the roster can't be read then.
+/// extends the applied one and no longer lists it also forgets the group and its keys. A server
+/// that refuses it a token, or a roster that replaces entries it had applied, leaves that to the
+/// user.
 pub async fn stop_if_shut_out(pool: &SqlitePool, error: &EngineError) -> Result<()> {
     match error {
         EngineError::Removed => forget_with_keys(pool).await?,
-        EngineError::Store(StoreError::SignInRefused) => {}
+        EngineError::Store(StoreError::SignInRefused) | EngineError::RemovalUnconfirmed => {}
         _ => return Ok(()),
     }
     Ok(set_setting(pool, STOPPED, error.kind()).await?)
@@ -161,7 +177,7 @@ async fn started(local: &Local, words: String) -> Result<String> {
     Ok(words)
 }
 
-async fn set_recovery_saved(pool: &SqlitePool, saved: bool) -> Result<()> {
+pub(super) async fn set_recovery_saved(pool: &SqlitePool, saved: bool) -> Result<()> {
     Ok(set_setting(pool, RECOVERY_SAVED, if saved { "1" } else { "0" }).await?)
 }
 
@@ -186,11 +202,73 @@ pub struct LinkedStatus {
     pub store_url: Option<String>,
     /// The `WebDAV` folder refused its login, so nothing syncs until a new one is entered.
     pub login_refused: bool,
+    /// A removed device can still reach the `WebDAV` folder until its login changes.
+    pub login_due: bool,
+    /// The devices yet to read the login this device sent, while that change is under way.
+    pub login_waiting: Option<Vec<String>>,
     /// The keychain hasn't given this device's keys: a read waits for access, or it was refused.
     pub keychain_blocked: bool,
     pub recovery_saved: bool,
+    /// Words the end of a restore had to make, to show once.
+    pub replaced_words: Option<String>,
+    pub recovery_notice: Option<RecoveryNotice>,
+    /// The device that set the recovery key left: nothing is written until it is replaced.
+    pub recovery_due: bool,
     pub last_sync: Option<LastSync>,
     pub syncing: bool,
+}
+
+/// One side of a contested roster: keeping it keeps this device, which removed those.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContestSide {
+    pub entry: String,
+    pub device: String,
+    pub removes: Vec<String>,
+}
+
+/// The sides the user chooses between while the roster is contested.
+pub async fn contest(app: &AppHandle) -> Result<Vec<ContestSide>> {
+    let local = local(app).await?;
+    let record = linked(&local.pool).await?;
+    let store = store_of(&local, &record).await?;
+    let pins = roster_pins(&local.pool).await?;
+    let mut session = Session::on_applied(&local.pool, store, &local.device).await?;
+    let Settlement::Contested { sides, .. } = settle_roster(
+        &record.group_id,
+        session.entries(),
+        &session.store().roster_view().await?,
+        &pins,
+        session.store().is_linear(),
+    )?
+    else {
+        return Ok(Vec::new());
+    };
+    let _ = session.prepare_names().await;
+    let names = device_names(&mut session).await.unwrap_or_default();
+    let name = |did: &str| {
+        names
+            .get(did)
+            .map_or_else(|| did[..8].to_owned(), |m| m.name.clone())
+    };
+    Ok(sides
+        .iter()
+        .map(|side| ContestSide {
+            entry: entry_hash(side),
+            device: name(&side.signer),
+            removes: side.remove.iter().flatten().map(|did| name(did)).collect(),
+        })
+        .collect())
+}
+
+/// Keeps one side of a contested roster on this device. The next sync settles from it.
+pub async fn keep_side(app: &AppHandle, entry: &str) -> Result<()> {
+    if !contest(app).await?.iter().any(|side| side.entry == entry) {
+        return Err(EngineError::Unexpected);
+    }
+    add_roster_pin(&state_pool(app), entry).await?;
+    sync_soon(app);
+    Ok(())
 }
 
 /// What can be shown without reaching the server.
@@ -198,6 +276,7 @@ pub async fn status(app: &AppHandle) -> Result<LinkedStatus> {
     let pool = state_pool(app);
     let saved = get_setting(&pool, RECOVERY_SAVED).await?;
     let record = load_group(&pool).await?;
+    let roster = replay_roster(&roster_entries(&pool).await?).ok();
     Ok(LinkedStatus {
         kind: record.as_ref().map(|r| r.kind),
         stopped: stopped(&pool).await?,
@@ -205,9 +284,14 @@ pub async fn status(app: &AppHandle) -> Result<LinkedStatus> {
             .filter(|r| r.kind != StoreKind::Lan)
             .map(|r| r.store_url),
         login_refused: login_refused(&pool).await?,
+        login_due: login_due(&pool).await?,
+        login_waiting: login_waiting(&pool).await?,
         keychain_blocked: DEVICE_KEYS.blocked(),
         // Only a device that created or restored the group was shown words to confirm.
         recovery_saved: saved.as_deref() != Some("0"),
+        replaced_words: take_replaced_words(),
+        recovery_notice: recovery_notice(&pool).await?,
+        recovery_due: roster.is_some_and(|state| state.recovery_due),
         last_sync: last_sync(app),
         syncing: is_syncing(app),
     })
@@ -220,6 +304,8 @@ pub struct LinkedDevice {
     pub name: String,
     pub platform: String,
     pub this_device: bool,
+    /// It set the current recovery key, so its leaving stops the others writing.
+    pub set_recovery_key: bool,
     /// Met on this network in the last few minutes.
     pub nearby: bool,
     /// When the device last synced: as the server saw it, or for a LAN group when this device
@@ -242,6 +328,8 @@ pub async fn devices(app: &AppHandle) -> Result<Vec<LinkedDevice>> {
         met.extend(last_sync(app).map(|last| (me.clone(), last.at_ms)));
         met
     };
+    let installer = recovery_member(&session.roster().members)
+        .and_then(|(_, member)| member.installer.as_ref());
     Ok(session
         .roster()
         .members
@@ -254,6 +342,7 @@ pub async fn devices(app: &AppHandle) -> Result<Vec<LinkedDevice>> {
                 name: meta.map(|m| m.name.clone()).unwrap_or_default(),
                 platform: meta.map(|m| m.platform.clone()).unwrap_or_default(),
                 this_device: *id == me,
+                set_recovery_key: installer == Some(id),
                 nearby: nearby.contains(id),
                 last_sync_ms: last_synced.get(id).copied(),
             }
@@ -311,6 +400,24 @@ pub async fn create_on_webdav(
     started(&local, words).await
 }
 
+/// Checks that the folder takes `login` and still holds this group.
+pub async fn check_login(record: &GroupRecord, me: String, login: &WebDavLogin) -> Result<()> {
+    let store = WebDavStore::connect(&record.store_url, login.clone(), me).await?;
+    store.probe().await?;
+    if store.group().await?.as_deref() != Some(record.group_id.as_str()) {
+        return Err(EngineError::Unexpected);
+    }
+    Ok(())
+}
+
+/// Saves a login the folder took, in place of whatever came before.
+async fn adopt_login(pool: &SqlitePool, login: &WebDavLogin) -> Result<()> {
+    save_login(login).await?;
+    forget_pending_login().await?;
+    forget_login_change(pool).await?;
+    set_login_refused(pool, false).await
+}
+
 /// Replaces a `WebDAV` login the folder refused, once the folder takes the new one and still
 /// holds this group.
 pub async fn update_login(app: &AppHandle, user: &str, password: &str) -> Result<()> {
@@ -320,20 +427,64 @@ pub async fn update_login(app: &AppHandle, user: &str, password: &str) -> Result
         user: user.trim().to_owned(),
         password: password.to_owned(),
     };
-    let store = WebDavStore::connect(
-        &record.store_url,
-        login.clone(),
-        hex::encode(local.device.did),
-    )
-    .await?;
-    store.probe().await?;
-    if store.group().await?.as_deref() != Some(record.group_id.as_str()) {
-        return Err(EngineError::Unexpected);
-    }
-    save_login(&login).await?;
-    set_login_refused(&local.pool, false).await?;
+    check_login(&record, hex::encode(local.device.did), &login).await?;
+    adopt_login(&local.pool, &login).await?;
     sync_soon(app);
     Ok(())
+}
+
+/// Sends the other devices a new login for the folder, before the user sets it there (spec/protocol.md,
+/// Replacing a store's login). Opening the session re-reads the roster, and fails while it is contested.
+pub async fn start_login_change(app: &AppHandle, user: &str, password: &str) -> Result<()> {
+    let local = local(app).await?;
+    let record = linked(&local.pool).await?;
+    if record.kind != StoreKind::WebDav {
+        return Err(EngineError::Unexpected);
+    }
+    let login = WebDavLogin {
+        user: user.trim().to_owned(),
+        password: password.to_owned(),
+    };
+    let mut session = open_session(&local, &record).await?;
+    session.write_login(&local.pool, &login).await?;
+    save_pending_login(&login).await?;
+    sync_soon(app);
+    Ok(())
+}
+
+/// The user set the new login at the provider: checks it, and uses it from now on.
+pub async fn finish_login_change(app: &AppHandle) -> Result<()> {
+    let local = local(app).await?;
+    let record = linked(&local.pool).await?;
+    let login = load_pending_login().await?.ok_or(EngineError::Unexpected)?;
+    check_login(&record, hex::encode(local.device.did), &login).await?;
+    adopt_login(&local.pool, &login).await?;
+    sync_soon(app);
+    Ok(())
+}
+
+/// Stops a login change this device started. A device that read the login still holds it, and only
+/// tries it if the folder refuses the current one.
+pub async fn cancel_login_change(app: &AppHandle) -> Result<()> {
+    forget_pending_login().await?;
+    forget_login_sent(&state_pool(app)).await
+}
+
+/// The folder refused the login: tries the pending one once. False when there is none, or it fails.
+pub async fn try_pending_login(app: &AppHandle) -> Result<bool> {
+    let local = local(app).await?;
+    let record = linked(&local.pool).await?;
+    let Some(login) = load_pending_login().await? else {
+        return Ok(false);
+    };
+    if check_login(&record, hex::encode(local.device.did), &login)
+        .await
+        .is_err()
+    {
+        return Ok(false);
+    }
+    adopt_login(&local.pool, &login).await?;
+    Ok(true)
 }
 
 /// Starts a group that lives on this network's devices, with no server, and returns the recovery
@@ -348,11 +499,32 @@ pub async fn create_on_lan(app: &AppHandle) -> Result<String> {
 
 /// Restores the group from its recovery words, on a Flow server or, with `login`, in a `WebDAV`
 /// folder, and returns the new words to show once.
+pub async fn preview_restore(
+    app: &AppHandle,
+    url: &str,
+    words: &str,
+    login: Option<WebDavLogin>,
+) -> Result<Vec<RestoreDevice>> {
+    let local = local(app).await?;
+    if load_group(&local.pool).await?.is_some() {
+        return Err(EngineError::AlreadyLinked);
+    }
+    let url = url.trim();
+    match login {
+        Some(login) => {
+            let store = WebDavStore::connect(url, login, hex::encode(local.device.did)).await?;
+            preview_restore_webdav_group(&store, words).await
+        }
+        None => preview_restore_group(url, words).await,
+    }
+}
+
 pub async fn restore(
     app: &AppHandle,
     url: &str,
     words: &str,
     login: Option<WebDavLogin>,
+    kept: &[String],
 ) -> Result<String> {
     let mut local = local(app).await?;
     start_membership(&mut local).await?;
@@ -361,9 +533,9 @@ pub async fn restore(
         Some(login) => {
             let store = WebDavStore::connect(url, login.clone(), hex::encode(device.did)).await?;
             save_login(&login).await?;
-            restore_webdav_group(pool, &store, url, words, device, meta).await?
+            restore_webdav_group(pool, &store, url, words, device, meta, kept).await?
         }
-        None => restore_group(pool, url, words, device, meta).await?,
+        None => restore_group(pool, url, words, device, meta, kept).await?,
     };
     set_recovery_saved(&local.pool, false).await?;
     sync_soon(app);
@@ -408,14 +580,36 @@ pub async fn rename(app: &AppHandle, id: &str, name: &str) -> Result<()> {
     rename_device(&session, &local.device, id, &meta).await
 }
 
-pub async fn remove(app: &AppHandle, id: &str) -> Result<()> {
+/// Removes `id` and the devices in `also`, and returns the new recovery words to show once when
+/// they had to be replaced with it.
+pub async fn remove(app: &AppHandle, id: &str, also: &[String]) -> Result<Option<String>> {
     let local = local(app).await?;
+    // The cut names what this device has read, so read what it can first (spec/protocol.md, Removal).
+    if let Err(error) = sync_now(app).await {
+        tracing::warn!(target: "flow::sync2", kind = error.kind(), "removing without a last sync");
+    }
     let record = linked(&local.pool).await?;
     let session = open_session(&local, &record).await?;
-    remove_device(&session, &local.device, id).await?;
+    let mut removed = also.to_vec();
+    removed.push(id.to_owned());
+    let words = remove_devices(&local.pool, &session, &local.device, &removed).await?;
+    if words.is_some() {
+        set_recovery_saved(&local.pool, false).await?;
+    }
     snapshot_soon(&local.pool).await?;
     sync_soon(app);
-    Ok(())
+    Ok(words)
+}
+
+/// The current devices `id` added, for the user to remove with it if they don't recognise them.
+pub async fn added_by(app: &AppHandle, id: &str) -> Result<Vec<String>> {
+    let entries = roster_entries(&state_pool(app)).await?;
+    Ok(devices_added_by(&entries, id))
+}
+
+/// The user answered the notice that the recovery key changed.
+pub async fn answer_recovery_notice(app: &AppHandle) -> Result<()> {
+    forget_recovery_notice(&state_pool(app)).await
 }
 
 /// Devices asking to join this device's server group; none for a LAN group.
@@ -497,7 +691,9 @@ pub async fn reset_local_data(pool: &SqlitePool, syncs: bool) -> Result<()> {
     if syncs && load_group(crate::db::device::pool(pool)).await?.is_some() {
         return Err(EngineError::AlreadyLinked);
     }
+    crate::recap::store::clear(pool).await?;
     crate::db::watch_history::clear_watch_history(pool).await?;
+    crate::db::local_media::clear_plays(pool).await?;
     for key in ["subscriptions", "user_playlists"] {
         set_setting(pool, key, "[]").await?;
     }
@@ -525,5 +721,6 @@ async fn forget_here(pool: &SqlitePool) -> Result<()> {
     super::error_log::clear(pool).await?;
     set_setting(pool, STOPPED, "").await?;
     set_login_refused(pool, false).await?;
+    forget_login_change(pool).await?;
     set_recovery_saved(pool, true).await
 }

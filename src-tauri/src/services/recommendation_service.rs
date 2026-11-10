@@ -15,14 +15,15 @@ use crate::flow_neuro::channel_knowledge::{learn_from_uploads, subscription_chan
 use crate::flow_neuro::co_watch::{RelatedChannel, neighbours};
 use crate::flow_neuro::deep_flow::learning_paused;
 use crate::flow_neuro::discovery::{SurfaceState, next_queries, note_query_novelty, stale_key};
-use crate::flow_neuro::display_forms::with_pick_spellings;
+use crate::flow_neuro::display_forms::{label as display_label, with_pick_spellings};
+use crate::flow_neuro::features::{TopicReader, VideoText, extract_features};
 use crate::flow_neuro::language::system_language;
 use crate::flow_neuro::learning::{Interaction, apply_interaction};
 use crate::flow_neuro::rank::{RankContext, SessionState, rank};
 use crate::flow_neuro::ranker::MomentumEntry;
 use crate::flow_neuro::scoring::{
-    FeedEntry, FlowPersona, IMPRESSION_CACHE_MAX, SESSION_TOPIC_HISTORY_MAX, TimeBucket, UserBrain,
-    classify_persona, is_known_short,
+    FeedEntry, FlowPersona, IMPRESSION_CACHE_MAX, IdfSnapshot, SESSION_TOPIC_HISTORY_MAX,
+    TimeBucket, UserBrain, classify_persona, is_known_short,
 };
 use crate::flow_neuro::search_learning::learn_search;
 use crate::flow_neuro::side_stores::SideStores;
@@ -107,6 +108,43 @@ impl RecommendationService {
             last_activity_ms: Mutex::new(now),
             momentum: Mutex::new(Vec::new()),
         }
+    }
+
+    /// A video's leading topics as people read them, for the recap ledger. Reads the brain only.
+    pub async fn video_topics(
+        &self,
+        title: &str,
+        channel_name: &str,
+        description: Option<&str>,
+        limit: usize,
+    ) -> Vec<String> {
+        let brain = self.brain_store.read().await;
+        let idf = IdfSnapshot {
+            word_frequencies: brain.idf_word_frequency.clone(),
+            total_documents: brain.idf_total_documents,
+        };
+        let reader = TopicReader {
+            spec: brain.key_spec(),
+            idf: &idf,
+        };
+        let vector = extract_features(
+            &VideoText {
+                title,
+                channel_name,
+                description,
+                duration_seconds: None,
+                is_live: false,
+                is_short: false,
+            },
+            &reader,
+        );
+        let mut topics: Vec<(String, f64)> = vector.topics.into_iter().collect();
+        topics.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+        topics
+            .into_iter()
+            .take(limit)
+            .map(|(key, _)| display_label(&brain.display_forms, &key))
+            .collect()
     }
 
     /// Best-effort persistence of the resident brain; called on the debounce timer and on exit.

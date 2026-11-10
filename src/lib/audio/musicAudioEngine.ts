@@ -1,7 +1,8 @@
 import { loudnessFactor, MUSIC_MAX_CUT_DB } from "../loudness";
 import { IS_LINUX_RUNTIME, IS_MACOS_RUNTIME } from "../platform";
 import { createAudioContext, keepRunning, resumeWithin, webAudioSupported } from "./audioContext";
-import { fadeInGain, fadeOutGain, resetFade, scheduleFade, steppedFade } from "./crossfadeRamp";
+import { QUICK_FADE_IN_SECONDS } from "./crossfade";
+import { fadeInGain, fadeOutGain, resetFade, scheduleFade, steppedFade, type CrossfadeCurve } from "./crossfadeRamp";
 import { EQ_GRAPH_OFF, type EqGraphSpec } from "./eq/graphPlan";
 import { EqChain, RAMP_TIME_CONSTANT } from "./eqChain";
 import { pastListedEnd, playableLength } from "./listedLength";
@@ -60,6 +61,23 @@ interface Fade {
   cancelSteps: (() => void) | null;
 }
 
+/** A fade on one element alone: a song fading out with nothing ready to blend into, or the next one coming in after it. */
+interface SoloFade {
+  slot: Slot;
+  cancelSteps: (() => void) | null;
+  done: ReturnType<typeof setTimeout> | null;
+}
+
+/** The song a skip moved away from, playing on until the next one starts. */
+interface HeldSkip {
+  previous: Slot;
+  seconds: number;
+  giveUp: ReturnType<typeof setTimeout>;
+}
+
+/** A skip whose next song hasn't started by then lets the old one go. */
+const SKIP_HOLD_LIMIT_MS = 10_000;
+
 class MusicAudioEngine {
   private slots: [Slot, Slot] = [emptySlot(), emptySlot()];
   private activeIndex: 0 | 1 = 0;
@@ -80,8 +98,16 @@ class MusicAudioEngine {
   private eqEngaged = false;
   private speed = 1;
   private crossfadeEnabled = false;
+  private crossfadeCurve: CrossfadeCurve = "EQUAL_POWER";
   private armedFadeSeconds: number | null = null;
   private fading: Fade | null = null;
+  private solo: SoloFade | null = null;
+  private held: HeldSkip | null = null;
+  /** Set once a song faded out on its own: the next one to play comes in over `QUICK_FADE_IN_SECONDS`. */
+  private quickFadeIn = false;
+  /** Bumped by every load, so a fade-in waiting for one song never starts on a later one. */
+  private loadToken = 0;
+  private preloadAfterFade: (() => void) | null = null;
 
   private get active(): Slot {
     return this.slots[this.activeIndex];
@@ -99,6 +125,10 @@ class MusicAudioEngine {
     this.slots = [emptySlot(), emptySlot()];
     this.activeIndex = 0;
     this.fading = null;
+    this.solo = null;
+    this.held = null;
+    this.quickFadeIn = false;
+    this.preloadAfterFade = null;
     for (const [i, el] of elements.entries()) {
       // Required for WebAudio to receive (non-silent) cross-origin samples.
       el.crossOrigin = "anonymous";
@@ -169,6 +199,8 @@ class MusicAudioEngine {
   async load(url: string, mime: string | null, listedSeconds: number | null = null): Promise<void> {
     const el = this.active.el;
     if (!el) return;
+    this.loadToken += 1;
+    this.prepareEntrance(this.active);
     this.active.key = null;
     this.active.mime = mime;
     this.active.listed = listedSeconds;
@@ -184,7 +216,7 @@ class MusicAudioEngine {
   /**
    * Start buffering `url` on the standby element for the track `key`, so it can
    * take over the moment the current track ends. A no-op when it already holds
-   * that track, or while it is still fading out the last one.
+   * that track. While it is still fading out the last one, this waits for that fade to run its course.
    */
   preload(
     key: string,
@@ -193,8 +225,12 @@ class MusicAudioEngine {
     mime: string | null,
     listedSeconds: number | null = null,
   ): void {
+    if (this.fading || this.held) {
+      this.preloadAfterFade = () => this.preload(key, url, loudnessDb, mime, listedSeconds);
+      return;
+    }
     const slot = this.standby;
-    if (!slot.el || slot.key === key || this.fading) return;
+    if (!slot.el || slot.key === key) return;
     slot.key = key;
     slot.loudnessDb = loudnessDb;
     slot.mime = mime;
@@ -234,6 +270,151 @@ class MusicAudioEngine {
   }
 
   /**
+   * Makes the next `load` play on the other element while the song now playing carries on, and
+   * fades the two over `seconds` once the new one plays, as Android's skip does: the old song
+   * never goes quiet while the next one resolves and buffers. A second skip before then only
+   * changes what loads.
+   */
+  holdForSkip(seconds: number): void {
+    if (this.held) return;
+    this.finishFade();
+    this.quickFadeIn = false;
+    this.endSolo();
+    const previous = this.active;
+    if (seconds <= 0 || !previous.el || previous.el.paused) return;
+    this.activeIndex = this.activeIndex === 0 ? 1 : 0;
+    const next = this.active;
+    this.release(next);
+    this.silence(next);
+    const el = next.el;
+    const token = this.loadToken + 1;
+    el?.addEventListener("playing", () => {
+      if (this.loadToken >= token) this.startHeldFade();
+    }, { once: true });
+    this.held = { previous, seconds, giveUp: setTimeout(() => this.dropHeld(), SKIP_HOLD_LIMIT_MS) };
+    this.applyGain();
+  }
+
+  private startHeldFade(): void {
+    const held = this.held;
+    if (!held) return;
+    clearTimeout(held.giveUp);
+    this.held = null;
+    if (!held.previous.el || held.previous.el.paused) {
+      this.release(held.previous);
+      this.restore(this.active);
+      return;
+    }
+    this.startFade(held.previous, held.seconds);
+  }
+
+  /** Lets the song a skip held go at once: the next one didn't start, or playback stopped. */
+  private dropHeld(): void {
+    const held = this.held;
+    if (!held) return;
+    clearTimeout(held.giveUp);
+    this.held = null;
+    this.release(held.previous);
+    this.restore(this.active);
+    const preload = this.preloadAfterFade;
+    this.preloadAfterFade = null;
+    preload?.();
+  }
+
+  /**
+   * Fades the song out on its own over `seconds` when no next song is ready to blend with, as
+   * Android does rather than dropping the fade; the next song to play then comes in over
+   * `QUICK_FADE_IN_SECONDS`. A seek or a pause puts the song back to full volume.
+   */
+  fadeThrough(seconds: number): void {
+    if (this.solo || this.fading || this.held || seconds <= 0 || !this.active.el) return;
+    this.soloFade(this.active, "out", seconds);
+    this.quickFadeIn = true;
+  }
+
+  /** Whether the song is fading out on its own, so it isn't started again on every tick. */
+  isFadingThrough(): boolean {
+    return !!this.solo && !this.solo.done;
+  }
+
+  /** Repeat one after a song faded out on its own: back to the start, coming in quickly. */
+  replay(): void {
+    const quick = this.quickFadeIn;
+    this.seek(0);
+    if (quick) {
+      this.loadToken += 1;
+      this.quickFadeIn = true;
+      this.prepareEntrance(this.active);
+    }
+  }
+
+  /** A song loading after one that faded out on its own starts silent and comes in quickly; any other starts at full. */
+  private prepareEntrance(slot: Slot): void {
+    const quick = this.quickFadeIn;
+    this.quickFadeIn = false;
+    // A song that faded out on another element is emptied by the caller, so it isn't turned back up here.
+    const solo = this.solo;
+    this.solo = null;
+    solo?.cancelSteps?.();
+    if (solo?.done) clearTimeout(solo.done);
+    if (!quick) {
+      // A song a skip loads stays silent until the fade brings it in.
+      if (slot.fade !== 1 && !this.held) this.restore(slot);
+      return;
+    }
+    this.silence(slot);
+    const el = slot.el;
+    const token = this.loadToken;
+    const begin = () => {
+      if (this.loadToken === token && this.active === slot) this.soloFade(slot, "in", QUICK_FADE_IN_SECONDS);
+    };
+    if (el && !el.paused && el.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) begin();
+    else el?.addEventListener("playing", begin, { once: true });
+  }
+
+  private soloFade(slot: Slot, direction: "in" | "out", seconds: number): void {
+    this.endSolo();
+    let cancelSteps: (() => void) | null = null;
+    if (this.ctx && this.routes(slot) && slot.fadeGain) {
+      scheduleFade(slot.fadeGain.gain, direction, this.ctx.currentTime, seconds, this.crossfadeCurve);
+    } else {
+      const gain = direction === "in" ? fadeInGain : fadeOutGain;
+      cancelSteps = steppedFade(seconds, (progress) => {
+        slot.fade = gain(progress, this.crossfadeCurve);
+        this.applyGain();
+      });
+    }
+    // A fade out holds until the song ends or loads another; a fade in hands back full volume.
+    const done = direction === "in" ? setTimeout(() => this.endSolo(), seconds * 1_000 + 50) : null;
+    this.solo = { slot, cancelSteps, done };
+  }
+
+  /** Puts the element a solo fade moved back at full volume. */
+  private endSolo(): void {
+    const solo = this.solo;
+    if (!solo) return;
+    this.solo = null;
+    solo.cancelSteps?.();
+    if (solo.done) clearTimeout(solo.done);
+    this.restore(solo.slot);
+  }
+
+  private silence(slot: Slot): void {
+    slot.fade = 0;
+    if (this.ctx && slot.fadeGain) {
+      slot.fadeGain.gain.cancelScheduledValues(this.ctx.currentTime);
+      slot.fadeGain.gain.setValueAtTime(0, this.ctx.currentTime);
+    }
+    this.applyGain();
+  }
+
+  private restore(slot: Slot): void {
+    slot.fade = 1;
+    if (this.ctx && slot.fadeGain) resetFade(slot.fadeGain.gain, this.ctx.currentTime);
+    this.applyGain();
+  }
+
+  /**
    * Make the standby element the active one when it holds `key`. The caller
    * then plays it; the element that was playing is emptied, at once or at the
    * end of an armed crossfade.
@@ -245,6 +426,8 @@ class MusicAudioEngine {
     this.finishFade();
     const previous = this.active;
     this.activeIndex = this.activeIndex === 0 ? 1 : 0;
+    this.loadToken += 1;
+    this.prepareEntrance(this.active);
     this.active.key = null;
     if (fadeSeconds !== null && previous.el && !previous.el.paused) {
       this.startFade(previous, fadeSeconds);
@@ -257,6 +440,7 @@ class MusicAudioEngine {
 
   private release(slot: Slot): void {
     if (slot.el) unload(slot.el);
+    if (slot.fade !== 1) this.restore(slot);
     slot.key = null;
     slot.loudnessDb = null;
     slot.mime = null;
@@ -271,16 +455,20 @@ class MusicAudioEngine {
     let cancelSteps: (() => void) | null = null;
     if (this.ctx && this.routes(previous) && this.routes(next) && previous.fadeGain && next.fadeGain) {
       const t = this.ctx.currentTime;
-      scheduleFade(previous.fadeGain.gain, "out", t, seconds);
-      scheduleFade(next.fadeGain.gain, "in", t, seconds);
+      scheduleFade(previous.fadeGain.gain, "out", t, seconds, this.crossfadeCurve);
+      scheduleFade(next.fadeGain.gain, "in", t, seconds, this.crossfadeCurve);
     } else {
       cancelSteps = steppedFade(seconds, (progress) => {
-        previous.fade = fadeOutGain(progress);
-        next.fade = fadeInGain(progress);
+        previous.fade = fadeOutGain(progress, this.crossfadeCurve);
+        next.fade = fadeInGain(progress, this.crossfadeCurve);
         this.applyGain();
       });
     }
-    const done = setTimeout(() => this.finishFade(), seconds * 1_000 + 50);
+    const done = setTimeout(() => {
+      const preload = this.preloadAfterFade;
+      this.finishFade();
+      preload?.();
+    }, seconds * 1_000 + 50);
     this.fading = { previous, done, cancelSteps };
   }
 
@@ -289,6 +477,7 @@ class MusicAudioEngine {
     const fading = this.fading;
     if (!fading) return;
     this.fading = null;
+    this.preloadAfterFade = null;
     clearTimeout(fading.done);
     fading.cancelSteps?.();
     this.release(fading.previous);
@@ -305,6 +494,7 @@ class MusicAudioEngine {
   clearPreload(): string | null {
     this.finishFade();
     const slot = this.standby;
+    if (this.held?.previous === slot) return null;
     const key = slot.key;
     if (key === null) return null;
     this.release(slot);
@@ -351,15 +541,25 @@ class MusicAudioEngine {
 
   pause(): void {
     this.finishFade();
+    this.dropHeld();
+    this.quickFadeIn = false;
+    this.endSolo();
     this.active.el?.pause();
   }
 
   stop(): void {
     this.finishFade();
+    this.dropHeld();
+    this.quickFadeIn = false;
+    this.endSolo();
     for (const slot of this.slots) this.release(slot);
   }
 
   seek(seconds: number): void {
+    if (this.solo && !this.solo.done) {
+      this.quickFadeIn = false;
+      this.endSolo();
+    }
     const el = this.active.el;
     if (el && Number.isFinite(seconds)) {
       el.currentTime = Math.max(0, seconds);
@@ -402,6 +602,10 @@ class MusicAudioEngine {
   }
 
   // --- speed --------------------------------------------------------------
+
+  getSpeed(): number {
+    return this.speed;
+  }
 
   setSpeed(rate: number): void {
     this.speed = Math.max(0.5, Math.min(2, rate));
@@ -481,12 +685,13 @@ class MusicAudioEngine {
     if (this.graphReady && this.volGain) this.volGain.gain.setTargetAtTime(vol, t, RAMP_TIME_CONSTANT);
     // A scheduled crossfade owns the fade gains until it ends; a stepped one moves `slot.fade`.
     const scheduledFade = !!this.fading && !this.fading.cancelSteps;
+    const scheduledSolo = this.solo && !this.solo.cancelSteps ? this.solo.slot : null;
     for (const slot of this.slots) {
       if (!slot.el) continue;
       const norm = this.normalizationFactor(slot.loudnessDb);
       if (this.routes(slot)) {
         slot.normGain?.gain.setTargetAtTime(norm, t, RAMP_TIME_CONSTANT);
-        if (!scheduledFade) slot.fadeGain?.gain.setTargetAtTime(slot.fade, t, RAMP_TIME_CONSTANT);
+        if (!scheduledFade && slot !== scheduledSolo) slot.fadeGain?.gain.setTargetAtTime(slot.fade, t, RAMP_TIME_CONSTANT);
         slot.el.volume = 1;
         slot.el.muted = false;
       } else {
@@ -502,6 +707,10 @@ class MusicAudioEngine {
   }
 
   // --- crossfade ----------------------------------------------------------
+
+  setCrossfadeCurve(curve: CrossfadeCurve): void {
+    this.crossfadeCurve = curve;
+  }
 
   /** Crossfades are timed on the audio clock, so turning them on brings WebAudio in. */
   setCrossfadeEnabled(enabled: boolean): void {

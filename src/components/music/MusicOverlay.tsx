@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { AnimatePresence, motion, useMotionValueEvent, useTransform } from "framer-motion";
 import { ChevronDown, ListMusic, Mic2, Minimize2, SlidersHorizontal, Volume1, Volume2, VolumeX } from "lucide-react";
 
@@ -18,14 +18,19 @@ import { MusicScrubber } from "./MusicScrubber";
 import { MusicQueuePane } from "./MusicQueuePane";
 import { LyricsActionsMenu, MusicLyrics } from "./MusicLyrics";
 import { AmbientBackdrop } from "./AmbientBackdrop";
+import { LyricsCoverBackground } from "./lyrics/LyricsCoverBackground";
+import { useLyricsBackground, useLyricsCover } from "../../lib/lyrics/useLyricsCover";
 import { EqPanel } from "./EqPanel";
 import { useEqActive } from "../../lib/audio/eq/useEqualizer";
 import { VolumePopover } from "./VolumePopover";
+import { PlayOnButton } from "../playon/PlayOnButton";
 import { LAYOUT_SPRING, NowPlayingColumn } from "./player/NowPlayingColumn";
 import { PlayerSidePane, type SidePaneTab } from "./player/PlayerSidePane";
 import { PlayerTransport } from "./player/PlayerTransport";
+import { GROUP_BUTTON, GROUP_BUTTON_ACTIVE, GroupItem, NO_TAP_SCALE, PlayerButtonGroup } from "./player/PlayerButtonGroup";
 import { useArtworkSwatches } from "../../lib/useArtworkSwatches";
 import { useFullPlayerColors } from "../../lib/usePlayerColors";
+import { coverSurfaceVariables } from "../../lib/playerColors";
 import { upgradeMusicImageUrl } from "../../lib/thumbnails";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 import {
@@ -39,10 +44,7 @@ import {
   sheetProgress,
 } from "../../lib/musicSheet";
 
-const TOP_BTN =
-  "grid h-10 w-10 place-items-center rounded-full text-chrome-neutral-300 transition-colors duration-200 ease-out hover:bg-surface-container-high hover:text-chrome-neutral-100";
-const TOP_BTN_ACTIVE =
-  "grid h-10 w-10 place-items-center rounded-full bg-surface-container-high text-[var(--color-primary)] transition-colors duration-200 ease-out";
+const rgbCss = ({ r, g, b }: { r: number; g: number; b: number }) => `rgb(${r} ${g} ${b})`;
 
 /** From this width the song keeps its column and Up next or the lyrics sit beside it, as on Android tablets. */
 const WIDE_QUERY = "(min-width: 1100px)";
@@ -144,6 +146,16 @@ export function MusicOverlay() {
   const fullBleedLyrics = isLyrics && (!wide || lyricsExpanded);
   const sideTab: SidePaneTab = isLyrics ? "lyrics" : "queue";
   const showPane = wide && paneVisible;
+  const lyricsBackground = useLyricsBackground();
+  // The cover's colours are only worked out while lyrics drawn on them are on screen.
+  const coverBehindLyrics = lyricsBackground !== "player" && isLyrics && (fullBleedLyrics || showPane);
+  const lyricsCover = useLyricsCover(accentSrc, open && coverBehindLyrics);
+  const lyricsOnCover = lyricsBackground !== "player" ? lyricsCover : null;
+  const [paneCoverColors] = useBoolPref(SETTINGS.MUSIC_SIDE_PANE_COVER_COLORS);
+  const paneSurface = useMemo(
+    () => (paneCoverColors ? (coverSurfaceVariables(playerColors.colors) as CSSProperties) : undefined),
+    [paneCoverColors, playerColors.colors],
+  );
   // Immersive's cover sits beside the side pane, and moves behind the song once the pane is hidden.
   const artworkPlacement = !wide ? "top" : showPane && !fullBleedLyrics ? "start" : "center";
 
@@ -185,7 +197,7 @@ export function MusicOverlay() {
         track={currentTrack}
         variant={variant}
         accent={playerColors.colors.roles.primary}
-        backdrop={playerColors.colors.roles.surface}
+        backdrop={lyricsOnCover ? lyricsOnCover.backdrop : playerColors.colors.roles.surface}
         active
         className="h-full w-full"
       />
@@ -210,72 +222,93 @@ export function MusicOverlay() {
         style={{ opacity: innerOpacity, scale: innerScale, transformOrigin: "50% 100%" }}
         className="relative flex min-h-0 flex-1 flex-col"
       >
-        <AmbientBackdrop imageSrc={accentSrc} style={playerColors.style} artworkPlacement={artworkPlacement} />
+        <AmbientBackdrop
+          imageSrc={accentSrc}
+          style={playerColors.style}
+          artworkPlacement={artworkPlacement}
+          track={playerColors.style === "immersive" ? currentTrack : null}
+          loopRunning={!fullBleedLyrics}
+          blurred={fullBleedLyrics && lyricsBackground === "player"}
+        />
 
         {/* TOP BAR */}
-        <div className="absolute top-0 z-20 grid w-full grid-cols-[1fr_auto_1fr] items-center gap-4 p-6">
-          <HapticButton
-            onClick={closeOverlay}
-            aria-label={getString("music_collapse")}
-            className={`${TOP_BTN} justify-self-start`}
-          >
-            <ChevronDown className="h-6 w-6" />
-          </HapticButton>
-
-          <p className="line-clamp-1 max-w-md text-center text-sm text-chrome-neutral-400">
-            {queueSource ? (
-              <>
-                {getString("playing_from")} <span className="font-medium text-chrome-neutral-200">{queueSource}</span>
-              </>
-            ) : null}
-          </p>
-
-          <div className="relative flex items-center gap-1 justify-self-end">
-            {isLyrics && <LyricsActionsMenu track={currentTrack} className={TOP_BTN} />}
-            {wide && lyricsExpanded && (
-              <HapticButton
-                onClick={() => setLyricsExpanded(false)}
-                aria-label={getString("music_lyrics_back_to_pane")}
-                title={getString("music_lyrics_back_to_pane")}
-                className={TOP_BTN}
-              >
-                <Minimize2 className="h-5 w-5" />
+        <div className="absolute top-0 z-40 grid w-full grid-cols-[1fr_auto_1fr] items-center gap-4 p-6">
+          <PlayerButtonGroup className="justify-self-start">
+            <GroupItem id="collapse">
+              <HapticButton onClick={closeOverlay} aria-label={getString("music_collapse")} whileTap={NO_TAP_SCALE} className={GROUP_BUTTON}>
+                <ChevronDown className="h-6 w-6" />
               </HapticButton>
+            </GroupItem>
+          </PlayerButtonGroup>
+
+          {queueSource ? (
+            <p className="line-clamp-1 max-w-md rounded-full bg-[var(--player-tonal)] px-4 py-2 text-center text-sm text-[color-mix(in_srgb,var(--player-ink)_72%,transparent)]">
+              {getString("playing_from")} <span className="font-medium text-[var(--player-ink)]">{queueSource}</span>
+            </p>
+          ) : (
+            <span />
+          )}
+
+          <PlayerButtonGroup className="relative justify-self-end">
+            {isLyrics && (
+              <GroupItem id="lyrics-actions">
+                <LyricsActionsMenu track={currentTrack} className={GROUP_BUTTON} />
+              </GroupItem>
+            )}
+            {wide && lyricsExpanded && (
+              <GroupItem id="back-to-pane">
+                <HapticButton
+                  onClick={() => setLyricsExpanded(false)}
+                  aria-label={getString("music_lyrics_back_to_pane")}
+                  title={getString("music_lyrics_back_to_pane")}
+                  whileTap={NO_TAP_SCALE}
+                  className={GROUP_BUTTON}
+                >
+                  <Minimize2 className="h-5 w-5" />
+                </HapticButton>
+              </GroupItem>
             )}
 
-            <HapticButton
-              onClick={onQueueButton}
-              aria-label={getString("music_queue")}
-              aria-pressed={queueShown}
-              className={queueShown ? TOP_BTN_ACTIVE : TOP_BTN}
-            >
-              <ListMusic className="h-5 w-5" />
-            </HapticButton>
+            <GroupItem id="queue">
+              <HapticButton
+                onClick={onQueueButton}
+                aria-label={getString("music_queue")}
+                aria-pressed={queueShown}
+                whileTap={NO_TAP_SCALE}
+                className={queueShown ? GROUP_BUTTON_ACTIVE : GROUP_BUTTON}
+              >
+                <ListMusic className="h-5 w-5" />
+              </HapticButton>
+            </GroupItem>
 
-            <HapticButton
-              onClick={onLyricsButton}
-              aria-label={getString("music_lyrics")}
-              aria-pressed={lyricsShown}
-              className={lyricsShown ? TOP_BTN_ACTIVE : TOP_BTN}
-            >
-              <Mic2 className="h-5 w-5" />
-            </HapticButton>
+            <GroupItem id="lyrics">
+              <HapticButton
+                onClick={onLyricsButton}
+                aria-label={getString("music_lyrics")}
+                aria-pressed={lyricsShown}
+                whileTap={NO_TAP_SCALE}
+                className={lyricsShown ? GROUP_BUTTON_ACTIVE : GROUP_BUTTON}
+              >
+                <Mic2 className="h-5 w-5" />
+              </HapticButton>
+            </GroupItem>
 
-            <div className="relative">
+            <GroupItem id="volume">
               <HapticButton
                 ref={volumeWheelRef}
                 onClick={() => setVolumeOpen((v) => !v)}
                 aria-label={getString("music_volume")}
                 aria-pressed={volumeOpen}
-                className={volumeOpen ? TOP_BTN_ACTIVE : TOP_BTN}
+                whileTap={NO_TAP_SCALE}
+                className={volumeOpen ? GROUP_BUTTON_ACTIVE : GROUP_BUTTON}
               >
                 {muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
               </HapticButton>
-              <div className="absolute right-0 top-full mt-2">
+              <div className="absolute end-0 top-full mt-2">
               {volumeFeedback && !volumeOpen && (
                 <div
                   key={volumeFeedback.id}
-                  className="pointer-events-none absolute right-0 top-full mt-2 z-50 flex items-center gap-2 rounded-full border border-chrome-neutral-800 bg-surface-container px-3 py-1.5 text-chrome-neutral-100 animate-fade-in"
+                  className="pointer-events-none absolute end-0 top-full mt-2 z-50 flex items-center gap-2 rounded-full border border-chrome-neutral-800 bg-surface-container px-3 py-1.5 text-chrome-neutral-100 animate-fade-in"
                 >
                   {volumeFeedback.muted || volumeFeedback.volume === 0 ? (
                     <VolumeX className="h-4 w-4 text-chrome-neutral-400" />
@@ -291,22 +324,29 @@ export function MusicOverlay() {
               )}
                 <VolumePopover open={volumeOpen} onClose={() => setVolumeOpen(false)} />
               </div>
-            </div>
+            </GroupItem>
 
-            <HapticButton
-              onClick={() => setEqOpen((v) => !v)}
-              aria-label={getString("music_equalizer")}
-              aria-pressed={eqOpen}
-              className={eqOpen || eqEnabled ? TOP_BTN_ACTIVE : TOP_BTN}
-            >
-              <SlidersHorizontal className="h-5 w-5" />
-            </HapticButton>
+            <GroupItem id="play-on">
+              <PlayOnButton className={GROUP_BUTTON} iconSize={20} />
+            </GroupItem>
+
+            <GroupItem id="equalizer">
+              <HapticButton
+                onClick={() => setEqOpen((v) => !v)}
+                aria-label={getString("music_equalizer")}
+                aria-pressed={eqOpen}
+                whileTap={NO_TAP_SCALE}
+                className={eqOpen || eqEnabled ? GROUP_BUTTON_ACTIVE : GROUP_BUTTON}
+              >
+                <SlidersHorizontal className="h-5 w-5" />
+              </HapticButton>
+            </GroupItem>
 
             {/* EQ opens BELOW the top bar so it stays in frame */}
-            <div className="absolute right-0 top-full mt-2">
+            <div className="absolute end-0 top-full mt-2">
               <EqPanel open={eqOpen} onClose={() => setEqOpen(false)} placement="bottom" />
             </div>
-          </div>
+          </PlayerButtonGroup>
         </div>
 
         {/* Playback failure banner — floats below the top bar across all sub-views. */}
@@ -327,8 +367,12 @@ export function MusicOverlay() {
         {/* MAIN */}
         {fullBleedLyrics ? (
           <>
+            {lyricsBackground !== "player" && <LyricsCoverBackground cover={lyricsCover} moving={lyricsBackground === "moving"} />}
             {lyricsView("full", "absolute inset-0 z-10")}
-            <div className="absolute inset-x-0 bottom-0 z-20 flex flex-col items-center gap-4 bg-linear-to-t from-[color-mix(in_srgb,var(--player-ground)_90%,transparent)] via-[color-mix(in_srgb,var(--player-ground)_50%,transparent)] to-transparent px-6 pb-10 pt-24">
+            <div
+              // Over the cover's colours, the controls' scrim fades from the cover's own backdrop.
+              style={lyricsOnCover ? ({ "--player-ground": rgbCss(lyricsOnCover.backdrop) } as CSSProperties) : undefined}
+              className="absolute inset-x-0 bottom-0 z-20 flex flex-col items-center gap-4 bg-linear-to-t from-[color-mix(in_srgb,var(--player-ground)_90%,transparent)] via-[color-mix(in_srgb,var(--player-ground)_50%,transparent)] to-transparent px-6 pb-10 pt-24">
               <div className="w-full max-w-2xl">
                 <MusicScrubber size="lg" showTimes countdown expressive />
               </div>
@@ -366,6 +410,12 @@ export function MusicOverlay() {
                       onTabChange={(tab) => setViewState(tab === "lyrics" ? "lyrics" : "queue")}
                       onExpandLyrics={() => setLyricsExpanded(true)}
                       onHide={hidePane}
+                      surfaceStyle={paneSurface}
+                      background={
+                        sideTab === "lyrics" && lyricsBackground !== "player" ? (
+                          <LyricsCoverBackground cover={lyricsCover} moving={lyricsBackground === "moving"} />
+                        ) : null
+                      }
                     >
                       {sideTab === "lyrics" ? lyricsView("pane", "absolute inset-0") : <MusicQueuePane />}
                     </PlayerSidePane>
@@ -381,7 +431,8 @@ export function MusicOverlay() {
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 48 }}
                     transition={LAYOUT_SPRING}
-                    className="flex min-h-0 w-1/2 flex-col rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-4"
+                    style={paneSurface}
+                    className="flex min-h-0 w-1/2 flex-col rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-4 transition-colors duration-500 ease-out"
                   >
                     <MusicQueuePane />
                   </motion.div>

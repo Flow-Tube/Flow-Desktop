@@ -6,6 +6,8 @@ import { MediaMenu } from "../../ui/MediaMenu";
 import { ProfileAvatar } from "../../ui/ProfileAvatar";
 import { SkeletonLoader } from "../../ui/SkeletonLoader";
 import type { MenuAnchor } from "../../ui/AnchoredPortalMenu";
+import { ToggleSwitch } from "../../ui/ToggleSwitch";
+import { SettingItem } from "../SettingItem";
 import { SettingsGroup } from "../SettingsGroup";
 import { ProfileEditorDialog } from "../../profiles/ProfileEditorDialog";
 import type { Profile } from "../../../lib/api/profiles";
@@ -15,6 +17,7 @@ import { profileDisplayName } from "../../../lib/profiles/display";
 import { profileErrorMessage } from "../../../lib/profiles/profileErrors";
 import { useProfilesStore } from "../../../store/useProfilesStore";
 import { useUiStore } from "../../../store/useUiStore";
+import { alignToEnd } from "../../../lib/direction";
 
 type Editing = { profile?: Profile } | null;
 
@@ -38,7 +41,13 @@ function ProfileRow({ profile, onEdit }: { profile: Profile; onEdit: (profile: P
   };
 
   const onDelete = async () => {
-    if (!(await confirmAction(getString("profiles_delete_body"), getString("profiles_delete_title", name)))) return;
+    const confirmed = await confirmAction({
+      message: getString("profiles_delete_body"),
+      title: getString("profiles_delete_title", name),
+      confirmLabel: getString("profiles_delete"),
+      destructive: true,
+    });
+    if (!confirmed) return;
     try {
       await remove(profile.id);
       showToast({ message: getString("profiles_deleted", name), variant: "success" });
@@ -49,11 +58,11 @@ function ProfileRow({ profile, onEdit }: { profile: Profile; onEdit: (profile: P
 
   const openMenu = (button: HTMLElement) => {
     const rect = button.getBoundingClientRect();
-    setMenu({ top: rect.bottom + 4, right: rect.right, flipBottom: rect.top - 4 });
+    setMenu({ top: rect.bottom + 4, ...alignToEnd(rect), flipBottom: rect.top - 4 });
   };
 
   return (
-    <div className="flex items-center gap-3 px-5 py-3 transition-colors duration-200 ease-out hover:bg-surface-container">
+    <div className="flex items-center gap-3 px-5 py-3 transition-colors duration-200 ease-out hover:bg-surface-row-hover">
       <ProfileAvatar
         name={name}
         colorKey={profile.colorKey}
@@ -63,7 +72,7 @@ function ProfileRow({ profile, onEdit }: { profile: Profile; onEdit: (profile: P
         size="lg"
       />
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium text-chrome-neutral-200">{name}</div>
+        <div dir="auto" className="truncate text-sm font-medium text-chrome-neutral-200">{name}</div>
         {description && <div className="mt-0.5 text-xs text-chrome-neutral-400">{description}</div>}
       </div>
       {!isActive && (
@@ -95,11 +104,17 @@ export function ProfilesTab() {
   const loading = useProfilesStore((state) => state.loading);
   const loadError = useProfilesStore((state) => state.loadError);
   const load = useProfilesStore((state) => state.load);
+  const setAsk = useProfilesStore((state) => state.setAsk);
+  const showToast = useUiStore((state) => state.showToast);
   const [editing, setEditing] = useState<Editing>(null);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  const onAskChange = (ask: boolean) => {
+    setAsk(ask).catch(() => showToast({ message: getString("profiles_ask_whos_watching_failed"), variant: "error" }));
+  };
 
   const atLimit = view ? view.profiles.length >= view.maxProfiles : true;
 
@@ -146,6 +161,14 @@ export function ProfilesTab() {
           <span className="text-xs text-chrome-neutral-400">{getString("profiles_limit_reached", view.maxProfiles)}</span>
         )}
       </div>
+
+      {view && (
+        <SettingsGroup>
+          <SettingItem title={getString('profiles_ask_whos_watching')} description={getString('profiles_ask_whos_watching_summary')}>
+            <ToggleSwitch checked={view.askWhosWatching} onChange={onAskChange} />
+          </SettingItem>
+        </SettingsGroup>
+      )}
 
       {editing && <ProfileEditorDialog profile={editing.profile} onClose={() => setEditing(null)} />}
     </div>

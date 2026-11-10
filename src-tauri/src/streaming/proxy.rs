@@ -1,5 +1,6 @@
 use futures_util::StreamExt;
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
@@ -243,6 +244,13 @@ impl StreamingManager {
         lock.retain(|_, s| s.expires_at > now);
     }
 
+    /// Stops serving the local files under `folder`, which the library no longer holds.
+    pub fn revoke_local_sessions_under(&self, folder: &Path) {
+        self.sessions.lock().unwrap().retain(|_, session| {
+            !matches!(&session.kind, StreamSessionKind::Local { path } if Path::new(path).starts_with(folder))
+        });
+    }
+
     pub fn get_session(&self, token: &str) -> Option<StreamSession> {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -453,7 +461,7 @@ pub async fn start_proxy_server(manager: StreamingManager, std_listener: std::ne
             .local_addr()
             .map_or_else(|_| "an unknown port".to_string(), |addr| addr.to_string())
     );
-    let client = reqwest::Client::builder()
+    let client = crate::api::app_proxy::with_app_proxy(reqwest::Client::builder())
         .connect_timeout(std::time::Duration::from_secs(10))
         .no_gzip()
         .no_brotli()
@@ -1674,5 +1682,31 @@ mod session_expiry_tests {
             remote_session_expiry(expired, 1000),
             1000 + UNDATED_SESSION_SECS
         );
+    }
+}
+
+#[cfg(test)]
+mod local_session_tests {
+    use super::StreamingManager;
+    use std::path::Path;
+
+    #[test]
+    fn a_folder_leaving_the_library_stops_its_sessions_only() {
+        let (manager, _) = StreamingManager::new();
+        manager.register_local_session(
+            "a".into(),
+            "/music/hidden/a.mp3".into(),
+            "audio/mpeg".into(),
+        );
+        manager.register_local_session("b".into(), "/music/kept/b.mp3".into(), "audio/mpeg".into());
+        manager.register_local_session(
+            "c".into(),
+            "/music/hidden2/c.mp3".into(),
+            "audio/mpeg".into(),
+        );
+        manager.revoke_local_sessions_under(Path::new("/music/hidden"));
+        assert!(manager.get_session("a").is_none());
+        assert!(manager.get_session("b").is_some());
+        assert!(manager.get_session("c").is_some());
     }
 }

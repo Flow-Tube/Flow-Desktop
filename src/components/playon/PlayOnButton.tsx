@@ -5,6 +5,7 @@ import { getString } from "../../lib/i18n/index";
 import { usePlayOnAvailable, useRemoteActive } from "../../lib/live/usePlayOn";
 import { AnchoredPortalMenu, type MenuAnchor } from "../ui/AnchoredPortalMenu";
 import { PlayOnPopover } from "./PlayOnPopover";
+import { alignToEnd } from "../../lib/direction";
 
 /** The devices button of a player bar; hidden while no other device can be reached. */
 export function PlayOnButton({ className, iconSize = 18 }: { className: string; iconSize?: number }) {
@@ -23,7 +24,7 @@ export function PlayOnButton({ className, iconSize = 18 }: { className: string; 
         onClick={(event) => {
           // Opens above the bar, as the dock's other popovers do.
           const rect = event.currentTarget.getBoundingClientRect();
-          setAnchor(anchor ? null : { top: rect.bottom + 12, right: rect.right, flipBottom: rect.top - 12 });
+          setAnchor(anchor ? null : { top: rect.bottom + 12, ...alignToEnd(rect), flipBottom: rect.top - 12 });
         }}
         className={`${className} ${anchor || remote ? "text-[var(--color-primary)]" : ""}`}
       >
@@ -31,7 +32,7 @@ export function PlayOnButton({ className, iconSize = 18 }: { className: string; 
       </button>
       {anchor && (
         <AnchoredPortalMenu anchor={anchor} onClose={() => setAnchor(null)} closeOnScroll={false} className="z-[70]">
-          <PlayOnPopover />
+          <PlayOnPopover onClose={() => setAnchor(null)} />
         </AnchoredPortalMenu>
       )}
     </>

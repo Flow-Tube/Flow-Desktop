@@ -253,6 +253,38 @@ export const restoreStoredPlaylistTrack = (
     : moveAfterId([...tracks, track], track.id, afterId),
 );
 
+export interface RemovedTrack {
+  track: VideoSummary;
+  /** The track it followed, for putting it back. */
+  afterId: string | null;
+}
+
+/** Takes several tracks out in one write and returns what Undo needs to put them back. */
+export const removeVideosFromStoredPlaylist = async (
+  playlistId: string,
+  videoIds: ReadonlySet<string>,
+): Promise<RemovedTrack[]> => {
+  let removed: RemovedTrack[] = [];
+  await updateStoredPlaylistTracks(playlistId, (tracks) => {
+    removed = tracks.flatMap((track, index) => (
+      videoIds.has(track.id) ? [{ track, afterId: tracks[index - 1]?.id ?? null }] : []
+    ));
+    return removed.length > 0 ? tracks.filter((track) => !videoIds.has(track.id)) : tracks;
+  });
+  return removed;
+};
+
+/** Undoes {@link removeVideosFromStoredPlaylist}; each track follows one restored before it. */
+export const restoreStoredPlaylistTracks = (playlistId: string, removed: RemovedTrack[]) =>
+  updateStoredPlaylistTracks(playlistId, (tracks) => removed.reduce(
+    (current, { track, afterId }) => (
+      current.some((held) => held.id === track.id)
+        ? current
+        : moveAfterId([...current, track], track.id, afterId)
+    ),
+    tracks,
+  ));
+
 /** Move one track to sit right after another (or first, when `afterId` is null). */
 export const moveStoredPlaylistTrack = (
   playlistId: string,
@@ -270,6 +302,11 @@ export const persistStoredPlaylists = async (playlists: StoredPlaylist[]) => {
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event(PLAYLIST_LIBRARY_UPDATED_EVENT));
   }
+};
+
+export const isOwnedPlaylist = async (playlistId: string) => {
+  const playlists = await loadStoredPlaylists();
+  return playlists.some((playlist) => playlist.id === playlistId && playlist.source === "Owned");
 };
 
 export const isPlaylistInLibrary = async (playlistId: string) => {
@@ -384,6 +421,27 @@ export const createStoredPlaylist = async (
   return playlist;
 });
 
+/** A new playlist of your own holding `tracks`, as read from a playlist file. */
+export const importStoredPlaylist = async (
+  name: string,
+  description: string,
+  tracks: VideoSummary[],
+) => withLibraryWrite(async () => {
+  const playlists = await loadStoredPlaylists();
+  const playlist = normalizePlaylist({
+    id: `playlist-${Date.now()}`,
+    name,
+    description,
+    tracks,
+    createdAt: new Date().toISOString(),
+    source: "Owned",
+    videoCount: tracks.length,
+    videoCountText: formatVideoCountText(tracks.length),
+  });
+  await persistStoredPlaylists([...playlists, playlist]);
+  return playlist;
+});
+
 export const addVideoToStoredPlaylist = async (
   playlistId: string,
   video: VideoSummary,
@@ -417,6 +475,59 @@ export const addVideoToStoredPlaylist = async (
     return updatedPlaylist;
   });
 };
+
+/** Adds every video the playlist lacks, in order; Watch Later keeps its newest-first order. */
+export const addVideosToStoredPlaylist = async (
+  playlistId: string,
+  videos: VideoSummary[],
+): Promise<{ playlist: StoredPlaylist; added: number } | null> => withLibraryWrite(async () => {
+  const playlists = await loadStoredPlaylists();
+  const target = playlists.find((playlist) => playlist.id === playlistId && playlist.source === "Owned");
+  if (!target) return null;
+
+  const held = new Set(target.tracks.map((track) => track.id));
+  const addedAt = Date.now();
+  const incoming = videos.filter((video) => {
+    if (held.has(video.id)) return false;
+    held.add(video.id);
+    return true;
+  }).map((video) => ({ ...video, addedAtInPlaylist: addedAt }));
+  if (incoming.length === 0) return { playlist: target, added: 0 };
+
+  const tracks = isProtectedPlaylistId(playlistId)
+    ? [...[...incoming].reverse(), ...target.tracks]
+    : [...target.tracks, ...incoming];
+  const updated = normalizePlaylist({
+    ...target,
+    tracks,
+    thumbnailUrl: target.thumbnailUrl ?? tracks[0]?.thumbnailUrl ?? null,
+    videoCount: tracks.length,
+    videoCountText: formatVideoCountText(tracks.length),
+  });
+  await persistStoredPlaylists(playlists.map((playlist) => (playlist.id === playlistId ? updated : playlist)));
+  return { playlist: updated, added: incoming.length };
+});
+
+/** Renames an owned playlist and sets its description. Built-in and saved playlists keep theirs. */
+export const updateStoredPlaylistDetails = async (
+  playlistId: string,
+  name: string,
+  description: string,
+): Promise<StoredPlaylist | null> => withLibraryWrite(async () => {
+  const playlists = await loadStoredPlaylists();
+  const target = playlists.find((playlist) => playlist.id === playlistId);
+  if (!target || target.source !== "Owned" || isProtectedPlaylistId(playlistId)) return null;
+
+  const updated = normalizePlaylist({
+    ...target,
+    name: name.trim() || target.name,
+    // The title captured on saving outranks the name, so it has to follow a rename.
+    sourceTitle: target.sourceTitle ? name.trim() || target.sourceTitle : target.sourceTitle,
+    description: description.trim(),
+  });
+  await persistStoredPlaylists(playlists.map((playlist) => (playlist.id === playlistId ? updated : playlist)));
+  return updated;
+});
 
 export const addVideoToWatchLater = async (video: VideoSummary) => withLibraryWrite(async () => {
   const playlists = await loadStoredPlaylists();

@@ -345,6 +345,8 @@ export interface MoodGenrePage {
 export interface MusicLyrics {
   text: string;
   source: string | null;
+  /** Empty for a music video row, whose lyrics have no times. */
+  timedLines: Array<{ startMs: number; text: string }>;
 }
 
 export interface MusicStreamInfo {

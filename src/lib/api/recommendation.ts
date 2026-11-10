@@ -261,6 +261,8 @@ export interface UserBrain {
   rejection_patterns: Record<string, RejectionSignal>;
   feed_history: Record<string, FeedEntry>;
   recent_query_tokens: string[][];
+  /** Device-local, and absent in a brain read from another synced profile. */
+  seen_shorts_history?: Record<string, number>;
   topic_evidence: Record<string, TopicEvidence>;
   schema_version: number;
   language_profile?: string | null;
@@ -516,6 +518,20 @@ export interface TasteOverview {
   hiddenChannels: NamedChannel[];
   /** Channels watched often without following, which Home draws uploads from. */
   rememberedChannels: NamedChannel[];
+}
+
+/** A channel several of the viewer's own sit next to in related lists. */
+export interface NeighbourChannel {
+  id: string;
+  name: string;
+  /** The viewer's channels that point here, strongest first. */
+  pointerNames: string[];
+  avatarUrl: string | null;
+}
+
+export async function getNeighbourChannels(): Promise<NeighbourChannel[]> {
+  if (!(await isTauriEnv())) return [];
+  return invokeBackend<NeighbourChannel[]>("get_neighbour_channels");
 }
 
 /** Home stops drawing on the channel until the viewer watches it again. */

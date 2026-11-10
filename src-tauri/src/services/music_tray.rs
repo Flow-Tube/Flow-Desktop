@@ -1,20 +1,23 @@
-//! Music controls in the system tray. The frontend owns playback, so the tray only shows what it
-//! is told and hands its clicks back to the main window as events.
+//! Playback controls in the system tray, for music and video. The frontend owns playback, so the
+//! tray only shows what it is told and hands its clicks back as events. Every window reports what
+//! it plays; the tray shows the window that last started playing.
 
+use std::collections::HashMap;
 use std::sync::{Mutex, PoisonError};
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{TrayIcon, TrayIconBuilder};
 use tauri::{AppHandle, Emitter, Manager};
 
-/// Event the main window listens on; the payload is one of the action ids below.
-pub const ACTION_EVENT: &str = "music-tray-action";
+use super::media_keys::{self, COMMAND_NEXT, COMMAND_PREVIOUS, COMMAND_TOGGLE};
+
+/// Event the main window listens on for the Continue watching item.
+const CONTINUE_WATCHING_EVENT: &str = "flow:tray-continue-watching";
+const MAIN_WINDOW: &str = "main";
 
 const TRAY_ID: &str = "flow-music";
-const ID_TOGGLE: &str = "toggle";
-const ID_PREVIOUS: &str = "previous";
-const ID_NEXT: &str = "next";
 const ID_SHOW: &str = "show";
+const ID_CONTINUE: &str = "continue-watching";
 const TITLE_MAX_CHARS: usize = 64;
 
 /// Menu text in the UI language, sent with every update so the backend holds no strings.
@@ -26,6 +29,7 @@ pub struct TrayLabels {
     pub previous: String,
     pub next: String,
     pub show: String,
+    pub continue_watching: String,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -34,6 +38,8 @@ pub struct TrayUpdate {
     pub now_playing: String,
     pub has_track: bool,
     pub playing: bool,
+    /// What the item says when there is something to resume; only the main window sends it.
+    pub continue_watching: Option<String>,
     pub labels: TrayLabels,
 }
 
@@ -43,12 +49,15 @@ struct TrayParts {
     toggle: MenuItem<tauri::Wry>,
     previous: MenuItem<tauri::Wry>,
     next: MenuItem<tauri::Wry>,
+    continue_watching: MenuItem<tauri::Wry>,
     show: MenuItem<tauri::Wry>,
 }
 
 #[derive(Default)]
 pub struct MusicTray {
     parts: Mutex<Option<TrayParts>>,
+    /// The latest report from each window. The main window's is there while the tray is wanted.
+    latest: Mutex<HashMap<String, TrayUpdate>>,
 }
 
 impl MusicTray {
@@ -57,11 +66,28 @@ impl MusicTray {
         indicator_library_present()
     }
 
-    /// Shows the tray with this state, creating it on first use.
-    pub fn update(&self, app: &AppHandle, update: &TrayUpdate) -> tauri::Result<()> {
+    /// Takes a window's report and shows the tray, creating it on first use.
+    pub fn update(&self, app: &AppHandle, window: &str, update: TrayUpdate) -> tauri::Result<()> {
         if !Self::supported() {
             return Ok(());
         }
+        self.latest
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(window.to_owned(), update);
+        self.show_latest(app)
+    }
+
+    /// Shows the report of the window that last started playing.
+    pub fn show_latest(&self, app: &AppHandle) -> tauri::Result<()> {
+        let latest = self.latest.lock().unwrap_or_else(PoisonError::into_inner);
+        // The main window alone decides whether there is a tray at all.
+        let Some(main) = latest.get(MAIN_WINDOW) else {
+            return Ok(());
+        };
+        let update = latest
+            .get(media_keys::playback_window(app).as_str())
+            .unwrap_or(main);
         let mut guard = self.parts.lock().unwrap_or_else(PoisonError::into_inner);
         if guard.is_none() {
             *guard = Some(build(app, update)?);
@@ -80,12 +106,24 @@ impl MusicTray {
         for item in [&parts.toggle, &parts.previous, &parts.next] {
             item.set_enabled(update.has_track)?;
         }
+        parts.continue_watching.set_text(menu_title(
+            main.continue_watching
+                .as_deref()
+                .unwrap_or(&main.labels.continue_watching),
+        ))?;
+        parts
+            .continue_watching
+            .set_enabled(main.continue_watching.is_some())?;
         parts.tray.set_tooltip(Some(&update.now_playing))?;
         Ok(())
     }
 
     /// Removes the tray icon, for when the setting is off.
     pub fn hide(&self, app: &AppHandle) -> tauri::Result<()> {
+        self.latest
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .remove(MAIN_WINDOW);
         let Some(parts) = self
             .parts
             .lock()
@@ -113,15 +151,22 @@ fn build(app: &AppHandle, update: &TrayUpdate) -> tauri::Result<TrayParts> {
         false,
         None::<&str>,
     )?;
-    let toggle = MenuItem::with_id(app, ID_TOGGLE, &update.labels.play, true, None::<&str>)?;
+    let toggle = MenuItem::with_id(app, COMMAND_TOGGLE, &update.labels.play, true, None::<&str>)?;
     let previous = MenuItem::with_id(
         app,
-        ID_PREVIOUS,
+        COMMAND_PREVIOUS,
         &update.labels.previous,
         true,
         None::<&str>,
     )?;
-    let next = MenuItem::with_id(app, ID_NEXT, &update.labels.next, true, None::<&str>)?;
+    let next = MenuItem::with_id(app, COMMAND_NEXT, &update.labels.next, true, None::<&str>)?;
+    let continue_watching = MenuItem::with_id(
+        app,
+        ID_CONTINUE,
+        &update.labels.continue_watching,
+        false,
+        None::<&str>,
+    )?;
     let show = MenuItem::with_id(app, ID_SHOW, &update.labels.show, true, None::<&str>)?;
     let menu = Menu::with_items(
         app,
@@ -132,6 +177,7 @@ fn build(app: &AppHandle, update: &TrayUpdate) -> tauri::Result<TrayParts> {
             &previous,
             &next,
             &PredefinedMenuItem::separator(app)?,
+            &continue_watching,
             &show,
         ],
     )?;
@@ -141,10 +187,14 @@ fn build(app: &AppHandle, update: &TrayUpdate) -> tauri::Result<TrayParts> {
         .show_menu_on_left_click(true)
         .on_menu_event(|app, event| match event.id().as_ref() {
             ID_SHOW => show_main_window(app),
-            action @ (ID_TOGGLE | ID_PREVIOUS | ID_NEXT) => {
-                if let Err(error) = app.emit_to("main", ACTION_EVENT, action) {
-                    tracing::warn!(%error, "Could not send a tray action to the player");
+            ID_CONTINUE => {
+                show_main_window(app);
+                if let Err(error) = app.emit_to(MAIN_WINDOW, CONTINUE_WATCHING_EVENT, ()) {
+                    tracing::warn!(%error, "Could not resume a video from the tray");
                 }
+            }
+            command @ (COMMAND_TOGGLE | COMMAND_PREVIOUS | COMMAND_NEXT) => {
+                media_keys::send_media_command(app, command);
             }
             _ => {}
         });
@@ -158,12 +208,13 @@ fn build(app: &AppHandle, update: &TrayUpdate) -> tauri::Result<TrayParts> {
         toggle,
         previous,
         next,
+        continue_watching,
         show,
     })
 }
 
 fn show_main_window(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("main")
+    if let Some(window) = app.get_webview_window(MAIN_WINDOW)
         && let Err(error) = window
             .unminimize()
             .and_then(|()| window.show())

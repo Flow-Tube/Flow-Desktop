@@ -21,7 +21,7 @@ export function WatchPageSkeleton() {
                 <Pulse className="h-3 w-28" />
                 <Pulse className="h-2 w-16" />
               </div>
-              <Pulse className="ml-2 h-9 w-24 rounded-full" />
+              <Pulse className="ms-2 h-9 w-24 rounded-full" />
             </div>
             <div className="flex items-center gap-2">
               <Pulse className="h-9 w-32 rounded-full" />

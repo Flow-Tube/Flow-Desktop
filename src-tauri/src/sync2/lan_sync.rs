@@ -1,43 +1,56 @@
 //! Two members meeting on the LAN (spec/live.md, LAN groups, Syncing): each pulls the roster, the
 //! keys and the objects it lacks from the other, and holds them to serve in turn.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
+use std::sync::Arc;
 use std::time::Duration;
 
 use sqlx::SqlitePool;
 use tokio::net::TcpListener;
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
+use tokio::time::timeout;
 use tokio_tungstenite::{accept_async_with_config, connect_async_with_config};
 
-use super::engine::{EngineError, Result, Session, signing_keys, verify_logged};
-use super::held::{HeldStore, winning_chain};
+use super::engine::{EngineError, Result, Session, verify_logged};
+use super::forks::ForkResolution;
+use super::held::HeldStore;
 use super::kdf::sha256;
 use super::keys::MemberSecrets;
 use super::lan_link::{
-    Holder, Link, LiveSink, SESSION_PATH, hello_as_client, hello_as_server, lan_socket_config,
+    Framed, HELLO_WITHIN, Holder, Link, LiveSink, SESSION_PATH, hello_as_client, hello_as_server,
+    lan_socket_config,
 };
 use super::paths::parse_log_path;
-use super::roster::Entry;
-use super::store::Store;
-use crate::sync::transport::{WsChannel, ws_url};
+use super::roster::{Entry, replay_roster};
+use super::store::{Store, wraps_epoch};
+use crate::sync::transport::{ClientStream, WsChannel, ws_url};
 
-/// The wraps and chain boxes each epoch has: one per device that was a member during it.
-fn key_names(chain: &[Entry]) -> BTreeMap<u32, BTreeSet<String>> {
-    let mut names: BTreeMap<u32, BTreeSet<String>> = BTreeMap::new();
-    let mut epoch = 0;
-    for entry in chain {
-        if let Some(started) = &entry.epoch {
-            epoch = started.n;
-            let held = names.entry(epoch).or_default();
-            held.extend(started.to.iter().cloned());
+/// The wraps and chain boxes of `chain` and of the entries that lost and stand, as epoch, `<kc:16>`
+/// and name: one wrap per device that was a member during an epoch.
+fn key_names(resolved: &ForkResolution) -> Result<BTreeSet<(u32, String, String)>> {
+    let mut names = BTreeSet::new();
+    let mut add = |entry: &Entry, below: &[Entry]| -> Result<()> {
+        let (epoch, kc) = wraps_epoch(entry, below)?;
+        if let Some(field) = &entry.epoch {
+            for did in &field.to {
+                names.insert((epoch, kc.clone(), did.clone()));
+            }
             if epoch > 0 {
-                held.insert("chain".to_owned());
+                names.insert((epoch, kc.clone(), "chain".to_owned()));
             }
         }
         for subject in entry.add.iter().flatten() {
-            names.entry(epoch).or_default().insert(subject.did.clone());
+            names.insert((epoch, kc.clone(), subject.did.clone()));
         }
+        Ok(())
+    };
+    for (index, entry) in resolved.chain.iter().enumerate() {
+        add(entry, &resolved.chain[..index])?;
     }
-    names
+    for entry in &resolved.standing {
+        add(entry, &[])?;
+    }
+    Ok(names)
 }
 
 /// A blob path names the SHA-256 of its bytes.
@@ -49,22 +62,22 @@ fn is_blob_of(path: &str, bytes: &[u8]) -> bool {
 
 /// Pulls what `held` lacks from the peer behind `link`, and returns how many objects it took.
 pub async fn pull_from(held: &HeldStore, link: &Link, group: &[u8; 16]) -> Result<usize> {
-    let (after, tip) = held.head().await?;
-    for entry in link.roster(after, tip).await? {
+    // From the start: an entry that lost can sit below this device's head, and its key still reads.
+    for entry in link.roster(-1).await? {
         held.hold_entry(&entry).await?;
     }
-    let chain = winning_chain(&held.candidates_after(-1).await?);
-    for (epoch, names) in key_names(&chain) {
-        for name in names {
-            if held.key(epoch, &name).await?.is_none()
-                && let Some(bytes) = link.key(epoch, &name).await?
-            {
-                held.hold_key(epoch, &name, &bytes).await?;
-            }
+    let resolved = held.resolved().await?;
+    for (epoch, kc, name) in key_names(&resolved)? {
+        if held.key(epoch, &kc, &name).await?.is_none()
+            && let Some(bytes) = link.key(epoch, &kc, &name).await?
+        {
+            held.hold_key(epoch, &kc, &name, &bytes).await?;
         }
     }
 
-    let keys = signing_keys(&chain)?;
+    let senders = replay_roster(&resolved.chain)
+        .map(|state| state.senders)
+        .unwrap_or_default();
     let (paths, blobs) = link.list(held.held_vv().await?).await?;
     let mut taken = 0;
     for path in paths {
@@ -75,7 +88,7 @@ pub async fn pull_from(held: &HeldStore, link: &Link, group: &[u8; 16]) -> Resul
             continue;
         }
         if let Some(bytes) = link.get(&path).await?
-            && verify_logged(&bytes, group, &keys, &did, seq).is_ok()
+            && verify_logged(&bytes, group, &senders, &did, seq).is_ok()
         {
             held.put_object(&path, bytes).await?;
             taken += 1;
@@ -94,6 +107,16 @@ pub async fn pull_from(held: &HeldStore, link: &Link, group: &[u8; 16]) -> Resul
 
 /// How long dialing a member may take (spec/live.md, Discovery).
 const CONNECT_WITHIN: Duration = Duration::from_secs(3);
+
+/// How many epochs to try a member under, one lower each time (spec/live.md, Session).
+const DIAL_ATTEMPTS: u32 = 4;
+
+/// Connections that haven't proved themselves yet, beyond which new ones are closed at once, so
+/// they can't use up this process's descriptors.
+const HELLOS_AT_ONCE: usize = 16;
+
+/// How soon to accept again after a failure such as running out of descriptors.
+const ACCEPT_AGAIN: Duration = Duration::from_millis(100);
 
 /// A session that ended: the member met, how many objects this device took from it, and where
 /// the member can be reached for the next one, when known.
@@ -115,8 +138,20 @@ pub async fn meet(
     sink: LiveSink,
 ) -> Result<Met> {
     let held = HeldStore::new(pool.clone());
-    let session = Session::open_as_peer(pool, held.clone(), device).await?;
-    meet_as(&session, held, device, address, listening, live, sink).await
+    let mut session = Session::open_for_lan(pool, held.clone(), device).await?;
+    let mut epoch = session.roster().epoch;
+    for attempt in 1.. {
+        let socket = dial(address).await?;
+        let key = session.epoch_key(epoch).await?;
+        match hello_as_client(socket, &session, device, (epoch, &key), listening).await {
+            Err(EngineError::LanUnreachable) if attempt < DIAL_ATTEMPTS && epoch > 0 => epoch -= 1,
+            hello => {
+                let (framed, peer) = hello?;
+                return pull_after_hello(framed, peer, &session, held, address, live, sink).await;
+            }
+        }
+    }
+    Err(EngineError::LanUnreachable)
 }
 
 /// [`meet`] as `session` sees the group, as a device that just appended its `leave` still does.
@@ -129,16 +164,33 @@ pub async fn meet_as<T: Store>(
     live: &[Vec<u8>],
     sink: LiveSink,
 ) -> Result<Met> {
+    let socket = dial((address, port)).await?;
+    let current = (session.roster().epoch, session.current_key());
+    let (framed, peer) = hello_as_client(socket, session, device, current, listening).await?;
+    pull_after_hello(framed, peer, session, held, (address, port), live, sink).await
+}
+
+async fn dial((address, port): (&str, u16)) -> Result<WsChannel<ClientStream>> {
     let connect = connect_async_with_config(
         ws_url(address, port, SESSION_PATH),
         Some(lan_socket_config()),
         false,
     );
-    let Ok(Ok((socket, _))) = tokio::time::timeout(CONNECT_WITHIN, connect).await else {
-        return Err(EngineError::LanUnreachable);
-    };
-    let (framed, peer) =
-        hello_as_client(WsChannel::new(socket), session, device, listening).await?;
+    match tokio::time::timeout(CONNECT_WITHIN, connect).await {
+        Ok(Ok((socket, _))) => Ok(WsChannel::new(socket)),
+        _ => Err(EngineError::LanUnreachable),
+    }
+}
+
+async fn pull_after_hello<T: Store>(
+    framed: Framed<ClientStream>,
+    peer: String,
+    session: &Session<'_, T>,
+    held: HeldStore,
+    (address, port): (&str, u16),
+    live: &[Vec<u8>],
+    sink: LiveSink,
+) -> Result<Met> {
     let link = Link::spawn(framed, Holder::of(held.clone(), session, sink));
     for envelope in live {
         link.live(envelope.clone()).await?;
@@ -160,10 +212,18 @@ pub async fn serve(
     met: impl Fn(Met) + Clone + Send + 'static,
     sink: LiveSink,
 ) {
-    while let Ok((stream, _)) = listener.accept().await {
+    let hellos = Arc::new(Semaphore::new(HELLOS_AT_ONCE));
+    loop {
+        let Ok((stream, _)) = listener.accept().await else {
+            tokio::time::sleep(ACCEPT_AGAIN).await;
+            continue;
+        };
+        let Ok(hello) = Arc::clone(&hellos).try_acquire_owned() else {
+            continue;
+        };
         let (pool, device, met, sink) = (pool.clone(), device.clone(), met.clone(), sink.clone());
         tokio::spawn(async move {
-            match answer(stream, &pool, &device, sink).await {
+            match answer(stream, hello, &pool, &device, sink).await {
                 Ok(session) => met(session),
                 Err(error) => {
                     tracing::debug!(target: "flow::sync2", kind = error.kind(), "LAN session ended");
@@ -175,18 +235,28 @@ pub async fn serve(
 
 async fn answer(
     stream: tokio::net::TcpStream,
+    hello: OwnedSemaphorePermit,
     pool: &SqlitePool,
     device: &MemberSecrets,
     sink: LiveSink,
 ) -> Result<Met> {
     let address = stream.peer_addr().ok().map(|peer| peer.ip().to_string());
-    let socket = accept_async_with_config(stream, Some(lan_socket_config()))
+    let first_message = async {
+        let socket = accept_async_with_config(stream, Some(lan_socket_config()))
+            .await
+            .map_err(|_| EngineError::LanUnreachable)?;
+        let mut socket = WsChannel::new(socket);
+        let first = socket.recv_binary().await?;
+        Ok::<_, EngineError>((socket, first))
+    };
+    let (socket, first) = timeout(HELLO_WITHIN, first_message)
         .await
-        .map_err(|_| EngineError::LanUnreachable)?;
+        .map_err(|_| EngineError::TimedOut)??;
+    // Opening a session replays the roster, so a connection that says nothing doesn't cost that.
     let held = HeldStore::new(pool.clone());
-    let mut session = Session::open_as_peer(pool, held.clone(), device).await?;
-    let (framed, peer, listening) =
-        hello_as_server(WsChannel::new(socket), &mut session, device).await?;
+    let mut session = Session::open_for_lan(pool, held.clone(), device).await?;
+    let (framed, peer, listening) = hello_as_server(socket, &first, &mut session, device).await?;
+    drop(hello);
     let link = Link::spawn(framed, Holder::of(held.clone(), &session, sink));
     let taken = pull_from(&held, &link, session.group()).await?;
     Ok(Met {

@@ -1,7 +1,7 @@
 import type { LyricsEntry, LyricsProvider } from "../types";
 import { lyricsHttpGet, enc } from "../http";
 import { parseTTMLToLyricsEntries } from "../ttmlParser";
-import { best, type MatchSong } from "../matching";
+import { best, cleanArtist, type MatchSong } from "../matching";
 import { flowUserAgent } from "./common";
 
 const SEARCH_URL = "https://lrc.red/api/v1";
@@ -39,7 +39,9 @@ export function pickLrcRedHit(hits: LrcRedHit[], request: MatchSong): LrcRedHit 
 
 async function get(url: string): Promise<string | null> {
   const res = await lyricsHttpGet(url, { "User-Agent": await flowUserAgent() });
-  return res.status >= 200 && res.status < 300 && res.body.trim() ? res.body : null;
+  if (res.status === 404) return null;
+  if (res.status < 200 || res.status >= 300) throw new Error(`HTTP ${res.status}`);
+  return res.body.trim() ? res.body : null;
 }
 
 async function search(params: Array<[string, string]>): Promise<LrcRedHit[]> {
@@ -58,13 +60,14 @@ export const lrcRedProvider: LyricsProvider = {
   async getLyrics(_id, title, artist, durationSec, album): Promise<LyricsEntry[]> {
     const request: MatchSong = { title, artist, durationSec };
     const shaped: Array<[string, string]> = [["track", title]];
-    if (artist.trim()) shaped.push(["artist", artist]);
+    const searchArtist = cleanArtist(artist);
+    if (searchArtist) shaped.push(["artist", searchArtist]);
     if (album?.trim()) shaped.push(["album", album]);
     if (durationSec > 0) shaped.push(["duration", String(durationSec)]);
 
     const hit =
       pickLrcRedHit(await search(shaped), request) ??
-      pickLrcRedHit(await search([["q", artist.trim() ? `${artist} - ${title}` : title]]), request);
+      pickLrcRedHit(await search([["q", searchArtist ? `${searchArtist} - ${title}` : title]]), request);
     if (!hit?.lyricsUrl) return [];
     const document = await get(hit.lyricsUrl);
     return document ? parseTTMLToLyricsEntries(document) : [];

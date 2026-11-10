@@ -59,7 +59,7 @@ export function MusicListeningPatterns({ profile }: MusicListeningPatternsProps)
                   >
                     {timeBucketLabel(bucket.bucket)}
                     {topGenre ? (
-                      <span className="ml-2 text-[var(--color-on-surface-variant)]">· {topGenre}</span>
+                      <span className="ms-2 text-[var(--color-on-surface-variant)]">· {topGenre}</span>
                     ) : null}
                   </span>
                   <span className="font-mono text-[var(--color-on-surface-variant)]">{bucket.plays}</span>

@@ -127,7 +127,7 @@ async fn deleted_links(pool: &SqlitePool) -> Result<Vec<String>> {
     )
 }
 
-async fn acks(pool: &SqlitePool) -> Result<BTreeMap<String, VersionVector>> {
+pub(super) async fn acks(pool: &SqlitePool) -> Result<BTreeMap<String, VersionVector>> {
     let rows: Vec<(String, String)> = sqlx::query_as("SELECT did, vv FROM sync2_acks")
         .fetch_all(pool)
         .await
@@ -263,7 +263,7 @@ impl Facts<'_> {
 impl<S: Store> Session<'_, S> {
     /// Deletes one object, and whether it was still there; `None` when the store refused, which
     /// ends the pass so collecting never crowds out the requests that sync (a 429 among them).
-    async fn delete_or_stop(&self, path: &str) -> Option<bool> {
+    pub(super) async fn delete_or_stop(&self, path: &str) -> Option<bool> {
         match self.store().delete_object(path).await {
             Ok(found) => Some(found),
             Err(error) => {

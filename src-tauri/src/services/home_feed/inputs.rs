@@ -28,6 +28,17 @@ const WATCHED_UNKNOWN_LENGTH_SECONDS: i64 = 1800;
 const MAX_VIDEO_AGE_SETTING: &str = "home_max_video_age";
 /// Settings → Content, "Hide videos you've already seen".
 const HIDE_SEEN_SETTING: &str = "hide_seen_videos";
+/// Settings → Content, "Subscriptions on Home".
+const SUBSCRIPTIONS_ON_HOME_SETTING: &str = "home_subscriptions_enabled";
+
+/// Whether channels the viewer follows may appear on Home; on unless they turned it off.
+pub async fn subscriptions_on_home(pool: &SqlitePool) -> bool {
+    get_setting(pool, SUBSCRIPTIONS_ON_HOME_SETTING)
+        .await
+        .ok()
+        .flatten()
+        .is_none_or(|value| value != "false")
+}
 
 /// Whether the viewer chose never to be recommended a video they were already shown.
 pub async fn hides_seen_videos(pool: &SqlitePool) -> bool {
@@ -118,13 +129,20 @@ impl Exclusions {
 
     #[must_use]
     pub fn hides(&self, card: &Card) -> bool {
-        self.videos.contains(card.id())
-            || self.shorts.contains(card.id())
-            || self.unplayable.contains(card.id())
+        self.hides_rewatch(card)
             || self.seen.contains(card.id())
             || self
                 .age_limit
                 .is_some_and(|(max_age_ms, now_ms)| !is_within(card, now_ms, max_age_ms))
+    }
+
+    /// What stays hidden even from videos the viewer chose to see again: an old or seen video is
+    /// the point of the Watched chip and of a mix's seed.
+    #[must_use]
+    pub fn hides_rewatch(&self, card: &Card) -> bool {
+        self.videos.contains(card.id())
+            || self.shorts.contains(card.id())
+            || self.unplayable.contains(card.id())
             || self.channels.contains(card.channel_id())
             || self
                 .matchers
@@ -142,6 +160,7 @@ pub struct Inputs {
     pub saved: Vec<(VideoSummary, u64)>,
     pub max_video_age_ms: Option<u64>,
     pub hides_seen_videos: bool,
+    pub subscriptions_on_home: bool,
 }
 
 impl Inputs {
@@ -187,6 +206,10 @@ impl Inputs {
         let spec = brain.key_spec();
         let max_video_age_ms = max_video_age_ms(pool).await;
         let hides_seen_videos = hides_seen_videos(pool).await;
+        let subscriptions_on_home = subscriptions_on_home(pool).await;
+        if !subscriptions_on_home {
+            channels.extend(subscriptions.names.keys().cloned());
+        }
         Ok(Self {
             exclusions: Exclusions {
                 videos,
@@ -209,7 +232,19 @@ impl Inputs {
             history,
             max_video_age_ms,
             hides_seen_videos,
+            subscriptions_on_home,
         })
+    }
+
+    /// The channels Home fetches and ranks up: those followed, unless the viewer keeps them off
+    /// Home, where `Exclusions` hides them instead.
+    #[must_use]
+    pub fn boosted_channels(&self) -> HashSet<String> {
+        if self.subscriptions_on_home {
+            self.subscriptions.ids()
+        } else {
+            HashSet::new()
+        }
     }
 
     fn history_seeds(&self) -> impl Iterator<Item = SeedInput> + '_ {

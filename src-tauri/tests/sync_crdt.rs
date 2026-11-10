@@ -148,9 +148,9 @@ fn collection_serializes_snake_case() {
 
 #[test]
 fn selection_drops_collections_this_build_does_not_know() {
-    // Android 2.3 adds `notes`; one unknown name used to fail the whole frame and end the session.
+    // One unknown name used to fail the whole frame and end the session.
     let s: SelectionFrame = serde_json::from_str(
-        r#"{"send":["watch_history","notes","likes"],"accept":["notes","future_thing"]}"#,
+        r#"{"send":["watch_history","future_thing","likes"],"accept":["future_thing"]}"#,
     )
     .unwrap();
     assert_eq!(s.send, vec![Collection::WatchHistory, Collection::Likes]);

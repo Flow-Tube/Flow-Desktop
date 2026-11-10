@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell, BellOff, X } from "lucide-react";
+import { Bell, BellOff, Clock3, X } from "lucide-react";
 import { IconButton } from "../ui/IconButton";
 import { AnchoredPortalMenu, type MenuAnchor } from "../ui/AnchoredPortalMenu";
 import { useNotificationStore } from "../../store/useNotificationStore";
@@ -12,49 +12,20 @@ import {
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 import { prefetchStreamInfo } from "../../lib/streamResolution";
 import { getString } from "../../lib/i18n/index";
-
-function startOfDay(timestamp: number): number {
-  const date = new Date(timestamp);
-  date.setHours(0, 0, 0, 0);
-  return date.getTime();
-}
-
-type GroupKey = "today" | "yesterday" | "earlier";
-
-function groupLabel(key: GroupKey): string {
-  switch (key) {
-    case "today":
-      return getString("notifications_group_today");
-    case "yesterday":
-      return getString("notifications_group_yesterday");
-    default:
-      return getString("notifications_group_earlier");
-  }
-}
-
-function groupNotifications(notifications: NotificationRecord[]) {
-  const today = startOfDay(Date.now());
-  const yesterday = today - 24 * 60 * 60 * 1000;
-  const groups: Record<GroupKey, NotificationRecord[]> = { today: [], yesterday: [], earlier: [] };
-
-  for (const item of notifications) {
-    const day = startOfDay(item.createdAt);
-    if (day >= today) groups.today.push(item);
-    else if (day >= yesterday) groups.yesterday.push(item);
-    else groups.earlier.push(item);
-  }
-
-  return (["today", "yesterday", "earlier"] as GroupKey[])
-    .map((key) => ({ key, items: groups[key] }))
-    .filter((group) => group.items.length > 0);
-}
-
-function formatTime(timestamp: number): string {
-  return new Date(timestamp).toLocaleTimeString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+import {
+  BUCKET_TITLES,
+  groupNotifications,
+  notificationKindLabel,
+  notificationRoute,
+  notificationTimeLabel,
+} from "../../lib/notificationGrouping";
+import { showSaveFailedToast, showSaveToast } from "../../lib/saveToast";
+import { useUiStore } from "../../store/useUiStore";
+import { useUpcomingReminderStore } from "../../store/useUpcomingReminderStore";
+import { useWatchLaterStore } from "../../store/useWatchLaterStore";
+import type { VideoSummary } from "../../types/video";
+import { alignToEnd } from "../../lib/direction";
+import { joinIsolated } from "../../lib/direction";
 
 function NotificationThumbnail({ src, alt }: { src: string | null; alt: string }) {
   const imageSrc = useProxiedImageUrl(src);
@@ -64,24 +35,38 @@ function NotificationThumbnail({ src, alt }: { src: string | null; alt: string }
   return <img src={imageSrc} alt={alt} className="h-full w-full object-cover" loading="lazy" />;
 }
 
+function notificationVideo(notification: NotificationRecord): VideoSummary {
+  return {
+    id: notification.videoId,
+    title: notification.title,
+    channelName: notification.channelName,
+    channelId: notification.channelId,
+    thumbnailUrl: notification.thumbnailUrl,
+    publishedText: notification.publishedText,
+  };
+}
+
 function NotificationItem({
   notification,
   onOpen,
   onDismiss,
+  onSave,
 }: {
   notification: NotificationRecord;
-  onOpen: (videoId: string) => void;
-  onDismiss: (id: number) => void;
+  onOpen: (notification: NotificationRecord) => void;
+  onDismiss: (notification: NotificationRecord) => void;
+  onSave: (notification: NotificationRecord) => void;
 }) {
+  const kindLabel = notificationKindLabel(notification.kind);
   return (
     <div
       role="button"
       tabIndex={0}
-      onClick={() => onOpen(notification.videoId)}
+      onClick={() => onOpen(notification)}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          onOpen(notification.videoId);
+          onOpen(notification);
         }
       }}
       className={`group flex cursor-pointer items-start gap-3 px-3 py-2.5 transition-colors duration-200 ease-out hover:bg-surface-container ${
@@ -93,7 +78,7 @@ function NotificationItem({
       </div>
 
       <div className="min-w-0 flex-1">
-        <p
+        <p dir="auto"
           className={`line-clamp-2 text-sm text-chrome-neutral-100 ${
             notification.isRead ? "font-normal" : "font-semibold"
           }`}
@@ -101,9 +86,7 @@ function NotificationItem({
           {notification.title}
         </p>
         <p className="mt-1 line-clamp-1 text-xs text-chrome-neutral-400">
-          {notification.channelName}
-          {" • "}
-          {formatTime(notification.createdAt)}
+          {joinIsolated([notification.channelName, kindLabel, notificationTimeLabel(notification.createdAt)])}
         </p>
       </div>
 
@@ -113,12 +96,25 @@ function NotificationItem({
         )}
         <button
           type="button"
-          title={getString("notifications_dismiss")}
+          title={getString("notifications_save_to_watch_later")}
+          aria-label={getString("notifications_save_to_watch_later")}
           onClick={(event) => {
             event.stopPropagation();
-            onDismiss(notification.id);
+            onSave(notification);
           }}
-          className="grid h-7 w-7 place-items-center rounded-full text-chrome-neutral-500 opacity-0 transition-colors duration-200 ease-out hover:bg-surface-container-highest hover:text-chrome-neutral-200 group-hover:opacity-100"
+          className="grid h-7 w-7 place-items-center rounded-full text-chrome-neutral-500 opacity-0 transition-colors duration-200 ease-out hover:bg-surface-container-highest hover:text-chrome-neutral-200 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary group-hover:opacity-100"
+        >
+          <Clock3 size={15} />
+        </button>
+        <button
+          type="button"
+          title={getString("notifications_dismiss")}
+          aria-label={getString("notifications_dismiss")}
+          onClick={(event) => {
+            event.stopPropagation();
+            onDismiss(notification);
+          }}
+          className="grid h-7 w-7 place-items-center rounded-full text-chrome-neutral-500 opacity-0 transition-colors duration-200 ease-out hover:bg-surface-container-highest hover:text-chrome-neutral-200 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary group-hover:opacity-100"
         >
           <X size={15} />
         </button>
@@ -138,13 +134,20 @@ export function NotificationsBell() {
   const prependNotifications = useNotificationStore((state) => state.prependNotifications);
   const markAllRead = useNotificationStore((state) => state.markAllRead);
   const removeNotification = useNotificationStore((state) => state.removeNotification);
+  const restoreRemoved = useNotificationStore((state) => state.restoreRemoved);
   const clearAll = useNotificationStore((state) => state.clearAll);
+  const loadReminders = useUpcomingReminderStore((state) => state.load);
+  const forgetReminders = useUpcomingReminderStore((state) => state.forget);
 
   useEffect(() => {
     void loadNotifications();
+    void loadReminders();
     let unlisten: (() => void) | undefined;
     let active = true;
-    void onNewNotifications((records) => prependNotifications(records)).then((fn) => {
+    void onNewNotifications((records) => {
+      prependNotifications(records);
+      forgetReminders(records.filter((record) => record.kind === "UPCOMING_LIVE").map((record) => record.videoId));
+    }).then((fn) => {
       if (active) unlisten = fn;
       else fn();
     });
@@ -152,7 +155,7 @@ export function NotificationsBell() {
       active = false;
       unlisten?.();
     };
-  }, [loadNotifications, prependNotifications]);
+  }, [loadNotifications, loadReminders, forgetReminders, prependNotifications]);
 
   // Clicking a native system toast opens and plays that video in the app.
   useEffect(() => {
@@ -184,17 +187,42 @@ export function NotificationsBell() {
       return;
     }
     const rect = wrapRef.current?.getBoundingClientRect();
-    if (rect) setAnchor({ top: rect.bottom + 8, right: rect.right });
+    if (rect) setAnchor({ top: rect.bottom + 8, ...alignToEnd(rect) });
   }, [open, closePanel]);
 
-  const handleOpenVideo = useCallback(
-    (videoId: string) => {
+  const handleOpen = useCallback(
+    (notification: NotificationRecord) => {
       closePanel();
-      prefetchStreamInfo(videoId);
-      navigate(`/watch/${videoId}`);
+      prefetchStreamInfo(notification.videoId);
+      navigate(notificationRoute(notification));
     },
     [closePanel, navigate],
   );
+
+  const handleDismiss = useCallback(
+    (notification: NotificationRecord) => {
+      void removeNotification(notification.id);
+      useUiStore.getState().showToast({
+        message: getString("notifications_removed"),
+        actions: [{ label: getString("undo"), onSelect: () => void restoreRemoved(notification) }],
+      });
+    },
+    [removeNotification, restoreRemoved],
+  );
+
+  const handleSave = useCallback(async (notification: NotificationRecord) => {
+    const video = notificationVideo(notification);
+    const watchLater = useWatchLaterStore.getState();
+    const item = { title: video.title, image: video.thumbnailUrl, shape: "landscape" as const };
+    const destination = { kind: "watchLater" as const };
+    try {
+      await watchLater.add(video);
+      showSaveToast({ destination, item, undo: () => watchLater.remove(video.id) });
+    } catch (error) {
+      console.error("Failed to save the notification's video", error);
+      showSaveFailedToast({ destination, item });
+    }
+  }, []);
 
   const groups = useMemo(() => groupNotifications(notifications), [notifications]);
   const badge = unreadCount > 9 ? "9+" : String(unreadCount);
@@ -211,7 +239,7 @@ export function NotificationsBell() {
           <Bell />
         </IconButton>
         {unreadCount > 0 && (
-          <span className="pointer-events-none absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--color-primary)] px-1 text-[10px] font-semibold leading-none text-[var(--color-on-primary)]">
+          <span className="pointer-events-none absolute end-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--color-primary)] px-1 text-[10px] font-semibold leading-none text-[var(--color-on-primary)]">
             {badge}
           </span>
         )}
@@ -254,15 +282,16 @@ export function NotificationsBell() {
               groups.map((group) => (
                 <section key={group.key}>
                   <div className="sticky top-0 z-10 bg-surface-container-high px-4 py-2 text-xs font-semibold uppercase tracking-widest text-chrome-neutral-500">
-                    {groupLabel(group.key)}
+                    {getString(BUCKET_TITLES[group.key])}
                   </div>
                   <div className="divide-y divide-chrome-neutral-800/60">
                     {group.items.map((notification) => (
                       <NotificationItem
                         key={notification.id}
                         notification={notification}
-                        onOpen={handleOpenVideo}
-                        onDismiss={(id) => void removeNotification(id)}
+                        onOpen={handleOpen}
+                        onDismiss={handleDismiss}
+                        onSave={(item) => void handleSave(item)}
                       />
                     ))}
                   </div>

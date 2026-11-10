@@ -36,6 +36,24 @@ describe("lyrics panel state", () => {
     expect(state.deferredCurrentLineIndex).toBe(1);
   });
 
+  it("settles on the line coming up when opened or moved back into a break", () => {
+    const withBreak: LyricsEntry[] = [
+      { time: 0, text: "" },
+      { time: 1000, text: "sung" },
+      { time: 70_000, text: "after" },
+      { time: 80_000, text: "last" },
+    ];
+    const opened = tracking(30_000);
+    opened.advance(withBreak, 30_000, false);
+    expect([...opened.activeLineIndices]).toEqual([]);
+    expect(opened.scrollTargetIndex).toBe(2);
+
+    const seeked = tracking(0);
+    seeked.advance(withBreak, 85_000, false);
+    seeked.advance(withBreak, 30_000, false);
+    expect(seeked.scrollTargetIndex).toBe(2);
+  });
+
   it("pauses auto scroll on a user scroll until a jump or resync", () => {
     const state = tracking(0);
     state.onUserScroll(-120, 42);

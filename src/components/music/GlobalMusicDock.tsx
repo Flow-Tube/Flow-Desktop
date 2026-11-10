@@ -127,7 +127,7 @@ export function GlobalMusicDock() {
               <HapticButton
                 onClick={dismiss}
                 aria-label={getString("music_dismiss")}
-                className="absolute -right-2.5 -top-2.5 z-20 grid h-6 w-6 place-items-center rounded-full border border-chrome-neutral-700 bg-surface-container-highest text-chrome-neutral-300 opacity-0 transition-opacity duration-200 ease-out hover:text-chrome-neutral-100 group-hover:opacity-100"
+                className="absolute -end-2.5 -top-2.5 z-20 grid h-6 w-6 place-items-center rounded-full border border-chrome-neutral-700 bg-surface-container-highest text-chrome-neutral-300 opacity-0 transition-opacity duration-200 ease-out hover:text-chrome-neutral-100 group-hover:opacity-100"
               >
                 <X className="h-3.5 w-3.5" />
               </HapticButton>
@@ -158,7 +158,7 @@ export function GlobalMusicDock() {
                 }
                 openOverlay("full");
               }}
-              className={`relative flex h-full touch-none select-none items-center overflow-hidden rounded-2xl border border-chrome-neutral-800 bg-surface-container-high pl-3 pr-4 ${away ? "" : "cursor-pointer"}`}
+              className={`relative flex h-full touch-none select-none items-center overflow-hidden rounded-2xl border border-chrome-neutral-800 bg-surface-container-high ps-3 pe-4 ${away ? "" : "cursor-pointer"}`}
             >
               {/* Grab handle, shown on hover so the drag up is discoverable. */}
               <span
@@ -174,7 +174,7 @@ export function GlobalMusicDock() {
                   onClick={() => openOverlay("full")}
                   onContextMenu={menu.openMenuFromContext}
                   aria-label={getString("music_expand")}
-                  className="group/art flex min-w-0 items-center gap-3 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
+                  className="group/art flex min-w-0 items-center gap-3 rounded-md text-start outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
                 >
                   <div className="relative h-12 w-12 shrink-0">
                     <MusicArtwork
@@ -190,7 +190,7 @@ export function GlobalMusicDock() {
                     )}
                   </div>
                   <div className="min-w-0">
-                    <div className="line-clamp-1 text-[15px] font-semibold tracking-tight text-chrome-neutral-100">
+                    <div dir="auto" className="line-clamp-1 text-[15px] font-semibold tracking-tight text-chrome-neutral-100">
                       {shown.title}
                     </div>
                     {away ? (
@@ -211,8 +211,8 @@ export function GlobalMusicDock() {
                 />
               </div>
 
-              {/* CENTER — transport */}
-              <div className="flex w-1/3 items-center justify-center gap-5">
+              {/* CENTER — transport, left to right in every language like the timeline */}
+              <div dir="ltr" className="flex w-1/3 items-center justify-center gap-5">
                 {!away && (
                   <HapticButton
                     onClick={toggleShuffle}
@@ -333,14 +333,14 @@ export function GlobalMusicDock() {
             </div>
 
             {/* Popovers — rendered outside the clipped pill so they aren't cut off. */}
-            <div className="absolute bottom-full right-2 mb-3">
+            <div className="absolute bottom-full end-2 mb-3">
               <EqPanel
                 open={popover === "eq"}
                 onClose={() => setPopover(null)}
                 placement="top"
               />
             </div>
-            <div className="absolute bottom-full right-2 mb-3">
+            <div className="absolute bottom-full end-2 mb-3">
               {volumeFeedback && popover !== "vol" && (
                 <div
                   key={volumeFeedback.id}

@@ -10,7 +10,7 @@ use crate::api::innertube::download::DownloadContainer;
 
 mod boxes;
 mod ilst;
-mod matroska;
+pub mod matroska;
 mod mp4_demux;
 mod mp4_writer;
 pub mod retag;
@@ -536,6 +536,19 @@ pub(super) fn scratch_file(tag: &str, extension: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("flow-mux-{tag}-{}-{nanos}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("scratch dir");
     dir.join(format!("out.{extension}"))
+}
+
+/// A small playable song with no tags, for tests of what handles finished files.
+#[cfg(test)]
+pub(super) fn write_test_song(path: &Path) {
+    use mp4_writer::tests::{audio_track, options, samples};
+    mp4_writer::write_mp4(
+        path,
+        vec![audio_track(samples(200, 50, 1024, 1))],
+        &options(),
+        &AtomicBool::new(false),
+    )
+    .expect("writes");
 }
 
 #[cfg(test)]

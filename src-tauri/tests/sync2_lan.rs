@@ -3,13 +3,18 @@
 
 mod sync2_common;
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use base64::Engine as _;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use flow_desktop_lib::sync2::Error;
 use flow_desktop_lib::sync2::batches::apply_batches;
 use flow_desktop_lib::sync2::codes::{StoreLocation, new_offer, read_code};
 use flow_desktop_lib::sync2::engine::EngineError;
 use flow_desktop_lib::sync2::engine::{Session, now_ms};
+use flow_desktop_lib::sync2::entries::{build_entry, member_subject};
 use flow_desktop_lib::sync2::group_store::GroupStore;
 use flow_desktop_lib::sync2::held::HeldStore;
 use flow_desktop_lib::sync2::keys::MemberSecrets;
@@ -22,20 +27,24 @@ use flow_desktop_lib::sync2::linking::{
 };
 use flow_desktop_lib::sync2::live_message::{LiveMessage, Now, PlayState};
 use flow_desktop_lib::sync2::live_seal::LiveKeys;
-use flow_desktop_lib::sync2::membership::{leave_group, rename_device};
+use flow_desktop_lib::sync2::membership::{leave_group, member_keys, new_epoch, rename_device};
+use flow_desktop_lib::sync2::pairing::pairing_proof;
 use flow_desktop_lib::sync2::paths::log_path;
 use flow_desktop_lib::sync2::pipe::{Pipe, listen_on};
-use flow_desktop_lib::sync2::roster::{Entry, Op, fork_winner};
+use flow_desktop_lib::sync2::roster::{Entry, Op, Role, entry_hash, fork_winner};
 use flow_desktop_lib::sync2::sealed::random_bytes;
-use flow_desktop_lib::sync2::state::{GroupRecord, add_roster_entries, save_group};
+use flow_desktop_lib::sync2::server::Appended;
+use flow_desktop_lib::sync2::state::{GroupRecord, add_roster_entries, roster_entries, save_group};
 use flow_desktop_lib::sync2::state::{StoreKind, load_group};
 use flow_desktop_lib::sync2::store::Store;
+use flow_desktop_lib::sync2::wrap::wrap_epoch_key;
 use futures_util::{SinkExt, StreamExt};
 use sqlx::SqlitePool;
-use sync2_common::{Group, LINK, empty_pool, exported, group, watch};
-use tokio::net::TcpListener;
-use tokio_tungstenite::connect_async;
+use sync2_common::{Group, LINK, draft, empty_pool, exported, group, head, watch};
+use tokio::io::AsyncReadExt as _;
+use tokio::net::{TcpListener, TcpStream};
 use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::{accept_async, connect_async};
 
 /// A device that holds the group as pairing leaves it: the roster and the wraps, no objects.
 async fn holding(g: &Group) -> SqlitePool {
@@ -48,8 +57,8 @@ async fn holding(g: &Group) -> SqlitePool {
     for entry in &roster {
         held.hold_entry(entry).await.unwrap();
     }
-    for ((epoch, name), bytes) in keys {
-        held.hold_key(epoch, &name, &bytes).await.unwrap();
+    for ((epoch, kc, name), bytes) in keys {
+        held.hold_key(epoch, &kc, &name, &bytes).await.unwrap();
     }
     add_roster_entries(&pool, &roster[..1]).await.unwrap();
     let record = GroupRecord::on_lan(hex::encode(g.group), LINK.into());
@@ -118,7 +127,7 @@ async fn a_malformed_entry_from_a_peer_is_not_held() {
     let mut entry = g.store.0.lock().unwrap().roster[1].clone();
     entry.v = 3;
     let refused = held.hold_entry(&entry).await.is_err();
-    assert_eq!(held.head().await.unwrap().0, 1);
+    assert_eq!(held.chain().await.unwrap().last().unwrap().seq, 1);
     assert!(refused);
 }
 
@@ -469,7 +478,7 @@ async fn a_live_message_crosses_a_lan_session_and_opens_on_the_other_side() {
             let session = Session::open(&pool, HeldStore::new(pool.clone()), device)
                 .await
                 .unwrap();
-            LiveKeys::of(&session)
+            LiveKeys::of(&session).unwrap()
         }
     };
     let (keys_a, keys_b) = (keys(&pool_a, &g.a).await, keys(&pool_b, &g.b).await);
@@ -526,14 +535,314 @@ async fn a_lan_message_past_a_frame_s_limit_is_refused() {
         "ws://127.0.0.1:{}/flow-sync/2/pair",
         listening.addresses[0].p
     );
+    let token = [7; 16];
     tokio::spawn(async move {
         let (mut socket, _) = connect_async(url).await.unwrap();
-        for len in [32, 4 << 20, 5 << 20] {
+        let first = [&[0; 32][..], &pairing_proof(&token, &[0; 32])[..]].concat();
+        let _ = socket.send(Message::Binary(first.into())).await;
+        for len in [4 << 20, 5 << 20] {
             let _ = socket.send(Message::Binary(vec![0; len].into())).await;
         }
         let _ = socket.next().await;
     });
-    let (mut pipe, _) = listening.accept().await.unwrap();
+    let (mut pipe, _) = listening.accept(&token).await.unwrap();
     assert_eq!(pipe.receive().await.unwrap().len(), 4 << 20);
     assert!(pipe.receive().await.is_err());
+}
+
+/// `device`, alone on the LAN, starts the next epoch in what it holds.
+async fn rotate_alone(g: &Group, pool: &SqlitePool, device: &MemberSecrets) -> Entry {
+    let held = HeldStore::new(pool.clone());
+    let session = Session::open_as_peer(pool, held.clone(), device)
+        .await
+        .unwrap();
+    let state = session.roster().clone();
+    let keys = member_keys(&state, None).unwrap();
+    let epoch = new_epoch(&g.group, state.epoch + 1, &keys, session.current_key()).unwrap();
+    let mut rotate = draft(Op::Rotate, device);
+    rotate.epoch = Some(epoch.field);
+    let entry = build_entry(&g.group, Some(&state), rotate, &[device]);
+    let appended = held
+        .append_roster(&state.head, &entry, &epoch.wraps, Some(&epoch.chain))
+        .await
+        .unwrap();
+    assert_eq!(appended, Appended::Done);
+    entry
+}
+
+/// What `device` reads from the logs it holds, by sender.
+async fn read_senders(pool: &SqlitePool, device: &MemberSecrets) -> BTreeSet<String> {
+    let mut session = Session::open_as_peer(pool, HeldStore::new(pool.clone()), device)
+        .await
+        .unwrap();
+    let pulled = session.pull(pool).await.unwrap();
+    pulled.batches.into_keys().collect()
+}
+
+/// Waits until `pool` holds `entry`.
+async fn eventually_holds_entry(pool: &SqlitePool, entry: &Entry) -> bool {
+    let held = HeldStore::new(pool.clone());
+    for _ in 0..50 {
+        if held.candidates_after(-1).await.unwrap().contains(entry) {
+            return true;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    false
+}
+
+#[tokio::test]
+async fn members_that_each_rotated_meet_and_settle_on_one_chain() {
+    let g = group().await;
+    let (pool_a, pool_b) = (holding(&g).await, holding(&g).await);
+    let from_a = rotate_alone(&g, &pool_a, &g.a).await;
+    let from_b = rotate_alone(&g, &pool_b, &g.b).await;
+
+    let port = listening(&pool_a, &g.a).await;
+    meet(&pool_b, &g.b, ("127.0.0.1", port), None, &[], no_live())
+        .await
+        .unwrap();
+    assert!(eventually_holds_entry(&pool_a, &from_b).await);
+    assert!(eventually_holds_entry(&pool_b, &from_a).await);
+
+    let a = Session::open_as_peer(&pool_a, HeldStore::new(pool_a.clone()), &g.a)
+        .await
+        .unwrap();
+    let b = Session::open_as_peer(&pool_b, HeldStore::new(pool_b.clone()), &g.b)
+        .await
+        .unwrap();
+    assert_eq!(a.roster().head, b.roster().head);
+    assert_eq!(a.current_key(), b.current_key());
+}
+
+#[tokio::test]
+async fn objects_sealed_under_a_rotation_that_lost_are_read_after_settling() {
+    let g = group().await;
+    let (pool_a, pool_b) = (holding(&g).await, holding(&g).await);
+    rotate_alone(&g, &pool_a, &g.a).await;
+    rotate_alone(&g, &pool_b, &g.b).await;
+    watch(&pool_a, "aaaaaaaaaaa").await;
+    watch(&pool_b, "bbbbbbbbbbb").await;
+    push(&pool_a, &g.a).await;
+    push(&pool_b, &g.b).await;
+
+    let port = listening(&pool_a, &g.a).await;
+    meet(&pool_b, &g.b, ("127.0.0.1", port), None, &[], no_live())
+        .await
+        .unwrap();
+    assert!(eventually_holds(&pool_a, &log_path(&hex::encode(g.b.did), 1)).await);
+
+    let (a, b) = (hex::encode(g.a.did), hex::encode(g.b.did));
+    assert_eq!(read_senders(&pool_a, &g.a).await, BTreeSet::from([b]));
+    assert_eq!(read_senders(&pool_b, &g.b).await, BTreeSet::from([a]));
+}
+
+#[tokio::test]
+async fn an_object_sealed_under_an_entry_that_fell_stops_only_its_sender() {
+    let g = group().await;
+    let c = member_secrets(random_bytes(), random_bytes());
+    let state = head(&g.store);
+    let mut add = draft(Op::Add, &g.a);
+    add.add = Some(vec![member_subject(
+        &c.sig_public,
+        &c.kem_public,
+        Role::Device,
+    )]);
+    let add = build_entry(&g.group, Some(&state), add, &[&g.a, &c]);
+    let wrap = wrap_epoch_key(&c.kem_public, &g.group, 0, &c.did, &g.epoch_key).unwrap();
+    let wraps = BTreeMap::from([(hex::encode(c.did), URL_SAFE_NO_PAD.encode(wrap))]);
+    (&g.store)
+        .append_roster(&state.head, &add, &wraps, None)
+        .await
+        .unwrap();
+    let (pool_a, pool_b, pool_c) = (holding(&g).await, holding(&g).await, holding(&g).await);
+
+    rotate_alone(&g, &pool_c, &c).await;
+    watch(&pool_c, "ccccccccccc").await;
+    push(&pool_c, &c).await;
+    let port_c = listening(&pool_c, &c).await;
+    meet(&pool_b, &g.b, ("127.0.0.1", port_c), None, &[], no_live())
+        .await
+        .unwrap();
+
+    let session = Session::open_as_peer(&pool_a, HeldStore::new(pool_a.clone()), &g.a)
+        .await
+        .unwrap();
+    let state = session.roster().clone();
+    let keys = member_keys(&state, Some(&hex::encode(c.did))).unwrap();
+    let epoch = new_epoch(&g.group, state.epoch + 1, &keys, session.current_key()).unwrap();
+    let mut remove = draft(Op::Remove, &g.a);
+    remove.remove = Some(vec![hex::encode(c.did)]);
+    remove.epoch = Some(epoch.field);
+    let remove = build_entry(&g.group, Some(&state), remove, &[&g.a]);
+    HeldStore::new(pool_a.clone())
+        .append_roster(&state.head, &remove, &epoch.wraps, Some(&epoch.chain))
+        .await
+        .unwrap();
+    watch(&pool_a, "aaaaaaaaaaa").await;
+    push(&pool_a, &g.a).await;
+    let port_a = listening(&pool_a, &g.a).await;
+    meet(&pool_b, &g.b, ("127.0.0.1", port_a), None, &[], no_live())
+        .await
+        .unwrap();
+
+    assert_eq!(
+        read_senders(&pool_b, &g.b).await,
+        BTreeSet::from([hex::encode(g.a.did)])
+    );
+}
+
+#[tokio::test]
+async fn a_device_missing_its_wrap_stays_on_its_chain_and_fetches_it_over_the_lan() {
+    let g = group().await;
+    let (pool_a, pool_b) = (holding(&g).await, holding(&g).await);
+    let opened = Session::open_as_peer(&pool_b, HeldStore::new(pool_b.clone()), &g.b)
+        .await
+        .unwrap();
+    let applied = opened.roster().head.clone();
+    drop(opened);
+    let rotated = rotate_alone(&g, &pool_a, &g.a).await;
+    HeldStore::new(pool_b.clone())
+        .hold_entry(&rotated)
+        .await
+        .unwrap();
+
+    let refused = Session::open_as_peer(&pool_b, HeldStore::new(pool_b.clone()), &g.b).await;
+    assert!(matches!(
+        refused.err(),
+        Some(EngineError::Protocol(Error::KeyCommitment))
+    ));
+    assert_eq!(
+        entry_hash(roster_entries(&pool_b).await.unwrap().last().unwrap()),
+        applied
+    );
+
+    let port = listening(&pool_a, &g.a).await;
+    meet(&pool_b, &g.b, ("127.0.0.1", port), None, &[], no_live())
+        .await
+        .unwrap();
+    let session = Session::open_as_peer(&pool_b, HeldStore::new(pool_b.clone()), &g.b)
+        .await
+        .unwrap();
+    assert_eq!(session.roster().head, entry_hash(&rotated));
+}
+
+#[tokio::test]
+async fn a_dial_tries_lower_epochs_and_stops_after_four_attempts() {
+    let g = group().await;
+    let pool = holding(&g).await;
+    for _ in 0..5 {
+        rotate_alone(&g, &pool, &g.b).await;
+    }
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let attempts = tokio::spawn(async move {
+        let mut epochs = Vec::new();
+        while let Ok(Ok((stream, _))) =
+            tokio::time::timeout(Duration::from_secs(2), listener.accept()).await
+        {
+            let mut socket = tokio_tungstenite::accept_async(stream).await.unwrap();
+            if let Some(Ok(Message::Binary(frame))) = socket.next().await {
+                epochs.push(u32::from_be_bytes(frame[..4].try_into().unwrap()));
+            }
+        }
+        epochs
+    });
+
+    let met = meet(&pool, &g.b, ("127.0.0.1", port), None, &[], no_live()).await;
+    assert!(matches!(met.err(), Some(EngineError::LanUnreachable)));
+    assert_eq!(attempts.await.unwrap(), [5, 4, 3, 2]);
+}
+
+/// Whether the other side has closed `stream`, once what it sent is read.
+async fn closed_within(stream: &mut TcpStream, limit: Duration) -> bool {
+    let mut bytes = [0; 1024];
+    tokio::time::timeout(limit, async {
+        while !matches!(stream.read(&mut bytes).await, Ok(0) | Err(_)) {}
+    })
+    .await
+    .is_ok()
+}
+
+#[tokio::test]
+async fn connections_that_say_nothing_are_closed_and_members_still_meet() {
+    let g = group().await;
+    let (pool_a, pool_b) = (holding(&g).await, holding(&g).await);
+    let port = listening(&pool_a, &g.a).await;
+    let mut silent = Vec::new();
+    for _ in 0..64 {
+        silent.push(TcpStream::connect(("127.0.0.1", port)).await.unwrap());
+    }
+    let last = silent.last_mut().unwrap();
+    assert!(
+        closed_within(last, Duration::from_secs(1)).await,
+        "over the limit, a connection is closed at once"
+    );
+    for stream in &mut silent {
+        assert!(closed_within(stream, Duration::from_secs(5)).await);
+    }
+    meet(&pool_b, &g.b, ("127.0.0.1", port), None, &[], no_live())
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn a_websocket_that_says_nothing_is_closed() {
+    let g = group().await;
+    let pool = holding(&g).await;
+    let port = listening(&pool, &g.a).await;
+    let (mut socket, _) = connect_async(format!("ws://127.0.0.1:{port}/flow-sync/2"))
+        .await
+        .unwrap();
+    let ended = tokio::time::timeout(Duration::from_secs(5), async {
+        while let Some(Ok(_)) = socket.next().await {}
+    })
+    .await;
+    assert!(ended.is_ok());
+}
+
+#[tokio::test]
+async fn meeting_a_peer_that_stays_silent_after_connecting_ends() {
+    let g = group().await;
+    let pool = holding(&g).await;
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.unwrap();
+        let _socket = accept_async(stream).await.unwrap();
+        std::future::pending::<()>().await;
+    });
+    let met = tokio::time::timeout(
+        Duration::from_secs(5),
+        meet(&pool, &g.b, ("127.0.0.1", port), None, &[], no_live()),
+    )
+    .await;
+    assert!(matches!(met, Ok(Err(EngineError::TimedOut))));
+}
+
+/// Run under a low descriptor limit, as a macOS GUI app has by default:
+/// `bash -c 'ulimit -n 256; cargo test --test sync2_lan -- --ignored --exact <this test>'`.
+#[tokio::test]
+#[ignore = "needs ulimit -n 256"]
+async fn the_service_keeps_accepting_after_running_out_of_descriptors() {
+    let g = group().await;
+    let pool = holding(&g).await;
+    let port = listening(&pool, &g.a).await;
+    let mut files = Vec::new();
+    while let Ok(file) = std::fs::File::open("/dev/null") {
+        files.push(file);
+    }
+    files.truncate(files.len() - 3);
+    let mut streams = Vec::new();
+    for _ in 0..3 {
+        if let Ok(stream) = TcpStream::connect(("127.0.0.1", port)).await {
+            streams.push(stream);
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    drop(streams);
+    drop(files);
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let mut again = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+    assert!(closed_within(&mut again, Duration::from_secs(5)).await);
 }

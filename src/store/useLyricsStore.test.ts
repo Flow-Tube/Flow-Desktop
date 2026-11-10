@@ -2,17 +2,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { LyricsResult } from "../lib/lyrics/types";
 
-let answer: () => Promise<LyricsResult | null> = async () => null;
+let answer: (onAnswer?: (result: LyricsResult) => void) => Promise<LyricsResult | null> = async () => null;
 
 vi.mock("../lib/lyrics/lyricsHelper", () => ({
-  getLyrics: () => answer(),
+  getLyrics: (_request: unknown, _signal: unknown, onAnswer?: (result: LyricsResult) => void) => answer(onAnswer),
   forceRefresh: () => {},
   getAllLyrics: async () => {},
   applyManualLyrics: () => {},
 }));
 
 const { useLyricsStore } = await import("./useLyricsStore");
-const { seedOfflineLyrics } = await import("../lib/lyrics/offline");
+const { LOCAL_FILE_LYRICS_PROVIDER, lyricsSourceLabel, seedOfflineLyrics } = await import("../lib/lyrics/offline");
 
 let id = 0;
 const request = () => ({ videoId: `song-${++id}`, title: "Song", artist: "Band", durationSec: 200 });
@@ -25,6 +25,33 @@ beforeEach(() => {
 });
 
 describe("lyrics store", () => {
+  it("shows an answer as soon as the run has one, before the run ends", async () => {
+    const first = { entries: [{ time: 1000, text: "Line" }, { time: 5000, text: "Next" }], provider: "Lines" };
+    let end: (result: LyricsResult) => void = () => {};
+    answer = (onAnswer) => {
+      onAnswer?.(first);
+      return new Promise((resolve) => (end = resolve));
+    };
+    useLyricsStore.getState().load(request());
+    expect(useLyricsStore.getState()).toMatchObject({ providerName: "Lines", loading: false });
+    end(first);
+    await flush();
+    expect(useLyricsStore.getState().entries).toBe(first.entries);
+  });
+
+  it("reports the lookup's end, unless another song took its place", async () => {
+    const settled: string[] = [];
+    let end: (result: null) => void = () => {};
+    answer = () => new Promise((resolve) => (end = resolve));
+    useLyricsStore.getState().load(request(), () => settled.push("left"));
+    const stale = end;
+    useLyricsStore.getState().load(request(), () => settled.push("current"));
+    stale(null);
+    end(null);
+    await flush();
+    expect(settled).toEqual(["current"]);
+  });
+
   it("shows saved lyrics at once, without a spinner", () => {
     const req = request();
     seedOfflineLyrics(req.videoId, timed);
@@ -70,18 +97,25 @@ describe("lyrics store", () => {
 });
 
 describe("lyrics session", () => {
-  it("clamps the sync offset to half a minute either way and resets it for the next song", () => {
+  it("clamps the sync offset to half a minute either way and keeps it for that song only", () => {
     answer = () => new Promise(() => {});
-    useLyricsStore.getState().load(request());
+    const first = request();
+    useLyricsStore.getState().load(first);
     for (let i = 0; i < 80; i++) useLyricsStore.getState().adjustSyncOffset(500);
     expect(useLyricsStore.getState().syncOffsetMs).toBe(30_000);
     useLyricsStore.getState().adjustSyncOffset(-100);
     expect(useLyricsStore.getState().syncOffsetMs).toBe(29_900);
     useLyricsStore.getState().load(request());
     expect(useLyricsStore.getState().syncOffsetMs).toBe(0);
+    useLyricsStore.getState().load(first);
+    expect(useLyricsStore.getState().syncOffsetMs).toBe(29_900);
+    useLyricsStore.getState().resetSyncOffset();
+    useLyricsStore.getState().load(request());
+    useLyricsStore.getState().load(first);
+    expect(useLyricsStore.getState().syncOffsetMs).toBe(0);
   });
 
-  it("shows a chosen source at once and starts its timing from zero, while an edit keeps it", () => {
+  it("keeps the song's timing through a chosen source and an edit", () => {
     answer = () => new Promise(() => {});
     useLyricsStore.getState().load(request());
     useLyricsStore.getState().adjustSyncOffset(500);
@@ -90,7 +124,7 @@ describe("lyrics session", () => {
     expect(useLyricsStore.getState().isSynced).toBe(true);
     useLyricsStore.getState().applyCandidate({ providerName: "LrcLib", entries: [{ time: 0, text: "Plain" }], synced: false });
     expect(useLyricsStore.getState().providerName).toBe("LrcLib");
-    expect(useLyricsStore.getState().syncOffsetMs).toBe(0);
+    expect(useLyricsStore.getState().syncOffsetMs).toBe(500);
     expect(useLyricsStore.getState().plain).toBe("Plain");
   });
 });
@@ -112,6 +146,17 @@ describe("saved lyrics timing", () => {
     await flush();
     expect(useLyricsStore.getState().providerName).toBe("BetterLyrics");
     expect(useLyricsStore.getState().syncOffsetMs).toBe(0);
+  });
+
+  it("lets a saved nudge win over the file's offset", () => {
+    answer = () => new Promise(() => {});
+    const req = request();
+    useLyricsStore.getState().load(req);
+    useLyricsStore.getState().adjustSyncOffset(200);
+    useLyricsStore.getState().load(request());
+    seedOfflineLyrics(req.videoId, `[offset:+350]\n${timed}`);
+    useLyricsStore.getState().load(req);
+    expect(useLyricsStore.getState().syncOffsetMs).toBe(200);
   });
 });
 
@@ -178,5 +223,29 @@ describe("lyrics source choice for downloaded songs", () => {
     useLyricsStore.getState().refresh();
     await flush();
     expect(useLyricsStore.getState().providerName).toBe("BetterLyrics");
+  });
+});
+
+describe("a library song's lyrics", () => {
+  const LOCAL_ID = "local_0123456789abcdef";
+  const request = { videoId: LOCAL_ID, title: "A", artist: "B", durationSeconds: 10 } as never;
+
+  it("shows no lyrics rather than sending the file's name to a provider", () => {
+    const fetchStub = vi.fn();
+    vi.stubGlobal("fetch", fetchStub);
+    useLyricsStore.getState().load(request);
+    expect(useLyricsStore.getState().loading).toBe(false);
+    expect(useLyricsStore.getState().entries).toEqual([]);
+    expect(fetchStub).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("takes the file's own lyrics when they arrive after the song started, under its source", () => {
+    useLyricsStore.getState().load(request);
+    seedOfflineLyrics(LOCAL_ID, "[00:01.00]Hello", LOCAL_FILE_LYRICS_PROVIDER);
+    const state = useLyricsStore.getState();
+    expect(state.entries.map((entry) => entry.text)).toEqual(["Hello"]);
+    expect(state.providerName).toBe(LOCAL_FILE_LYRICS_PROVIDER);
+    expect(lyricsSourceLabel(state.providerName)).toBe("Lyrics file");
   });
 });

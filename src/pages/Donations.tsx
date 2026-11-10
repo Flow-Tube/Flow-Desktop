@@ -89,7 +89,7 @@ function CryptoMethodCard({
         onClick={() => onCopy(method)}
         title={getString("donations_copy_address")}
         aria-label={getString("donations_copy_address")}
-        className="mt-3 flex items-center gap-2 rounded-lg bg-surface-container px-3 py-2 text-left transition-colors duration-200 ease-out hover:bg-surface-container-high"
+        className="mt-3 flex items-center gap-2 rounded-lg bg-surface-container px-3 py-2 text-start transition-colors duration-200 ease-out hover:bg-surface-container-high"
       >
         <code className="min-w-0 flex-1 truncate font-mono text-xs text-chrome-neutral-300">
           {method.address}

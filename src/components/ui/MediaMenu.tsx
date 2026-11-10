@@ -87,8 +87,8 @@ export function MediaMenu({ anchor, onClose, actions, header, note, className = 
               />
             ) : null}
             <div className="min-w-0">
-              <p className="line-clamp-2 font-medium leading-snug text-chrome-neutral-100">{header.title}</p>
-              {header.subtitle ? <p className="mt-0.5 truncate text-xs text-chrome-neutral-400">{header.subtitle}</p> : null}
+              <p dir="auto" className="line-clamp-2 font-medium leading-snug text-chrome-neutral-100">{header.title}</p>
+              {header.subtitle ? <p dir="auto" className="mt-0.5 truncate text-xs text-chrome-neutral-400">{header.subtitle}</p> : null}
             </div>
           </div>
         ) : null}
@@ -124,7 +124,7 @@ export function MediaMenu({ anchor, onClose, actions, header, note, className = 
                 type="button"
                 role="menuitem"
                 onClick={() => select(action)}
-                className={`flex h-9 w-full items-center gap-3 rounded-md px-2.5 text-left transition-colors duration-150 ease-out hover:bg-surface-container-highest focus-visible:bg-surface-container-highest focus-visible:outline-none ${
+                className={`flex h-9 w-full items-center gap-3 rounded-md px-2.5 text-start transition-colors duration-150 ease-out hover:bg-surface-container-highest focus-visible:bg-surface-container-highest focus-visible:outline-none ${
                   action.danger ? "text-chrome-red-400" : ""
                 }`}
               >
@@ -142,7 +142,7 @@ export function MediaMenu({ anchor, onClose, actions, header, note, className = 
           <div className="mx-0.5 mt-1.5 flex items-start gap-2.5 rounded-md bg-surface-container px-2.5 py-2 text-xs text-chrome-neutral-400">
             <Info size={14} className="mt-0.5 shrink-0" />
             <span>
-              <span className="block font-medium text-chrome-neutral-300">{note.title}</span>
+              <span dir="auto" className="block font-medium text-chrome-neutral-300">{note.title}</span>
               {note.body}
             </span>
           </div>

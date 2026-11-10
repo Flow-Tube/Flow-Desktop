@@ -11,6 +11,10 @@ const TRACK_LEVEL_KINDS = new Set([
   "privateContent",
   "ageRestricted",
   "accountTerminated",
+  "localFileMissing",
+  "localFileRefused",
+  "localAudioUnsupported",
+  "localVideoUnsupported",
 ]);
 
 /**

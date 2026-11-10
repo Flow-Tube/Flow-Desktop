@@ -89,6 +89,39 @@ pub fn neighbours(
         .collect()
 }
 
+/// A neighbour as the Discover channels page lists it.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscoverableChannel {
+    pub id: String,
+    pub name: String,
+    pub pointer_names: Vec<String>,
+    pub avatar_url: Option<String>,
+}
+
+/// The neighbours worth offering: named, not given up on, with an avatar if an upload carries one.
+#[must_use]
+pub fn discoverable(
+    neighbours: Vec<Neighbour>,
+    stored: &HashMap<String, Stored>,
+) -> Vec<DiscoverableChannel> {
+    neighbours
+        .into_iter()
+        .filter(|n| !n.name.is_empty())
+        .filter(|n| !stored.get(&n.channel_id).is_some_and(|s| s.dropped))
+        .map(|n| DiscoverableChannel {
+            avatar_url: stored
+                .get(&n.channel_id)
+                .into_iter()
+                .flat_map(|s| &s.uploads)
+                .find_map(|card| card.video.channel_avatar_url.clone()),
+            id: n.channel_id,
+            name: n.name,
+            pointer_names: n.pointer_names,
+        })
+        .collect()
+}
+
 /// The named neighbours whose uploads are older than six hours, at most a load's worth.
 #[must_use]
 pub fn refresh_queue<'a>(
@@ -188,6 +221,33 @@ pub async fn drop_off_topic(pool: &SqlitePool, channel_ids: &HashSet<String>) ->
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_named_channels_still_wanted_are_offered() {
+        let neighbour = |id: &str, name: &str| Neighbour {
+            channel_id: id.into(),
+            name: name.into(),
+            pointer_names: vec!["Alpha".into()],
+        };
+        let stored = HashMap::from([(
+            "dropped".to_string(),
+            Stored {
+                dropped: true,
+                ..Stored::default()
+            },
+        )]);
+        let offered = discoverable(
+            vec![
+                neighbour("kept", "Kept"),
+                neighbour("nameless", ""),
+                neighbour("dropped", "Dropped"),
+            ],
+            &stored,
+        );
+        assert_eq!(offered.len(), 1);
+        assert_eq!(offered[0].id, "kept");
+        assert_eq!(offered[0].pointer_names, ["Alpha"]);
+    }
 
     #[test]
     fn a_neighbour_needs_two_of_the_viewers_channels() {

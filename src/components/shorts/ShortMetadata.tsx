@@ -1,5 +1,7 @@
 import { useNavigate } from "react-router-dom";
-import { Music2 } from "lucide-react";
+import { Music2, Play } from "lucide-react";
+import { getString } from "../../lib/i18n/index";
+import { prefetchStreamInfo } from "../../lib/streamResolution";
 import { useChannelAvatar } from "../../lib/useChannelAvatar";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 import { upgradeAvatarUrl } from "../../lib/thumbnails";
@@ -7,6 +9,7 @@ import { formatCount } from "../../lib/utils";
 import { SubscribeButton } from "../ui/SubscribeButton";
 import type { ShortItem } from "../../types/shorts";
 import type { VideoDetails } from "../../types/video";
+import { useOriginalTitle } from "../../lib/useOriginalTitle";
 
 interface ShortMetadataProps {
   short: ShortItem;
@@ -23,7 +26,8 @@ export function ShortMetadata({
   const channelId = short.channelId ?? details?.channelId ?? null;
   const fetchedAvatar = useChannelAvatar(channelId);
   const avatar = useProxiedImageUrl(upgradeAvatarUrl(short.channelAvatarUrl ?? fetchedAvatar));
-  const title = short.title.trim() && short.title !== "Short" ? short.title : details?.title || short.title;
+  const originalTitle = useOriginalTitle(short.id);
+  const title = originalTitle || (short.title.trim() && short.title !== "Short" ? short.title : details?.title || short.title);
   const channelName = short.channelName.trim() || details?.channelName || "Unknown channel";
   const viewText = formatCount(short.viewCountText ?? details?.viewCountText);
   const viewStatText = viewText ? `${viewText} views` : null;
@@ -52,10 +56,10 @@ export function ShortMetadata({
           )}
         </button>
 
-        <button
+        <button dir="auto"
           type="button"
           onClick={openChannel}
-          className="truncate text-left text-lg font-bold text-chrome-neutral-100 hover:text-chrome-white"
+          className="truncate text-lg font-bold text-chrome-neutral-100 hover:text-chrome-white"
         >
           {channelName}
         </button>
@@ -71,9 +75,9 @@ export function ShortMetadata({
         )}
       </div>
 
-      <button
+      <button dir="auto"
         type="button"
-        className="line-clamp-4 text-left text-base leading-relaxed text-chrome-neutral-200 transition-colors hover:text-chrome-white"
+        className="line-clamp-4 text-base leading-relaxed text-chrome-neutral-200 transition-colors hover:text-chrome-white"
         onClick={onOpenDescription}
       >
         {title}
@@ -83,6 +87,22 @@ export function ShortMetadata({
         <span className="w-fit rounded-full bg-chrome-black/60 px-2.5 py-1 text-xs font-semibold text-chrome-neutral-300">
           {viewStatText}
         </span>
+      )}
+
+      {short.linkedVideoId && (
+        <button
+          type="button"
+          onClick={() => {
+            prefetchStreamInfo(short.linkedVideoId!);
+            navigate(`/watch/${short.linkedVideoId}`);
+          }}
+          className="inline-flex w-fit max-w-full items-center gap-2 rounded-full bg-chrome-black/60 px-3 py-1.5 text-xs font-semibold text-chrome-neutral-200 transition-colors duration-200 ease-out hover:bg-chrome-black/80 hover:text-chrome-white"
+        >
+          <Play className="h-3.5 w-3.5 shrink-0" fill="currentColor" />
+          <span className="max-w-[220px] truncate lg:max-w-[240px]">
+            {short.linkedVideoTitle || getString("shorts_linked_video")}
+          </span>
+        </button>
       )}
 
       <div className="inline-flex w-fit items-center gap-2 rounded-full bg-chrome-black/60 px-3 py-1.5 text-xs text-chrome-neutral-300">

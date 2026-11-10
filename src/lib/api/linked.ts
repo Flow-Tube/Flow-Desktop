@@ -9,18 +9,34 @@ export interface LastSync {
   error?: string | null;
 }
 
+export interface RecoveryNotice {
+  /** The device behind the change. */
+  device: string;
+  atMs: number;
+}
+
 export interface LinkedStatus {
   /** The group this device is in: on a Flow server, in a WebDAV folder, or on its devices on the network. */
   kind: "server" | "webdav" | "lan" | null;
   /** Why syncing stopped by itself: the group shut this device out (an `EngineError::kind`). */
-  stopped?: "linkedRemoved" | "linkedSignInRefused" | null;
+  stopped?: "linkedRemoved" | "linkedRemovalUnconfirmed" | "linkedSignInRefused" | null;
   /** The Flow server or WebDAV folder this device syncs with. */
   storeUrl?: string | null;
   /** The WebDAV folder refused its login, so nothing syncs until a new one is entered. */
   loginRefused: boolean;
+  /** A removed device can still reach the WebDAV folder until its login changes. */
+  loginDue: boolean;
+  /** The devices yet to read the login this device sent, while that change is under way. */
+  loginWaiting?: string[] | null;
   /** The keychain hasn't given this device's keys: it waits for access, or access was refused. */
   keychainBlocked: boolean;
   recoverySaved: boolean;
+  /** Words the end of a restore had to make, to show once. */
+  replacedWords?: string | null;
+  /** The recovery key changed from another device, until the user answers. */
+  recoveryNotice: RecoveryNotice | null;
+  /** The device that set the recovery key left: nothing is written until it is replaced. */
+  recoveryDue: boolean;
   lastSync?: LastSync | null;
   /** A run is under way. */
   syncing: boolean;
@@ -31,6 +47,8 @@ export interface LinkedDevice {
   name: string;
   platform: string;
   thisDevice: boolean;
+  /** It set the current recovery key, so its leaving stops the others writing. */
+  setRecoveryKey: boolean;
   /** Met on this network in the last few minutes. */
   nearby: boolean;
   /** When the device last synced, as the server saw it, or as this device last met it on the LAN. */
@@ -135,9 +153,29 @@ export const createWebdavGroup = (url: string, user: string, password: string) =
 export const updateLogin = (user: string, password: string) =>
   invokeBackend<void>("linked_update_login", { user, password });
 
-/** Resolves to the new recovery words, shown once. */
-export const restoreGroup = (url: string, words: string, login?: WebdavLogin) =>
-  invokeBackend<string>("linked_restore", { url, words, login: login ?? null });
+/** Sends the other devices a new login for the folder, before the user sets it there. */
+export const startLoginChange = (user: string, password: string) =>
+  invokeBackend<void>("linked_start_login_change", { user, password });
+
+/** The user set the new login at the provider: checks it, and uses it from now on. */
+export const finishLoginChange = () => invokeBackend<void>("linked_finish_login_change");
+
+export const cancelLoginChange = () => invokeBackend<void>("linked_cancel_login_change");
+
+/** A device a restore asks about. `name` is null when it can't be read. */
+export interface RestoreDevice {
+  did: string;
+  name: string | null;
+  platform: string | null;
+}
+
+/** The group's devices, for the user to choose which to keep. Writes nothing. */
+export const previewRestore = (url: string, words: string, login?: WebdavLogin) =>
+  invokeBackend<RestoreDevice[]>("linked_preview_restore", { url, words, login: login ?? null });
+
+/** Resolves to the new recovery words, shown once. Devices not in `kept` are signed out next. */
+export const restoreGroup = (url: string, words: string, login: WebdavLogin | undefined, kept: string[]) =>
+  invokeBackend<string>("linked_restore", { url, words, login: login ?? null, kept });
 
 export const markRecoverySaved = () => invokeBackend<void>("linked_recovery_saved");
 /** Resolves to the new recovery words, shown once; the old ones stop working. */
@@ -145,11 +183,28 @@ export const replaceRecovery = () => invokeBackend<string>("linked_replace_recov
 /** Asks the keychain again after it refused, and resolves once it answered. */
 export const retryKeychain = () => invokeBackend<void>("linked_retry_keychain");
 export const renameDevice = (id: string, name: string) => invokeBackend<void>("linked_rename", { id, name });
-export const removeDevice = (id: string) => invokeBackend<void>("linked_remove", { id });
+/** Resolves to the new recovery words to show once, when the removal had to replace them. */
+export const removeDevice = (id: string, also: string[] = []) =>
+  invokeBackend<string | null>("linked_remove", { id, also })
+
+/** The current devices `id` added, for the user to remove with it if they don't recognise them. */
+export const devicesAddedBy = (id: string) => invokeBackend<string[]>("linked_added_by", { id })
+
+export const answerRecoveryNotice = () => invokeBackend<void>("linked_answer_recovery_notice");
 /** Tells the group this device leaves, then forgets the group and this device's keys. */
 export const leaveGroup = () => invokeBackend<void>("linked_leave");
 /** Forgets the group and this device's keys without telling the group. */
 export const forgetGroup = () => invokeBackend<void>("linked_forget");
+
+/** One side of a roster where two devices removed each other: `device` removed `removes`. */
+export interface ContestSide {
+  entry: string;
+  device: string;
+  removes: string[];
+}
+
+export const getContest = () => invokeBackend<ContestSide[]>("linked_contest");
+export const keepSide = (entry: string) => invokeBackend<void>("linked_keep_side", { entry });
 /** Resolves to what the run applied, by device. */
 export const syncNow = () => invokeBackend<Received[]>("linked_sync_now");
 export const addDevice = () => invokeBackend<void>("linked_add_device");

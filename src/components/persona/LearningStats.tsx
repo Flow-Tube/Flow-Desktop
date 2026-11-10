@@ -6,11 +6,13 @@ import {
   History,
   Layers,
   ShieldAlert,
+  Smartphone,
   ThumbsDown,
   Tv,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { getString } from "../../lib/i18n/index";
+import { joinIsolated } from "../../lib/direction";
 
 interface LearningStatsProps {
   brain: UserBrain;
@@ -20,6 +22,17 @@ interface StatItem {
   label: string;
   value: number;
   icon: LucideIcon;
+}
+
+const RECENT_QUERY_COUNT = 5;
+
+/** The words behind the discovery searches run most recently, newest first. */
+export function recentDiscoveryQueries(brain: Pick<UserBrain, "recent_query_tokens">): string[] {
+  return (brain.recent_query_tokens ?? [])
+    .slice(-RECENT_QUERY_COUNT)
+    .reverse()
+    .map((tokens) => tokens.join(" "))
+    .filter(Boolean);
 }
 
 function formatStat(value: number) {
@@ -70,7 +83,13 @@ export function LearningStats({ brain }: LearningStatsProps) {
       value: Object.keys(brain.rejection_patterns || {}).length,
       icon: ThumbsDown,
     },
+    {
+      label: getString("persona_stat_shorts_seen"),
+      value: Object.keys(brain.seen_shorts_history || {}).length,
+      icon: Smartphone,
+    },
   ];
+  const recentQueries = recentDiscoveryQueries(brain);
 
   return (
     <section className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full">
@@ -82,8 +101,8 @@ export function LearningStats({ brain }: LearningStatsProps) {
             key={stat.label}
             className="relative min-h-28 rounded-2xl bg-[var(--color-surface-container-low)] border border-[var(--color-outline-variant)] p-4"
           >
-            <Icon className="absolute right-4 top-4 h-5 w-5 text-[var(--color-on-surface-variant)] opacity-70" />
-            <div className="pr-8">
+            <Icon className="absolute end-4 top-4 h-5 w-5 text-[var(--color-on-surface-variant)] opacity-70" />
+            <div className="pe-8">
               <p className="text-xs font-semibold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
                 {stat.label}
               </p>
@@ -94,6 +113,14 @@ export function LearningStats({ brain }: LearningStatsProps) {
           </div>
         );
       })}
+      {recentQueries.length > 0 ? (
+        <div className="col-span-2 flex flex-col gap-2 rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4 md:col-span-3">
+          <p className="text-xs font-semibold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
+            {getString("persona_recent_queries")}
+          </p>
+          <p className="line-clamp-2 text-sm text-[var(--color-on-surface)]">{joinIsolated(recentQueries, " · ")}</p>
+        </div>
+      ) : null}
     </section>
   );
 }

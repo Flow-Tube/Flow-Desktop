@@ -29,8 +29,8 @@ function ItemContent({ icon, label, active, rightElement }: { icon: ReactNode; l
       <span className={`grid w-14 shrink-0 place-items-center ${active ? 'text-[var(--color-primary)]' : ''}`}>
         {icon}
       </span>
-      <span className="sidebar-label min-w-0 flex-1 truncate pr-3 text-left">{label}</span>
-      {rightElement && <span className="sidebar-label ml-auto shrink-0 pr-3">{rightElement}</span>}
+      <span className="sidebar-label min-w-0 flex-1 truncate pe-3 text-start">{label}</span>
+      {rightElement && <span className="sidebar-label ms-auto shrink-0 pe-3">{rightElement}</span>}
     </>
   );
 }

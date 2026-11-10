@@ -17,6 +17,7 @@ export class EqChain {
   readonly output: AudioNode;
   private readonly filters: BiquadFilterNode[];
   private readonly bass: BiquadFilterNode;
+  private readonly boost: GainNode;
 
   constructor(private readonly ctx: BaseAudioContext) {
     this.input = ctx.createGain();
@@ -30,6 +31,7 @@ export class EqChain {
     this.bass.type = "lowshelf";
     this.bass.frequency.value = EqLimits.BASS_BOOST_FREQUENCY;
     this.bass.gain.value = 0;
+    this.boost = ctx.createGain();
 
     // A WaveShaperNode clamps its input to ±1, so the signal goes in scaled down and the curve
     // spans the headroom; below the knee the curve is the identity, so normal levels pass as-is.
@@ -40,11 +42,16 @@ export class EqChain {
     clipper.curve = sharedClipCurve;
 
     let previous: AudioNode = this.input;
-    for (const node of [...this.filters, this.bass, clipIn, clipper]) {
+    for (const node of [...this.filters, this.bass, this.boost, clipIn, clipper]) {
       previous.connect(node);
       previous = node;
     }
     this.output = clipper;
+  }
+
+  /** Gain above full volume. It sits before the soft clipper, which catches what it pushes too far. */
+  setBoost(gain: number): void {
+    this.boost.gain.setTargetAtTime(gain, this.ctx.currentTime, RAMP_TIME_CONSTANT);
   }
 
   apply(spec: EqGraphSpec = EQ_GRAPH_OFF): void {

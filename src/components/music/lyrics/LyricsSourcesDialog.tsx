@@ -4,13 +4,16 @@ import type { LyricsCandidate } from "../../../lib/lyrics/lyricsHelper";
 import { getString } from "../../../lib/i18n/index";
 import { lyricsSourceLabel, OFFLINE_LYRICS_PROVIDER } from "../../../lib/lyrics/offline";
 import { LyricsDialog } from "./LyricsDialog";
+import { joinIsolated } from "../../../lib/direction";
 
 const preview = (candidate: LyricsCandidate): string =>
-  candidate.entries
-    .map((e) => e.text.trim())
-    .filter(Boolean)
-    .slice(0, 2)
-    .join(" · ");
+  joinIsolated(
+    candidate.entries
+      .map((e) => e.text.trim())
+      .filter(Boolean)
+      .slice(0, 2),
+    " · ",
+  );
 
 /** Port of Android's LyricsSourcesSheet: every provider's result as it arrives, with a synced badge. */
 export function LyricsSourcesDialog({
@@ -42,7 +45,7 @@ export function LyricsSourcesDialog({
                 <button
                   type="button"
                   onClick={() => onSelect(candidate)}
-                  className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition-colors duration-200 ease-out ${
+                  className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-start transition-colors duration-200 ease-out ${
                     current ? "bg-surface-container-highest" : "bg-surface-container-high hover:bg-surface-container-highest"
                   }`}
                 >

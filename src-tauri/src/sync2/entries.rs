@@ -8,7 +8,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use super::curve::sign;
 use super::epoch::epoch_commitment;
 use super::keys::{MemberSecrets, member_id};
-use super::roster::{Entry, EpochField, Op, Role, RosterState, Subject, signing_bytes};
+use super::roster::{Cut, Entry, EpochField, Op, Role, RosterState, Subject, signing_bytes};
 
 /// What an entry says, before the chain fields and signatures are added.
 pub struct Draft {
@@ -16,6 +16,7 @@ pub struct Draft {
     pub signer: String,
     pub add: Option<Vec<Subject>>,
     pub remove: Option<Vec<String>>,
+    pub cut: Option<BTreeMap<String, Cut>>,
     pub epoch: Option<EpochField>,
     pub meta: Option<BTreeMap<String, String>>,
 }
@@ -69,6 +70,7 @@ pub fn build_entry(
         signer: draft.signer,
         add: draft.add,
         remove: draft.remove,
+        cut: draft.cut,
         epoch: draft.epoch,
         meta: draft.meta,
         sigs: BTreeMap::new(),

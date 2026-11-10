@@ -44,6 +44,8 @@ interface PlayOnState {
    * cleared once playback comes back here or the device goes offline.
    */
   controlling: string | null;
+  /** The device playback is on its way to; only one move runs at a time. */
+  movingTo: string | null;
   /** The group's devices with their names, loaded once another device can be reached. */
   linked: LinkedDevice[];
   /** Requests waiting until the user allows their sender, oldest first. */
@@ -75,6 +77,11 @@ const waiting = new Map<number, (answer: Answer) => void>();
 /** Answers that arrived before their wait started, as a fast device's can. */
 const early = new Map<number, Answer>();
 
+/** The name the user knows a device by. */
+function deviceName(did: string): string {
+  return usePlayOnStore.getState().linked.find((device) => device.id === did)?.name || getString("play_on_another_device");
+}
+
 function answerFor(request: LiveRequest, ok: boolean, reason?: string): Answer {
   return { type: "result", to: request.from, ref: request.seq, ok, ...(reason ? { reason } : {}) };
 }
@@ -90,7 +97,10 @@ async function act(request: LiveRequest): Promise<void> {
     const sent = usePlayOnStore.getState().status?.devices[request.from]?.now;
     const named = sent?.video === message.video ? { title: sent.title, by: sent.by } : {};
     result = await startSession({ ...message, ...named }, watch).then(
-      () => answerFor(request, true),
+      () => {
+        useUiStore.getState().showToast({ message: getString("play_on_took_over", deviceName(request.from)) });
+        return answerFor(request, true);
+      },
       () => answerFor(request, false, "unavailable"),
     );
   } else if (message.type === "cmd") {
@@ -187,6 +197,7 @@ export const usePlayOnStore = create<PlayOnState>((set, get) => {
     reported: null,
     overrides: {},
     controlling: null,
+    movingTo: null,
     linked: [],
     asking: [],
 
@@ -202,14 +213,21 @@ export const usePlayOnStore = create<PlayOnState>((set, get) => {
     },
 
     pick: async (device) => {
+      if (get().movingTo) return;
       const driven = get().controlling;
-      if (device.thisDevice) return get().pullFrom(driven);
-      if (driven && driven !== device.did) return get().moveTo(device.did);
-      if (!playing()?.playing && device.now?.video) {
+      const movesDriven = driven !== null && driven !== device.did;
+      if (!device.thisDevice && !movesDriven && !playing()?.playing && device.now?.video) {
         get().control(device.did);
         return;
       }
-      return get().transferTo(device.did);
+      set({ movingTo: device.did });
+      try {
+        if (device.thisDevice) await get().pullFrom(driven);
+        else if (movesDriven) await get().moveTo(device.did);
+        else await get().transferTo(device.did);
+      } finally {
+        set({ movingTo: null });
+      }
     },
 
     transferTo: async (did) => {
@@ -265,8 +283,7 @@ export const usePlayOnStore = create<PlayOnState>((set, get) => {
         const { [did]: _, ...rest } = get().overrides;
         show(get().reported, rest);
       }
-      const name = get().linked.find((linked) => linked.id === did)?.name || getString("play_on_another_device");
-      useUiStore.getState().showToast({ variant: "error", message: getString("play_on_control_failed", name) });
+      useUiStore.getState().showToast({ variant: "error", message: getString("play_on_control_failed", deviceName(did)) });
     },
 
     answer: async (choice) => {
@@ -286,15 +303,14 @@ export const usePlayOnStore = create<PlayOnState>((set, get) => {
 
 /** Starts `queue` from `index` on the device controlled, and says so when it refuses. */
 async function playThere(queue: string[], index: number, music: boolean): Promise<void> {
-  const { controlling, linked } = usePlayOnStore.getState();
+  const { controlling } = usePlayOnStore.getState();
   const window = queueWindow(queue, index);
   const video = window.queue[window.index];
   if (!controlling || !video) return;
   try {
     await handOff(controlling, { ...nowOf(null), video, music, queue: window.queue, index: window.index }, 0);
   } catch {
-    const name = linked.find((device) => device.id === controlling)?.name || getString("play_on_another_device");
-    useUiStore.getState().showToast({ variant: "error", message: getString("play_on_control_failed", name) });
+    useUiStore.getState().showToast({ variant: "error", message: getString("play_on_control_failed", deviceName(controlling)) });
   }
 }
 

@@ -10,7 +10,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use flow_desktop_lib::sync2::engine::{EngineError, Session};
 use flow_desktop_lib::sync2::entries::build_entry;
 use flow_desktop_lib::sync2::linking::DeviceMeta;
-use flow_desktop_lib::sync2::membership::{remove_device, rename_device};
+use flow_desktop_lib::sync2::membership::{remove_devices, rename_device};
 use flow_desktop_lib::sync2::meta::seal_device_meta;
 use flow_desktop_lib::sync2::names::device_names;
 use flow_desktop_lib::sync2::roster::Op;
@@ -30,7 +30,7 @@ async fn a_removed_device_is_shut_out_and_the_others_continue() {
     let g = group().await;
     let (pool_a, pool_b) = (device_pool(&g).await, device_pool(&g).await);
     let session = Session::open(&pool_a, &g.store, &g.a).await.unwrap();
-    remove_device(&session, &g.a, &hex::encode(g.b.did))
+    remove_devices(&pool_a, &session, &g.a, &[hex::encode(g.b.did)])
         .await
         .unwrap();
 
@@ -74,7 +74,7 @@ async fn names_come_from_the_latest_entry_and_survive_a_new_epoch() {
         .await
         .unwrap();
     let session = Session::open(&pool_a, &g.store, &g.a).await.unwrap();
-    remove_device(&session, &g.a, &hex::encode(g.b.did))
+    remove_devices(&pool_a, &session, &g.a, &[hex::encode(g.b.did)])
         .await
         .unwrap();
 
@@ -95,7 +95,7 @@ async fn a_signed_name_that_can_not_be_read_is_left_out() {
         .unwrap();
     let not_json = |seq| seal_device_meta(&g.epoch_key, &g.group, 0, seq, &g.a.did, b"name");
     for sealed in [
-        "not base64url!".to_owned(),
+        "A".to_owned(),
         URL_SAFE_NO_PAD.encode([0; 100]),
         URL_SAFE_NO_PAD.encode(not_json(head(&g.store).seq + 1).unwrap()),
     ] {

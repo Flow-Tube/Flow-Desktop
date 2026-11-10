@@ -179,6 +179,7 @@ impl HomeFeedService {
             let mut feed = self.inner.feed.lock().unwrap();
             feed.max_video_age_ms = inputs.max_video_age_ms;
             feed.hides_seen = inputs.hides_seen_videos;
+            feed.subscriptions_kept_off = !inputs.subscriptions_on_home;
         }
         let ((searches, searches_failed), (related_seeds, related)) = tokio::join!(
             self.search_all(&yt, &wave1, now),
@@ -189,7 +190,7 @@ impl HomeFeedService {
 
         let taste = TasteProfile::of(&brain, &classify_persona(&brain));
         let recently_shown = rec.recently_shown().await;
-        let followed = inputs.subscriptions.ids();
+        let followed = inputs.boosted_channels();
         let Local {
             store,
             memory_entries,
@@ -449,7 +450,7 @@ impl HomeFeedService {
         let yt = app.state::<YoutubeService>();
         let rec = app.state::<RecommendationService>();
         let pool = app.state::<SqlitePool>();
-        let followed = after.inputs.subscriptions.ids();
+        let followed = after.inputs.boosted_channels();
         // A newer load replaces this one, and its late work with it.
         let generation = after.generation;
         let current = || self.generation() == generation;
@@ -467,8 +468,15 @@ impl HomeFeedService {
                 .await;
         }
         if current() {
-            self.channel_memory_refresh(app, &yt, &rec, &pool, &after, &followed)
-                .await;
+            self.channel_memory_refresh(
+                app,
+                &yt,
+                &rec,
+                &pool,
+                &after,
+                &after.inputs.subscriptions.ids(),
+            )
+            .await;
         }
         if current() {
             self.neighbour_refresh(&yt, &rec, &pool, &after).await;
@@ -976,7 +984,7 @@ pub(super) async fn local_sources(
         &inputs.watches(),
         &inputs.liked_channels(),
         &memory_entries,
-        followed,
+        &inputs.subscriptions.ids(),
         &brain.blocked_channels,
         &brain.suppressed_channels,
         now,

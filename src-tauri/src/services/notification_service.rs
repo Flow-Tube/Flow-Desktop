@@ -1,13 +1,18 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 #[cfg(not(windows))]
 use tauri_plugin_notification::NotificationExt;
 
 use crate::db;
 use crate::errors::AppResult;
+use crate::models::video::VideoSummary;
+use crate::services::subscription_feed::reels::reel_ids;
 use crate::services::subscription_feed::rss::{fetch_rss, parse_rss_feed};
+use crate::services::youtube_service::YoutubeService;
+
+use crate::services::upcoming_reminders;
 
 pub const NEW_NOTIFICATIONS_EVENT: &str = "notifications://new";
 pub const ACTIVATE_NOTIFICATION_EVENT: &str = "notifications://activate";
@@ -18,6 +23,13 @@ const KEY_SUBSCRIPTIONS: &str = "subscriptions";
 const KEY_CHANNEL_NOTIFICATIONS: &str = "subscription_notifications";
 const KEY_MASTER_ENABLED: &str = "notifications_enabled";
 const KEY_INTERVAL_MINUTES: &str = "notif_check_interval_minutes";
+const KEY_SHORTS_CONTENT: &str = "shorts_content_enabled";
+const KEY_SUBSCRIPTION_SHORTS: &str = "subscription_show_shorts";
+const KEY_NOTIFY_SHORTS: &str = "notif_shorts_enabled";
+
+const KIND_NEW_VIDEO: &str = "NEW_VIDEO";
+const KIND_NEW_SHORT: &str = "NEW_SHORT";
+const MAX_NEW_PER_CHANNEL: usize = 5;
 
 const DEFAULT_INTERVAL_MINUTES: u64 = 360;
 const MIN_INTERVAL_MINUTES: u64 = 15;
@@ -31,13 +43,14 @@ struct StoredSubscription {
     name: Option<String>,
 }
 
-struct PendingNotification {
-    video_id: String,
-    title: String,
-    channel_id: String,
-    channel_name: String,
-    thumbnail_url: Option<String>,
-    published_text: Option<String>,
+pub(crate) struct PendingNotification {
+    pub(crate) video_id: String,
+    pub(crate) title: String,
+    pub(crate) channel_id: Option<String>,
+    pub(crate) channel_name: String,
+    pub(crate) thumbnail_url: Option<String>,
+    pub(crate) published_text: Option<String>,
+    pub(crate) kind: &'static str,
 }
 
 fn now_millis() -> i64 {
@@ -75,53 +88,96 @@ async fn load_enabled_map(pool: &sqlx::SqlitePool) -> HashMap<String, bool> {
     serde_json::from_str::<HashMap<String, bool>>(&json).unwrap_or_default()
 }
 
+async fn setting_is_on(pool: &sqlx::SqlitePool, key: &str) -> bool {
+    !matches!(
+        db::settings::get_setting(pool, key).await,
+        Ok(Some(ref value)) if value == "false"
+    )
+}
+
+/// The uploads newer than the last one announced, newest first: none on a first look at the channel,
+/// and only the latest when the last one has left the feed.
+fn new_entries_since(entries: &[VideoSummary], last_video_id: Option<&str>) -> Vec<VideoSummary> {
+    let Some(last) = last_video_id else {
+        return Vec::new();
+    };
+    match entries.iter().position(|video| video.id == last) {
+        Some(index) => entries[..index.min(MAX_NEW_PER_CHANNEL)].to_vec(),
+        None => entries.iter().take(1).cloned().collect(),
+    }
+}
+
+/// A Short is announced only under both the Shorts switch and the alerts one; an upload not known to
+/// be a Short always is.
+fn should_announce(video: &VideoSummary, reels: &HashSet<String>, announce_shorts: bool) -> bool {
+    announce_shorts || !(video.is_short || reels.contains(&video.id))
+}
+
 async fn check_channel(
+    yt: &YoutubeService,
     client: &reqwest::Client,
     pool: &sqlx::SqlitePool,
     sub: &StoredSubscription,
-) -> AppResult<Option<PendingNotification>> {
+    announce_shorts: bool,
+) -> AppResult<Vec<PendingNotification>> {
     let Ok(xml) = fetch_rss(client, &sub.id).await else {
-        return Ok(None);
+        return Ok(Vec::new());
     };
 
     let feed = parse_rss_feed(&sub.id, &xml);
     let feed_name = feed.channel_name;
+    let unclassified = feed.unclassified;
     // A premiere is announced when it airs, and members-only uploads cannot be played.
-    let Some((_, latest)) = feed
+    let mut uploads: Vec<(i64, VideoSummary)> = feed
         .videos
         .into_iter()
         .filter(|(_, video)| !video.is_members_only && !video.is_upcoming)
-        .max_by_key(|(sort_key, _)| *sort_key)
-    else {
-        return Ok(None);
+        .collect();
+    uploads.sort_by_key(|(published, _)| std::cmp::Reverse(*published));
+    let entries: Vec<VideoSummary> = uploads.into_iter().map(|(_, video)| video).collect();
+    let Some(latest_id) = entries.first().map(|video| video.id.clone()) else {
+        return Ok(Vec::new());
     };
 
     let previous = db::notifications::get_watermark(pool, &sub.id).await?;
-    if previous.as_deref() == Some(latest.id.as_str()) {
-        return Ok(None);
+    if previous.as_deref() == Some(latest_id.as_str()) {
+        return Ok(Vec::new());
     }
 
-    let should_notify = previous.is_some();
-    db::notifications::set_watermark(pool, &sub.id, &latest.id, now_millis()).await?;
-    if !should_notify {
-        return Ok(None);
-    }
+    db::notifications::set_watermark(pool, &sub.id, &latest_id, now_millis()).await?;
+    let fresh = new_entries_since(&entries, previous.as_deref());
+    // The tab is a heavy look, only worth it when a Short would be held back and the feed can't say.
+    let reels = if !announce_shorts && fresh.iter().any(|video| unclassified.contains(&video.id)) {
+        reel_ids(yt, &sub.id).await.unwrap_or_default()
+    } else {
+        HashSet::new()
+    };
 
-    let channel_name = sub
-        .name
-        .clone()
-        .filter(|value| !value.trim().is_empty())
-        .or(feed_name)
-        .unwrap_or_else(|| latest.channel_name.clone());
-
-    Ok(Some(PendingNotification {
-        video_id: latest.id,
-        title: latest.title,
-        channel_id: sub.id.clone(),
-        channel_name,
-        thumbnail_url: latest.thumbnail_url,
-        published_text: latest.published_text,
-    }))
+    Ok(fresh
+        .into_iter()
+        .filter(|video| should_announce(video, &reels, announce_shorts))
+        .map(|video| {
+            let channel_name = sub
+                .name
+                .clone()
+                .filter(|value| !value.trim().is_empty())
+                .or_else(|| feed_name.clone())
+                .unwrap_or_else(|| video.channel_name.clone());
+            PendingNotification {
+                kind: if video.is_short {
+                    KIND_NEW_SHORT
+                } else {
+                    KIND_NEW_VIDEO
+                },
+                video_id: video.id,
+                title: video.title,
+                channel_id: Some(sub.id.clone()),
+                channel_name,
+                thumbnail_url: video.thumbnail_url,
+                published_text: video.published_text,
+            }
+        })
+        .collect())
 }
 
 #[cfg(windows)]
@@ -197,32 +253,54 @@ pub async fn poll_subscriptions(app: &AppHandle, pool: &sqlx::SqlitePool) -> App
     }
 
     let client = crate::api::http::shared_client();
+    let yt = app.state::<YoutubeService>();
+    let announce_shorts = setting_is_on(pool, KEY_SHORTS_CONTENT).await
+        && setting_is_on(pool, KEY_SUBSCRIPTION_SHORTS).await
+        && setting_is_on(pool, KEY_NOTIFY_SHORTS).await;
     let mut pending: Vec<PendingNotification> = Vec::new();
+    let mut seen = HashSet::new();
     for chunk in targets.chunks(CHANNEL_CHUNK) {
-        let fetches = chunk.iter().map(|sub| check_channel(client, pool, sub));
+        let fetches = chunk
+            .iter()
+            .map(|sub| check_channel(&yt, client, pool, sub, announce_shorts));
         for result in futures_util::future::join_all(fetches).await {
             match result {
-                Ok(Some(entry)) => pending.push(entry),
-                Ok(None) => {}
+                // A collaboration two followed channels both list must still notify once.
+                Ok(entries) => pending.extend(
+                    entries
+                        .into_iter()
+                        .filter(|entry| seen.insert(entry.video_id.clone())),
+                ),
                 Err(error) => tracing::warn!(%error, "Subscription channel check failed"),
             }
         }
     }
 
+    deliver(app, pool, &pending).await
+}
+
+/// Keeps these in the inbox, tells the page and shows them as system notifications.
+pub(crate) async fn deliver(
+    app: &AppHandle,
+    pool: &sqlx::SqlitePool,
+    pending: &[PendingNotification],
+) -> AppResult<usize> {
     if pending.is_empty() {
         return Ok(0);
     }
 
+    let client = crate::api::http::shared_client();
     let created_at = now_millis();
     let mut created: Vec<db::notifications::NotificationRecord> = Vec::with_capacity(pending.len());
-    for entry in &pending {
+    for entry in pending {
         let record = db::notifications::NewNotification {
             video_id: entry.video_id.clone(),
             title: entry.title.clone(),
-            channel_id: Some(entry.channel_id.clone()),
+            channel_id: entry.channel_id.clone(),
             channel_name: entry.channel_name.clone(),
             thumbnail_url: entry.thumbnail_url.clone(),
             published_text: entry.published_text.clone(),
+            kind: entry.kind,
             created_at,
         };
         match db::notifications::insert_notification(pool, &record).await {
@@ -234,7 +312,7 @@ pub async fn poll_subscriptions(app: &AppHandle, pool: &sqlx::SqlitePool) -> App
                 channel_name: record.channel_name,
                 thumbnail_url: record.thumbnail_url,
                 published_text: record.published_text,
-                kind: "NEW_VIDEO".to_string(),
+                kind: record.kind.to_string(),
                 is_read: false,
                 created_at,
             }),
@@ -249,7 +327,7 @@ pub async fn poll_subscriptions(app: &AppHandle, pool: &sqlx::SqlitePool) -> App
     if let Err(error) = app.emit(NEW_NOTIFICATIONS_EVENT, &created) {
         tracing::warn!(%error, "Failed to emit new-notifications event");
     }
-    post_native_toast(app, client, &pending).await;
+    post_native_toast(app, client, pending).await;
 
     Ok(created.len())
 }
@@ -257,6 +335,7 @@ pub async fn poll_subscriptions(app: &AppHandle, pool: &sqlx::SqlitePool) -> App
 /// Spawns the resident poll loop. Reads the interval from settings each cycle so
 /// changes take effect on the next pass without a restart.
 pub fn spawn_poll_loop(app: AppHandle, pool: sqlx::SqlitePool) {
+    upcoming_reminders::spawn_loop(app.clone(), pool.clone());
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(Duration::from_secs(STARTUP_DELAY_SECS)).await;
         loop {
@@ -271,4 +350,56 @@ pub fn spawn_poll_loop(app: AppHandle, pool: sqlx::SqlitePool) {
             tokio::time::sleep(Duration::from_secs(minutes.saturating_mul(60))).await;
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn video(id: &str) -> VideoSummary {
+        VideoSummary {
+            id: id.to_string(),
+            ..VideoSummary::default()
+        }
+    }
+
+    fn ids(videos: &[VideoSummary]) -> Vec<&str> {
+        videos.iter().map(|video| video.id.as_str()).collect()
+    }
+
+    #[test]
+    fn a_first_look_announces_nothing_and_a_later_one_what_came_since() {
+        let entries = [video("c"), video("b"), video("a")];
+        assert!(new_entries_since(&entries, None).is_empty());
+        assert!(new_entries_since(&entries, Some("c")).is_empty());
+        assert_eq!(ids(&new_entries_since(&entries, Some("a"))), ["c", "b"]);
+    }
+
+    #[test]
+    fn a_last_upload_gone_from_the_feed_announces_only_the_latest() {
+        let entries = [video("c"), video("b")];
+        assert_eq!(ids(&new_entries_since(&entries, Some("gone"))), ["c"]);
+    }
+
+    #[test]
+    fn a_burst_is_capped() {
+        let entries: Vec<VideoSummary> = (0..9).map(|i| video(&format!("v{i}"))).collect();
+        assert_eq!(
+            new_entries_since(&entries, Some("v8")).len(),
+            MAX_NEW_PER_CHANNEL
+        );
+    }
+
+    #[test]
+    fn shorts_are_held_back_unless_both_switches_allow_them() {
+        let mut short = video("short");
+        short.is_short = true;
+        let plain = video("plain");
+        let tab_says = video("reel");
+        let reels = HashSet::from(["reel".to_string()]);
+        assert!(should_announce(&short, &reels, true));
+        assert!(!should_announce(&short, &reels, false));
+        assert!(!should_announce(&tab_says, &reels, false));
+        assert!(should_announce(&plain, &reels, false));
+    }
 }

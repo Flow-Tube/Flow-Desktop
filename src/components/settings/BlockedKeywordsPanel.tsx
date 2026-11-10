@@ -61,11 +61,7 @@ export function BlockedKeywordsPanel() {
         </Button>
       </div>
 
-      {keywords.length === 0 ? (
-        <p className="text-xs text-chrome-neutral-500">
-          {getString("settings_blocked_keywords_empty")}
-        </p>
-      ) : (
+      {keywords.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {keywords.map((keyword) => (
             <span
@@ -75,7 +71,7 @@ export function BlockedKeywordsPanel() {
               {keyword}
               <button
                 type="button"
-                aria-label={`Remove ${keyword}`}
+                aria-label={getString("blocked_keyword_remove", keyword)}
                 onClick={() => removeBlockedKeyword(keyword)}
                 className="text-chrome-neutral-500 transition-colors hover:text-chrome-neutral-200"
               >

@@ -1,7 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { getString } from "../lib/i18n/index";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
+import { AddAllToPlaylistDialog } from "../components/playlist/AddAllToPlaylistDialog";
 import { PlaylistAmbientHeader } from "../components/playlist/PlaylistAmbientHeader";
+import { PlaylistFormDialog } from "../components/playlist/PlaylistFormDialog";
+import { addVideosToQueueWithToast, PlaylistSelectionActions } from "../components/playlist/PlaylistSelectionActions";
 import { PlaylistLoadMore } from "../components/playlist/PlaylistLoadMore";
 import { PlaylistSortableList } from "../components/playlist/PlaylistSortableList";
 import {
@@ -13,16 +17,26 @@ import {
   type PlaylistSortOrder,
 } from "../lib/playlistSort";
 import {
+  formatVideoCountText,
   isProtectedPlaylistId,
   removePlaylistFromLibrary,
   savePlaylistToLibrary,
+  updateStoredPlaylistDetails,
   updateStoredPlaylistTracks,
+  WATCH_LATER_PLAYLIST_ID,
 } from "../lib/playlistLibrary";
+import { sweepWatchedFromWatchLater } from "../lib/watchLaterCleanup";
+import { videoToFileEntry } from "../lib/playlistFile";
+import { filterVideosBySearch } from "../lib/playlistSearch";
+import { savePlaylistWhenLoaded } from "../lib/playlistTransfer";
+import { useDebounce } from "../lib/useDebounce";
+import { useMultiSelect } from "../lib/useMultiSelect";
 import { usePlaylistDetails } from "../lib/usePlaylistDetails";
 import { usePublishTitle } from "../lib/usePublishTitle";
 import { useCollectionDownloadState } from "../lib/useCollectionDownloads";
 import { youtubePlaylistUrl } from "../lib/youtubeUrl";
 import { copyText } from "../lib/clipboard";
+import { confirmPlaylistRemoval } from "../lib/confirmPlaylistRemoval";
 import { fisherYates } from "../lib/musicShuffle";
 import { usePlayerStore } from "../store/usePlayerStore";
 import { useDownloadStore } from "../store/useDownloadStore";
@@ -42,7 +56,6 @@ export function PlaylistDetailsPage({
   const playlistId = playlistIdOverride ?? params.playlistId;
   const navigate = useNavigate();
   const setQueue = usePlayerStore((state) => state.setQueue);
-  const addToQueue = usePlayerStore((state) => state.addToQueue);
   const showToast = useUiStore((state) => state.showToast);
 
   const {
@@ -57,6 +70,8 @@ export function PlaylistDetailsPage({
     loadMore,
     loadAllVideos,
     setVideos,
+    applyDetails,
+    hidesUnavailable,
   } = usePlaylistDetails(playlistId);
   usePublishTitle(meta?.title);
 
@@ -64,9 +79,14 @@ export function PlaylistDetailsPage({
     playlistId ? loadPlaylistSortOrder(playlistId) : null,
   );
   const [savedInLibrary, setSavedInLibrary] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const appliedSearch = useDebounce(searchQuery, 150);
+  const [editing, setEditing] = useState(false);
+  const [addingAll, setAddingAll] = useState(false);
 
   useEffect(() => {
     setStoredSortOrder(playlistId ? loadPlaylistSortOrder(playlistId) : null);
+    setSearchQuery("");
   }, [playlistId]);
 
   useEffect(() => {
@@ -85,14 +105,26 @@ export function PlaylistDetailsPage({
   const isLocalPlaylist = savedInLibrary || isProtected;
   const sortOrder = resolvePlaylistSortOrder(storedSortOrder, isLocalPlaylist);
 
-  // Sorting by date or popularity is only right over the whole playlist.
+  // Sorting by date or popularity and searching are only right over the whole playlist.
+  const needsWholePlaylist = sortOrder !== "manual" || appliedSearch.trim() !== "";
   useEffect(() => {
-    if (sortOrder !== "manual" && hasMore) void loadAllVideos().catch(() => undefined);
-  }, [sortOrder, hasMore, loadAllVideos]);
+    if (needsWholePlaylist && hasMore) void loadAllVideos().catch(() => undefined);
+  }, [needsWholePlaylist, hasMore, loadAllVideos]);
 
   const displayVideos = useMemo(
     () => sortPlaylistVideos(videos, sortOrder, isProtected),
     [videos, sortOrder, isProtected],
+  );
+  const shownVideos = useMemo(
+    () => filterVideosBySearch(displayVideos, appliedSearch),
+    [displayVideos, appliedSearch],
+  );
+
+  const shownIds = useMemo(() => shownVideos.map((video) => video.id), [shownVideos]);
+  const selection = useMultiSelect(shownIds);
+  const selectedVideos = useMemo(
+    () => shownVideos.filter((video) => selection.selectedIds.has(video.id)),
+    [shownVideos, selection.selectedIds],
   );
 
   const leadVideo = videos[0];
@@ -115,6 +147,49 @@ export function PlaylistDetailsPage({
     });
   };
 
+  // Watched elsewhere since this list was last open.
+  const swept = useRef(false);
+  useEffect(() => {
+    if (playlistId !== WATCH_LATER_PLAYLIST_ID || loading || swept.current) return;
+    swept.current = true;
+    void sweepWatchedFromWatchLater(videos, handleTracksChanged);
+    // Once per visit, over what the page first loaded.
+  }, [playlistId, loading]);
+
+  const handleExport = async () => {
+    if (!meta) return;
+    await savePlaylistWhenLoaded(async () => ({
+      name: meta.title,
+      description: isOwned ? meta.description ?? "" : "",
+      isMusic: false,
+      videos: (hasMore ? await loadAllVideos() : videos).map(videoToFileEntry),
+    }));
+  };
+
+  const handleSaveDetails = async (name: string, description: string) => {
+    if (!meta) return;
+    try {
+      const updated = await updateStoredPlaylistDetails(meta.id, name, description);
+      if (!updated) throw new Error("Playlist not found");
+      applyDetails(updated);
+      setEditing(false);
+    } catch (saveError) {
+      console.error("Failed to edit playlist", saveError);
+      showToast({ variant: "error", message: getString("playlist_edit_failed") });
+    }
+  };
+
+  const handleTracksChanged = (tracks: VideoSummary[]) => {
+    setVideos(tracks);
+    if (storedPlaylist) {
+      applyDetails({
+        ...storedPlaylist,
+        videoCount: tracks.length,
+        videoCountText: formatVideoCountText(tracks.length),
+      });
+    }
+  };
+
   const handleReorder = async (nextVideos: VideoSummary[]) => {
     setVideos(nextVideos);
     if (storedPlaylist) {
@@ -122,39 +197,26 @@ export function PlaylistDetailsPage({
     }
   };
 
-  const handleAddAllToQueue = () => {
-    if (displayVideos.length === 0) return;
-    let added = 0;
-    for (const video of displayVideos) {
-      if (addToQueue(video) === "added") added += 1;
-    }
-    showToast({
-      variant: added > 0 ? "success" : "info",
-      message:
-        added > 0
-          ? `Added ${added} ${added === 1 ? "video" : "videos"} to queue`
-          : "Already in your queue",
-    });
-  };
-
   const handleCopyLink = async () => {
     if (!meta) return;
     if (await copyText(youtubePlaylistUrl(meta.id))) {
-      showToast({ variant: "success", message: "Playlist link copied" });
+      showToast({ variant: "success", message: getString('playlist_playlist_link_copied') });
     } else {
-      showToast({ variant: "error", message: "Could not copy link" });
+      showToast({ variant: "error", message: getString('playlist_could_not_copy_link') });
     }
   };
 
+  const librarySummary = (): PlaylistSummary | null => meta && {
+    type: "playlist",
+    id: meta.id,
+    title: meta.title,
+    thumbnailUrl: heroThumbnailUrl ?? meta.thumbnailUrl ?? null,
+    videoCountText: meta.videoCountText,
+  };
+
   const handleSaveToLibrary = async () => {
-    if (!meta) return;
-    const summary: PlaylistSummary = {
-      type: "playlist",
-      id: meta.id,
-      title: meta.title,
-      thumbnailUrl: heroThumbnailUrl ?? meta.thumbnailUrl ?? null,
-      videoCountText: meta.videoCountText,
-    };
+    const summary = librarySummary();
+    if (!meta || !summary) return;
     try {
       const playlists = await savePlaylistToLibrary(summary);
       const saved = playlists.find((playlist) => playlist.id === meta.id);
@@ -166,16 +228,14 @@ export function PlaylistDetailsPage({
       });
     } catch (saveError) {
       console.error("Failed to save playlist to library", saveError);
-      showToast({ variant: "error", message: "Could not save playlist" });
+      showToast({ variant: "error", message: getString('playlist_could_not_save_playlist') });
     }
   };
 
   const handleRemoveFromLibrary = async () => {
-    if (!meta || isProtected) return;
-    const confirmMessage = isOwned
-      ? `Delete "${meta.title}"? This can't be undone.`
-      : `Remove "${meta.title}" from your library?`;
-    if (!window.confirm(confirmMessage)) return;
+    const summary = librarySummary();
+    if (!meta || !summary || isProtected) return;
+    if (!await confirmPlaylistRemoval(summary, isOwned)) return;
 
     try {
       await removePlaylistFromLibrary(meta.id);
@@ -189,7 +249,7 @@ export function PlaylistDetailsPage({
       navigate("/playlists");
     } catch (removeError) {
       console.error("Failed to remove playlist from library", removeError);
-      showToast({ variant: "error", message: "Could not update library" });
+      showToast({ variant: "error", message: getString('playlist_could_not_update_library') });
     }
   };
 
@@ -220,7 +280,7 @@ export function PlaylistDetailsPage({
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4">
         <Loader2 className="animate-spin text-[var(--color-primary)]" size={36} />
-        <p className="text-sm font-medium text-chrome-neutral-500">Loading playlist...</p>
+        <p className="text-sm font-medium text-chrome-neutral-500">{getString('playlist_loading_playlist')}</p>
       </div>
     );
   }
@@ -253,10 +313,14 @@ export function PlaylistDetailsPage({
           onDownload={() => void handleDownloadPlaylist()}
           downloadActive={downloadState.active}
           downloadComplete={downloadState.isComplete}
-          onAddToQueue={handleAddAllToQueue}
+          onAddToQueue={() => addVideosToQueueWithToast(displayVideos)}
           onCopyLink={handleCopyLink}
           onSaveToLibrary={handleSaveToLibrary}
           onRemoveFromLibrary={handleRemoveFromLibrary}
+          onEdit={() => setEditing(true)}
+          onAddAll={() => setAddingAll(true)}
+          onExport={() => void handleExport()}
+          hidesUnavailable={hidesUnavailable}
           isSaved={savedInLibrary}
           isProtected={isProtected}
           isOwned={isOwned}
@@ -264,13 +328,30 @@ export function PlaylistDetailsPage({
 
         <PlaylistSortableList
           videos={videos}
-          displayVideos={displayVideos}
+          displayVideos={shownVideos}
           sortOrder={sortOrder}
           sortOptions={availablePlaylistSortOrders(isLocalPlaylist)}
           onSortChange={handleSortChange}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
           onReorder={handleReorder}
           onPlay={playFromPlaylist}
           onAddToQueue={onAddToQueue}
+          selecting={selection.selecting}
+          selectedIds={selection.selectedIds}
+          onToggleSelected={selection.toggle}
+          onStartSelecting={selection.start}
+          selectionBar={
+            <PlaylistSelectionActions
+              playlistId={meta.id}
+              editable={editable}
+              selected={selectedVideos}
+              allSelected={selection.allSelected}
+              onToggleAll={() => selection.toggleAll(shownIds)}
+              onDone={selection.stop}
+              onTracksChanged={handleTracksChanged}
+            />
+          }
           footer={
             <PlaylistLoadMore
               hasMore={hasMore}
@@ -281,6 +362,24 @@ export function PlaylistDetailsPage({
           }
         />
       </div>
+
+      {editing && (
+        <PlaylistFormDialog
+          title={getString("playlist_edit")}
+          confirmLabel={getString("save")}
+          initialName={meta.title}
+          initialDescription={meta.description ?? ""}
+          onSubmit={handleSaveDetails}
+          onCancel={() => setEditing(false)}
+        />
+      )}
+      {addingAll && (
+        <AddAllToPlaylistDialog
+          excludePlaylistId={meta.id}
+          loadVideos={() => (hasMore ? loadAllVideos() : Promise.resolve(videos))}
+          onClose={() => setAddingAll(false)}
+        />
+      )}
     </div>
   );
 }

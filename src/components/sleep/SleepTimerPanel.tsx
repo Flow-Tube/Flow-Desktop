@@ -12,9 +12,9 @@ export type SleepTimerTone = "video" | "music";
 
 const ROW: Record<SleepTimerTone, string> = {
   video:
-    "flex h-10 w-full items-center justify-between gap-3 rounded-md px-3 text-left text-sm font-medium text-chrome-zinc-100 hover:bg-chrome-white/10",
+    "flex h-10 w-full items-center justify-between gap-3 rounded-md px-3 text-start text-sm font-medium text-chrome-zinc-100 hover:bg-chrome-white/10",
   music:
-    "flex h-10 w-full items-center justify-between gap-3 rounded-md px-3 text-left text-sm font-medium text-chrome-neutral-100 hover:bg-surface-container-highest",
+    "flex h-10 w-full items-center justify-between gap-3 rounded-md px-3 text-start text-sm font-medium text-chrome-neutral-100 hover:bg-surface-container-highest",
 };
 
 const MUTED: Record<SleepTimerTone, string> = {

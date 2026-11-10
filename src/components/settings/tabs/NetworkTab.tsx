@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { SettingsGroup } from '../SettingsGroup';
+import { CacheGroup } from './CacheGroup';
 import { SettingItem } from '../SettingItem';
 import { ToggleSwitch } from '../../ui/ToggleSwitch';
 import { Select } from '../../ui/Select';
@@ -15,7 +16,6 @@ export function NetworkTab() {
   const [maxBuffer, setMaxBuffer] = useNumberPref(SETTINGS.MAX_BUFFER_MS, 50000);
   const [playbackBuffer, setPlaybackBuffer] = useNumberPref(SETTINGS.BUFFER_FOR_PLAYBACK_MS, 2500);
   const [rebufferBuffer, setRebufferBuffer] = useNumberPref(SETTINGS.BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS, 5000);
-  const [cacheSize, setCacheSize] = useNumberPref(SETTINGS.MEDIA_CACHE_SIZE_MB, 500);
   const [remoteSignatures, setRemoteSignatures] = useBoolPref(SETTINGS.REMOTE_SIGNATURE_FALLBACK, false);
   const [proxyEnabled, setProxyEnabled] = useBoolPref(SETTINGS.PROXY_ENABLED, false);
   const [proxyType, setProxyType] = usePreference(SETTINGS.PROXY_TYPE, 'http');
@@ -66,14 +66,7 @@ export function NetworkTab() {
         </SettingsGroup>
       )}
 
-      <SettingsGroup title={getString('settings_group_cache')}>
-        <SettingItem title={getString('settings_media_cache_limit')} description={getString('settings_media_cache_limit_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.MEDIA_CACHE_SIZE_MB)}>
-          <Select value={String(cacheSize)} onChange={(v) => setCacheSize(Number(v))} disabled={isSettingDisabledUntilWired(SETTINGS.MEDIA_CACHE_SIZE_MB)} options={[
-            { value: '100', label: '100 MB' }, { value: '200', label: '200 MB' }, { value: '500', label: '500 MB' },
-            { value: '1000', label: '1 GB' }, { value: '2000', label: '2 GB' }, { value: '0', label: getString('settings_option_unlimited') },
-          ]} />
-        </SettingItem>
-      </SettingsGroup>
+      <CacheGroup />
 
       <SettingsGroup title={getString('settings_group_playback_sources')}>
         <SettingItem title={getString('settings_remote_signature_fallback')} description={getString('settings_remote_signature_fallback_desc')}>

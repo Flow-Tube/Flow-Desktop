@@ -22,11 +22,16 @@ const api = vi.hoisted(() => ({
   onLinkPhase: vi.fn(),
   onSynced: vi.fn(),
   removeDevice: vi.fn(),
+  answerRecoveryNotice: vi.fn(),
   renameDevice: vi.fn(),
+  previewRestore: vi.fn(),
   restoreGroup: vi.fn(),
   retryKeychain: vi.fn(),
   syncNow: vi.fn(),
   updateLogin: vi.fn(),
+  startLoginChange: vi.fn(),
+  finishLoginChange: vi.fn(),
+  cancelLoginChange: vi.fn(),
 }));
 vi.mock("../lib/api/linked", () => api);
 const confirmAction = vi.hoisted(() => vi.fn());
@@ -70,11 +75,33 @@ describe("useLinkedDevicesStore", () => {
   it("shows a backend failure as its translated message and clears busy", async () => {
     api.restoreGroup.mockRejectedValue({ kind: "linkedWrongWords", message: "these recovery words are not valid" });
 
-    await useLinkedDevicesStore.getState().restore("https://sync.example.com", "nope");
+    await useLinkedDevicesStore.getState().restore("https://sync.example.com", "nope", undefined, []);
     const state = useLinkedDevicesStore.getState();
     expect(state.error).toBe("These recovery words aren't valid. Check the spelling and the order.");
     expect(state.busy).toBe(false);
     expect(state.words).toBeNull();
+  });
+
+  it("asks which devices to keep before restoring, and restores keeping only those", async () => {
+    const devices = [{ did: "aa", name: "Phone", platform: "android" }];
+    api.previewRestore.mockResolvedValue(devices);
+    api.restoreGroup.mockResolvedValue(WORDS);
+    const store = useLinkedDevicesStore.getState();
+
+    await store.previewRestore("https://sync.example.com", "words");
+    expect(useLinkedDevicesStore.getState().restoreDevices).toEqual(devices);
+    expect(api.restoreGroup).not.toHaveBeenCalled();
+
+    await store.restore("https://sync.example.com", "words", undefined, []);
+    expect(api.restoreGroup).toHaveBeenCalledWith("https://sync.example.com", "words", undefined, []);
+    expect(useLinkedDevicesStore.getState().restoreDevices).toBeNull();
+    expect(useLinkedDevicesStore.getState().words).toBe(WORDS);
+  });
+
+  it("shows words the end of a restore had to make", async () => {
+    api.getLinkedStatus.mockResolvedValue({ ...LINKED, recoverySaved: false, replacedWords: WORDS });
+    await useLinkedDevicesStore.getState().refresh();
+    expect(useLinkedDevicesStore.getState().words).toBe(WORDS);
   });
 
   it("asks the keychain again, and says it is still waiting when macOS has not answered", async () => {
@@ -157,5 +184,18 @@ describe("useLinkedDevicesStore", () => {
     await useLinkedDevicesStore.getState().create("https://sync.example.com", "admin", true);
     expect(api.createGroup).toHaveBeenLastCalledWith("https://sync.example.com", "admin", true);
     expect(useLinkedDevicesStore.getState()).toMatchObject({ serverTaken: false, words: WORDS });
+  });
+
+  it("shows the new words when removing a device replaced them", async () => {
+    api.removeDevice.mockResolvedValue("new words");
+    await useLinkedDevicesStore.getState().remove("a", ["b"]);
+    expect(api.removeDevice).toHaveBeenCalledWith("a", ["b"]);
+    expect(useLinkedDevicesStore.getState().words).toBe("new words");
+  });
+
+  it("shows no words when a removal left the recovery key alone", async () => {
+    api.removeDevice.mockResolvedValue(null);
+    await useLinkedDevicesStore.getState().remove("a");
+    expect(useLinkedDevicesStore.getState().words).toBeNull();
   });
 });

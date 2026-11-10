@@ -3,6 +3,7 @@ import { ShelfScroller } from "../ui/ShelfScroller";
 import type { ShortVideoSummary, VideoSummary } from "../../types/video";
 import { useAppSettingsStore } from "../../store/useAppSettingsStore";
 import { SETTINGS } from "../../lib/settings/schema";
+import { useShortsEnabled } from "../../lib/useShortsContent";
 import { ShortCard } from "../shorts/ShortCard";
 
 interface ShortsShelfProps {
@@ -19,14 +20,15 @@ export const ShortsShelf: React.FC<ShortsShelfProps> = ({
   shorts,
 }) => {
   const shortsShelfEnabled = useAppSettingsStore((state) => state.values[SETTINGS.SHORTS_SHELF_ENABLED] !== "false");
-  if (!shortsShelfEnabled || !shorts || shorts.length === 0) return null;
+  const shortsEnabled = useShortsEnabled();
+  if (!shortsShelfEnabled || !shortsEnabled || !shorts?.length) return null;
 
   return (
     <div className="relative flex flex-col gap-4 py-4 border-b border-chrome-zinc-900 last:border-0">
       {/* Shelf Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold text-chrome-zinc-100 tracking-tight flex items-center gap-2">
-          <span>{title}</span>
+          <span dir="auto">{title}</span>
           <span className="text-xs text-chrome-zinc-500 font-semibold bg-chrome-zinc-900 border border-chrome-zinc-800/80 px-2 py-0.5 rounded-full">
             {shorts.length}
           </span>

@@ -112,7 +112,7 @@ export function VolumePopover({
             aria-label={getString("music_volume")}
             className="flex-1"
           />
-          <span className="w-8 shrink-0 text-right font-mono text-xs tabular-nums text-chrome-neutral-400">
+          <span className="w-8 shrink-0 text-end font-mono text-xs tabular-nums text-chrome-neutral-400">
             {Math.round(shown * 100)}
           </span>
         </motion.div>

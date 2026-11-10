@@ -1,8 +1,8 @@
 //! A group on a store that its devices also sync over the LAN (spec/live.md, LAN groups: "Groups
 //! on a store sync the same way"). Everything read from or written to the store is also held, as
 //! a LAN group holds it, so it can be served to members on the LAN. While the store is out of
-//! reach, reads and listings come from what is held, and new objects wait to be uploaded. Roster
-//! appends still need the store, which orders them.
+//! reach, reads and listings come from what is held, and new objects wait to be uploaded, as they
+//! do while the store refuses one. Roster appends still need the store, which orders them.
 
 use std::collections::BTreeMap;
 
@@ -78,6 +78,16 @@ impl<S: Store> HybridStore<S> {
 }
 
 impl<S> HybridStore<S> {
+    /// Objects go up in the order they were written, since readers stop at a gap in a log.
+    async fn upload_later(&self, path: &str) -> Result<()> {
+        sqlx::query("INSERT OR IGNORE INTO sync2_pending (path) VALUES (?)")
+            .bind(path)
+            .execute(&self.pool)
+            .await
+            .map_err(StoreError::Local)?;
+        Ok(())
+    }
+
     async fn held_above(
         &self,
         read: &BTreeMap<String, u64>,
@@ -94,6 +104,10 @@ impl<S> HybridStore<S> {
 }
 
 impl<S: Store + Sync> Store for HybridStore<S> {
+    async fn store_answers(&self) -> Result<()> {
+        self.store.roster_after(0).await.map(|_| ())
+    }
+
     async fn roster_after(&self, after: i64) -> Result<Vec<Entry>> {
         match self.store.roster_after(after).await {
             Ok(entries) => {
@@ -103,6 +117,20 @@ impl<S: Store + Sync> Store for HybridStore<S> {
                 Ok(entries)
             }
             Err(error) if unreachable(&error) => self.held.roster_after(after).await,
+            Err(error) => Err(error),
+        }
+    }
+
+    /// The server's answer decides while it answers. What arrived from LAN peers stays held.
+    async fn roster_view(&self) -> Result<Vec<Entry>> {
+        match self.store.roster_view().await {
+            Ok(entries) => {
+                for entry in &entries {
+                    self.held.hold_entry(entry).await?;
+                }
+                Ok(entries)
+            }
+            Err(error) if unreachable(&error) => self.held.roster_view().await,
             Err(error) => Err(error),
         }
     }
@@ -123,27 +151,41 @@ impl<S: Store + Sync> Store for HybridStore<S> {
         Ok(appended)
     }
 
-    async fn key(&self, epoch: u32, name: &str) -> Result<Option<Vec<u8>>> {
-        if let Some(bytes) = self.held.key(epoch, name).await? {
+    async fn key(&self, epoch: u32, kc: &str, name: &str) -> Result<Option<Vec<u8>>> {
+        if let Some(bytes) = self.held.key(epoch, kc, name).await? {
             return Ok(Some(bytes));
         }
-        let fetched = self.store.key(epoch, name).await?;
-        if let Some(bytes) = &fetched {
-            self.held.hold_key(epoch, name, bytes).await?;
-        }
-        Ok(fetched)
+        self.store.key(epoch, kc, name).await
+    }
+
+    async fn keep_key(&self, epoch: u32, kc: &str, name: &str, bytes: &[u8]) -> Result<()> {
+        self.held.hold_key(epoch, kc, name, bytes).await
+    }
+
+    async fn drop_key(&self, epoch: u32, kc: &str, name: &str) -> Result<()> {
+        self.held.forget_key(epoch, kc, name).await
+    }
+
+    async fn keep_object(&self, path: &str, bytes: &[u8]) -> Result<()> {
+        self.held.put_object(path, bytes.to_vec()).await
+    }
+
+    async fn drop_object(&self, path: &str) -> Result<()> {
+        self.held.delete_object(path).await.map(|_| ())
     }
 
     async fn put_object(&self, path: &str, bytes: Vec<u8>) -> Result<()> {
         self.held.put_object(path, bytes.clone()).await?;
+        let waiting: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sync2_pending")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(StoreError::Local)?;
+        if waiting > 0 {
+            return self.upload_later(path).await;
+        }
         match self.store.put_object(path, bytes).await {
-            Err(error) if unreachable(&error) => {
-                sqlx::query("INSERT OR IGNORE INTO sync2_pending (path) VALUES (?)")
-                    .bind(path)
-                    .execute(&self.pool)
-                    .await
-                    .map_err(StoreError::Local)?;
-                Ok(())
+            Err(error) if unreachable(&error) || error.refused_write() => {
+                self.upload_later(path).await
             }
             other => other,
         }
@@ -153,11 +195,7 @@ impl<S: Store + Sync> Store for HybridStore<S> {
         if let Some(bytes) = self.held.get_object(path).await? {
             return Ok(Some(bytes));
         }
-        let fetched = self.store.get_object(path).await?;
-        if let Some(bytes) = &fetched {
-            self.held.put_object(path, bytes.clone()).await?;
-        }
-        Ok(fetched)
+        self.store.get_object(path).await
     }
 
     async fn delete_object(&self, path: &str) -> Result<bool> {

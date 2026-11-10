@@ -2,6 +2,7 @@
 //! Shorts, premieres and members-only uploads told apart. Ported from Flow for
 //! Android's `RssSubscriptionService`.
 
+pub mod collabs;
 pub mod reels;
 pub mod rss;
 

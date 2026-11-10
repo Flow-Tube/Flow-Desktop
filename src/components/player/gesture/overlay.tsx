@@ -10,14 +10,13 @@ import {
   Play,
   Rewind,
   Repeat1,
-  Volume1,
-  Volume2,
-  VolumeX,
 } from "lucide-react";
 import { usePlayerStore, type PlaybackRate } from "../../../store/usePlayerStore";
 import { copyText } from "../../../lib/clipboard";
 import { getString } from "../../../lib/i18n/index";
 import { isLocalMediaId } from "../../../lib/localMediaId";
+import type { VolumeFeedback } from "../../../lib/useVolumeFeedback";
+import { VolumeFeedbackPill } from "../../ui/VolumeFeedbackPill";
 import { youtubeWatchUrl } from "../../../lib/youtubeUrl";
 import { LONG_PRESS_MS, shouldStartDrag } from "../../../lib/pointerGesture";
 import { startWindowDrag } from "../../../lib/api/pip";
@@ -35,12 +34,6 @@ export type PlayerSeekFeedback = {
   id: number;
   direction: "forward" | "backward";
   seconds: number;
-};
-
-export type PlayerVolumeFeedback = {
-  id: number;
-  volume: number;
-  muted: boolean;
 };
 
 const SINGLE_CLICK_DELAY_MS = 220;
@@ -64,7 +57,7 @@ type PlayerGestureOverlayProps = {
   currentTime: number;
   duration: number;
   seekFeedback: PlayerSeekFeedback | null;
-  volumeFeedback: PlayerVolumeFeedback | null;
+  volumeFeedback: VolumeFeedback | null;
   qualityLabel?: string | null;
   mimeType?: string | null;
   bitrate?: number | null;
@@ -466,27 +459,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
       )}
 
       {volumeFeedback && (
-        <div
-          key={volumeFeedback.id}
-          className="pointer-events-none absolute left-1/2 top-8 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full bg-chrome-black/60 px-5 py-2 text-chrome-white animate-fade-in"
-        >
-          {volumeFeedback.muted || volumeFeedback.volume === 0 ? (
-            <VolumeX size={18} />
-          ) : volumeFeedback.volume < 0.55 ? (
-            <Volume1 size={18} />
-          ) : (
-            <Volume2 size={18} />
-          )}
-          <div className="h-1 w-24 overflow-hidden rounded-full bg-chrome-white/25">
-            <div
-              className="h-full rounded-full bg-chrome-white"
-              style={{ width: `${volumeFeedback.muted ? 0 : Math.min(100, Math.round(volumeFeedback.volume * 100))}%` }}
-            />
-          </div>
-          <span className="min-w-[3ch] text-sm font-bold tabular-nums">
-            {volumeFeedback.muted ? 0 : Math.round(volumeFeedback.volume * 100)}
-          </span>
-        </div>
+        <VolumeFeedbackPill feedback={volumeFeedback} tone="video" className="absolute left-1/2 top-8 z-30 -translate-x-1/2" />
       )}
 
       {seekFeedback && (

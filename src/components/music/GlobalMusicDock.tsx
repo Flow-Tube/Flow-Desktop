@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useState } from "react";
 import { AnimatePresence, motion, useTransform } from "framer-motion";
 import {
   Play,
@@ -8,7 +8,6 @@ import {
   Shuffle,
   Repeat,
   Repeat1,
-  Volume1,
   Volume2,
   VolumeX,
   ListMusic,
@@ -35,6 +34,8 @@ import { VolumePopover } from "./VolumePopover";
 import { useArtworkSwatches } from "../../lib/useArtworkSwatches";
 import { useDockToggleColors } from "../../lib/usePlayerColors";
 import { useMusicWheelVolume } from "../../lib/useMusicWheelVolume";
+import { useVolumeFeedback } from "../../lib/useVolumeFeedback";
+import { VolumeFeedbackPill } from "../ui/VolumeFeedbackPill";
 import { upgradeMusicImageUrl } from "../../lib/thumbnails";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 import { dockOpacity, registerSheetDock, sheetProgress } from "../../lib/musicSheet";
@@ -60,17 +61,7 @@ export function GlobalMusicDock() {
   const repeatMode = useMusicPlayerStore((s) => s.repeatMode);
   const isMuted = useMusicPlayerStore((s) => s.isMuted);
   const volume = useMusicPlayerStore((s) => s.volume);
-  const [volumeFeedback, setVolumeFeedback] = useState<{ id: number; volume: number; muted: boolean } | null>(null);
-  const volumeFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const showVolumeFeedback = useCallback((nextVolume: number, nextMuted: boolean) => {
-    setVolumeFeedback({ id: Date.now(), volume: nextVolume, muted: nextMuted });
-    if (volumeFeedbackTimerRef.current) clearTimeout(volumeFeedbackTimerRef.current);
-    volumeFeedbackTimerRef.current = setTimeout(() => {
-      setVolumeFeedback(null);
-    }, 1200);
-  }, []);
-
+  const { feedback: volumeFeedback, show: showVolumeFeedback } = useVolumeFeedback();
   const volumeWheelRef = useMusicWheelVolume<HTMLButtonElement>({ onFeedback: showVolumeFeedback });
 
   const togglePlay = useMusicPlayerStore((s) => s.togglePlay);
@@ -342,21 +333,7 @@ export function GlobalMusicDock() {
             </div>
             <div className="absolute bottom-full end-2 mb-3">
               {volumeFeedback && popover !== "vol" && (
-                <div
-                  key={volumeFeedback.id}
-                  className="pointer-events-none mb-3 flex items-center gap-2 rounded-full border border-chrome-neutral-800 bg-surface-container px-3 py-1.5 text-chrome-neutral-100 animate-fade-in"
-                >
-                  {volumeFeedback.muted || volumeFeedback.volume === 0 ? (
-                    <VolumeX className="h-4 w-4 text-chrome-neutral-400" />
-                  ) : volumeFeedback.volume < 0.55 ? (
-                    <Volume1 className="h-4 w-4 text-chrome-neutral-300" />
-                  ) : (
-                    <Volume2 className="h-4 w-4 text-chrome-neutral-300" />
-                  )}
-                  <span className="font-mono text-xs tabular-nums text-chrome-neutral-200">
-                    {volumeFeedback.muted ? 0 : Math.round(volumeFeedback.volume * 100)}%
-                  </span>
-                </div>
+                <VolumeFeedbackPill feedback={volumeFeedback} tone="surface" />
               )}
               <VolumePopover
                 open={popover === "vol"}

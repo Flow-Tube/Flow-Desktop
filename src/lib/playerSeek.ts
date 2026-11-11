@@ -3,6 +3,9 @@ export const seekToTime = (seconds: number) => {
   window.dispatchEvent(new CustomEvent("flow-player-seek", { detail: { time: seconds } }));
 };
 
+/** The watch player's own video. A card or a Short can have a video of its own on the page too. */
+export const PLAYER_VIDEO = "[data-player-content] video";
+
 /**
  * Seeks the video player once a freshly opened video knows its duration: the
  * element only accepts a seek after that, so this polls briefly after navigation.
@@ -11,7 +14,7 @@ export function seekWhenVideoReady(seconds: number): void {
   let attempts = 0;
   const tick = () => {
     attempts += 1;
-    const video = document.querySelector<HTMLVideoElement>("video");
+    const video = document.querySelector<HTMLVideoElement>(PLAYER_VIDEO);
     if (video && Number.isFinite(video.duration) && video.duration > 0) {
       seekToTime(seconds);
       return;

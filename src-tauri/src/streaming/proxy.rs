@@ -8,6 +8,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tracing::{debug, error, info, warn};
 
 use super::sabr::{SabrError, SabrSessionManager, SabrTrack};
+use super::swap::{LinkResolver, RefusedStreamSwapper, StreamLink};
 use crate::api::innertube::core::clients;
 
 #[derive(Clone)]
@@ -25,6 +26,8 @@ pub struct StreamSession {
     pub registered_at: u64,
     pub expires_at: u64,
     pub user_agent: String,
+    /// The video a media link belongs to, so a refused link can be swapped for its twin.
+    pub video_id: Option<String>,
 }
 
 #[derive(Clone)]
@@ -52,6 +55,7 @@ pub struct StreamingManager {
     port: u16,
     image_port: u16,
     sabr: SabrSessionManager,
+    swapper: Arc<RefusedStreamSwapper>,
 }
 
 const MAX_CACHED_RESPONSE_BYTES: usize = 32 * 1024 * 1024;
@@ -157,6 +161,7 @@ impl StreamingManager {
             port: listeners.media.local_addr().unwrap().port(),
             image_port: listeners.images.local_addr().unwrap().port(),
             sabr: SabrSessionManager::new(),
+            swapper: Arc::new(RefusedStreamSwapper::default()),
         };
 
         (manager, listeners)
@@ -184,15 +189,40 @@ impl StreamingManager {
         content_type: String,
         user_agent: String,
     ) {
-        self.register_remote_session(token, remote_url, content_type, user_agent);
+        self.register_remote_session(token, remote_url, content_type, user_agent, None);
     }
 
-    pub fn register_remote_session(
+    /// A media link of `video_id`, which the proxy swaps for the same file from another client
+    /// when googlevideo refuses it.
+    pub fn register_video_stream(
+        &self,
+        video_id: &str,
+        token: String,
+        remote_url: String,
+        content_type: String,
+        user_agent: String,
+    ) {
+        self.register_remote_session(
+            token,
+            remote_url,
+            content_type,
+            user_agent,
+            Some(video_id.to_string()),
+        );
+    }
+
+    /// Where the proxy gets fresh links for a video one of whose links was refused.
+    pub fn set_link_resolver(&self, resolver: LinkResolver) {
+        self.swapper.set_resolver(resolver);
+    }
+
+    fn register_remote_session(
         &self,
         token: String,
         remote_url: String,
         content_type: String,
         user_agent: String,
+        video_id: Option<String>,
     ) {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -204,6 +234,7 @@ impl StreamingManager {
             kind: StreamSessionKind::Remote { remote_url },
             content_type,
             user_agent,
+            video_id,
         };
         let mut lock = self.sessions.lock().unwrap();
         lock.insert(token, session);
@@ -221,6 +252,7 @@ impl StreamingManager {
             registered_at: now,
             expires_at: now + UNDATED_SESSION_SECS,
             user_agent: String::new(),
+            video_id: None,
         };
         let mut lock = self.sessions.lock().unwrap();
         lock.insert(token, session);
@@ -238,6 +270,7 @@ impl StreamingManager {
             registered_at: now,
             expires_at: now + 24 * 3600,
             user_agent: String::new(),
+            video_id: None,
         };
         let mut lock = self.sessions.lock().unwrap();
         lock.insert(token, session);
@@ -588,6 +621,7 @@ async fn handle_connection(
             registered_at: 0,
             expires_at: 0,
             user_agent: crate::api::http::BROWSER_USER_AGENT.to_string(),
+            video_id: None,
         };
         return relay_remote(
             &mut socket,
@@ -810,6 +844,19 @@ fn debug_refusal_due(offset: u64) -> bool {
         .is_some_and(|after| offset >= after)
 }
 
+/// Notes googlevideo's refusal of `url` and finds the same file on another client's link.
+async fn on_refused(
+    manager: &StreamingManager,
+    session: &StreamSession,
+    url: &str,
+    swapped_at: Option<std::time::Instant>,
+) -> Option<StreamLink> {
+    let link_age = swapped_at.map_or_else(|| session_link_age(session), |at| at.elapsed());
+    crate::api::innertube::core::gate_tracker::record_refused_url(url, link_age);
+    let video_id = session.video_id.as_deref()?;
+    manager.swapper.replace(video_id, url).await
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn relay_remote(
     socket: &mut TcpStream,
@@ -823,9 +870,19 @@ async fn relay_remote(
 ) -> std::io::Result<()> {
     let (range_start, range_end) = parse_range_spec(client_range);
     let started = std::time::Instant::now();
-    // Match the fetch UA to the URL's `c=` client (mobile parity); the target URL
-    // is stable across recovery attempts, so resolve it once.
-    let upstream_user_agent = user_agent_for_media_url(target_url, &session.user_agent);
+    // Match the fetch UA to the URL's `c=` client (mobile parity).
+    let mut upstream_user_agent = user_agent_for_media_url(target_url, &session.user_agent);
+    let mut target_url = target_url.to_string();
+    // When a link of this file was refused before, its replacement is asked straight away.
+    let mut swapped_at = None;
+    if let Some(link) = session
+        .video_id
+        .as_deref()
+        .and_then(|video_id| manager.swapper.current(video_id, &target_url))
+    {
+        (target_url, upstream_user_agent, swapped_at) =
+            (link.url, link.user_agent, Some(link.issued_at));
+    }
     let range_key = match (range_start, range_end) {
         (s, Some(e)) => format!("{s}-{e}"),
         (s, None) if client_range.is_some() => format!("{s}-"),
@@ -871,7 +928,7 @@ async fn relay_remote(
         let stall_guarded = session.content_type.starts_with("video/")
             || session.content_type.starts_with("audio/");
         let mut req = client
-            .get(target_url)
+            .get(&target_url)
             .header("User-Agent", &upstream_user_agent)
             .header(
                 "Accept-Encoding",
@@ -899,15 +956,20 @@ async fn relay_remote(
             None
         };
 
-        if stall_guarded && debug_refusal_due(effective_start) {
+        // Only the links first handed out are refused, so a swap can be tried out.
+        if stall_guarded && swapped_at.is_none() && debug_refusal_due(effective_start) {
             warn!(
                 effective_start,
                 "FLOW_DEBUG_REFUSE_AFTER_BYTES: refusing the relay"
             );
-            crate::api::innertube::core::gate_tracker::record_refused_url(
-                target_url,
-                session_link_age(session),
-            );
+            if let Some(link) = on_refused(manager, session, &target_url, swapped_at).await {
+                (target_url, upstream_user_agent, swapped_at) =
+                    (link.url, link.user_agent, Some(link.issued_at));
+                continue;
+            }
+            if headers_written {
+                return Ok(());
+            }
             return write_status_only(socket, 403, "Forbidden", "Refused for testing").await;
         }
 
@@ -936,6 +998,14 @@ async fn relay_remote(
         };
 
         let status = response.status();
+        if stall_guarded
+            && matches!(status.as_u16(), 401 | 403)
+            && let Some(link) = on_refused(manager, session, &target_url, swapped_at).await
+        {
+            (target_url, upstream_user_agent, swapped_at) =
+                (link.url, link.user_agent, Some(link.issued_at));
+            continue;
+        }
         if headers_written {
             let end = (content_length_value > 0)
                 .then(|| range_start + content_length_value as u64 - 1)
@@ -972,12 +1042,6 @@ async fn relay_remote(
                     ua = %upstream_user_agent,
                     "Upstream rejected stream relay"
                 );
-                if stall_guarded && matches!(status.as_u16(), 401 | 403) {
-                    crate::api::innertube::core::gate_tracker::record_refused_url(
-                        target_url,
-                        session_link_age(session),
-                    );
-                }
             }
             let headers = response.headers();
             content_type_value = headers
@@ -1332,7 +1396,8 @@ async fn handle_sabr_route(
 #[cfg(test)]
 mod range_recovery_tests {
     use super::valid_resume_range;
-    use super::{StreamSession, StreamSessionKind, StreamingManager, relay_remote};
+    use super::{StreamLink, StreamSession, StreamSessionKind, StreamingManager, relay_remote};
+    use std::sync::{Arc, Mutex};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::{TcpListener, TcpStream};
 
@@ -1374,6 +1439,7 @@ mod range_recovery_tests {
                 registered_at: 0,
                 expires_at: u64::MAX,
                 user_agent: "test".into(),
+                video_id: None,
             };
             relay_remote(
                 &mut socket,
@@ -1432,6 +1498,7 @@ mod range_recovery_tests {
                 registered_at: 0,
                 expires_at: u64::MAX,
                 user_agent: "test".into(),
+                video_id: None,
             };
             relay_remote(
                 &mut socket,
@@ -1541,6 +1608,7 @@ mod range_recovery_tests {
                 registered_at: 0,
                 expires_at: u64::MAX,
                 user_agent: "test".into(),
+                video_id: None,
             };
             let client = reqwest::Client::builder()
                 .no_gzip()
@@ -1605,6 +1673,133 @@ mod range_recovery_tests {
         .await;
         assert!(result.is_ok());
         assert_eq!(body, b"#EXTM3");
+    }
+
+    /// Serves `/walled` as googlevideo serves a walled client: three bytes, a dropped
+    /// connection, then refusals. `/open` serves any range of the same six bytes.
+    async fn walled_upstream() -> (String, Arc<Mutex<Vec<String>>>) {
+        let upstream = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", upstream.local_addr().unwrap());
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let log = seen.clone();
+        tokio::spawn(async move {
+            let mut served_walled = false;
+            loop {
+                let (mut socket, _) = upstream.accept().await.unwrap();
+                let mut request = Vec::new();
+                while !request.windows(4).any(|part| part == b"\r\n\r\n") {
+                    let mut bytes = [0; 1024];
+                    let count = socket.read(&mut bytes).await.unwrap();
+                    request.extend_from_slice(&bytes[..count]);
+                }
+                let request = String::from_utf8_lossy(&request).to_lowercase();
+                let line = |name: &str| {
+                    request
+                        .lines()
+                        .find_map(|line| line.strip_prefix(name))
+                        .unwrap_or_default()
+                        .trim()
+                        .to_string()
+                };
+                let path = request.split_whitespace().nth(1).unwrap_or_default();
+                let range = line("range:");
+                log.lock().unwrap().push(format!(
+                    "{} {range} {}",
+                    path.split('?').next().unwrap(),
+                    line("user-agent:")
+                ));
+                let response = if path.starts_with("/open") {
+                    let start: usize = range
+                        .trim_start_matches("bytes=")
+                        .split('-')
+                        .next()
+                        .unwrap()
+                        .parse()
+                        .unwrap();
+                    let body = &"abcdef"[start..];
+                    format!(
+                        "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {start}-5/6\r\nConnection: close\r\n\r\n{body}",
+                        body.len()
+                    )
+                } else if !std::mem::replace(&mut served_walled, true) {
+                    "HTTP/1.1 206 Partial Content\r\nContent-Length: 6\r\nContent-Range: bytes 0-5/6\r\nConnection: close\r\n\r\nabc".to_string()
+                } else {
+                    "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                        .to_string()
+                };
+                socket.write_all(response.as_bytes()).await.unwrap();
+            }
+        });
+        (base, seen)
+    }
+
+    async fn relay_once(manager: &StreamingManager, session: &StreamSession, url: &str) -> Vec<u8> {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let mut downstream = TcpStream::connect(listener.local_addr().unwrap())
+            .await
+            .unwrap();
+        let (mut socket, _) = listener.accept().await.unwrap();
+        let (manager, session, url) = (manager.clone(), session.clone(), url.to_string());
+        let relay = tokio::spawn(async move {
+            relay_remote(
+                &mut socket,
+                &reqwest::Client::new(),
+                &manager,
+                &session,
+                &url,
+                Some("bytes=0-5"),
+                "/stream/test",
+                false,
+            )
+            .await
+        });
+        let mut received = Vec::new();
+        downstream.read_to_end(&mut received).await.unwrap();
+        relay.await.unwrap().unwrap();
+        let body_start = received
+            .windows(4)
+            .position(|part| part == b"\r\n\r\n")
+            .unwrap()
+            + 4;
+        received[body_start..].to_vec()
+    }
+
+    #[tokio::test]
+    async fn a_refused_link_continues_on_the_same_file_at_the_same_byte() {
+        let (base, seen) = walled_upstream().await;
+        let walled = format!("{base}/walled?c=VISIONOS&itag=140&lmt=7&clen=6");
+        let open = format!("{base}/open?c=TVHTML5&itag=140&lmt=7&clen=6");
+        let (manager, _) = StreamingManager::new();
+        manager.set_link_resolver(Arc::new(move |video_id| {
+            assert_eq!(video_id, "vid");
+            let links = vec![StreamLink::new(open.clone(), "tv".into())];
+            Box::pin(async move { Some(links) })
+        }));
+        let session = StreamSession {
+            kind: StreamSessionKind::Remote {
+                remote_url: walled.clone(),
+            },
+            content_type: "audio/mp4".into(),
+            registered_at: 0,
+            expires_at: u64::MAX,
+            user_agent: "vision".into(),
+            video_id: Some("vid".into()),
+        };
+
+        assert_eq!(relay_once(&manager, &session, &walled).await, b"abcdef");
+        assert_eq!(
+            *seen.lock().unwrap(),
+            [
+                "/walled bytes=0-5 vision",
+                "/walled bytes=3-5 vision",
+                "/open bytes=3-5 tv"
+            ]
+        );
+
+        // The next request for the file goes straight to the link that serves it.
+        seen.lock().unwrap().clear();
+        assert_eq!(relay_once(&manager, &session, &walled).await, b"abcdef");
+        assert_eq!(*seen.lock().unwrap(), ["/open bytes=0-5 tv"]);
     }
 
     #[tokio::test]

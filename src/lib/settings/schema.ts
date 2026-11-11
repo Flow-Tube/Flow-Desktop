@@ -133,6 +133,7 @@ export const SETTINGS = {
   LYRICS_BLUR_OTHER_LINES: "lyrics_blur_other_lines",
 
   VIDEO_TITLE_MAX_LINES: "video_title_max_lines",
+  VIDEO_HOVER_PREVIEWS_ENABLED: "video_hover_previews_enabled",
   GRID_COLUMNS: "grid_columns",
   HIGHLIGHT_NEW_SETTINGS: "highlight_new_settings",
   HIGHLIGHT_NEW_SETTINGS_DAYS: "highlight_new_settings_days",
@@ -382,6 +383,7 @@ export const SETTING_SCOPES = {
   [SETTINGS.LYRICS_KEEP_SCREEN_ON]: "profile",
   [SETTINGS.LYRICS_BLUR_OTHER_LINES]: "profile",
   [SETTINGS.VIDEO_TITLE_MAX_LINES]: "profile",
+  [SETTINGS.VIDEO_HOVER_PREVIEWS_ENABLED]: "profile",
   [SETTINGS.GRID_COLUMNS]: "profile",
   [SETTINGS.HIGHLIGHT_NEW_SETTINGS]: "device",
   [SETTINGS.HIGHLIGHT_NEW_SETTINGS_DAYS]: "device",
@@ -710,6 +712,7 @@ export const SETTING_DEFINITIONS = [
   bool(SETTINGS.LYRICS_BLUR_OTHER_LINES, "player", true, "wired"),
 
   num(SETTINGS.VIDEO_TITLE_MAX_LINES, "content", 1, "wired", 0, 3),
+  bool(SETTINGS.VIDEO_HOVER_PREVIEWS_ENABLED, "content", false, "wired"),
   num(SETTINGS.GRID_COLUMNS, "content", 4, "wired", 2, 8),
   bool(SETTINGS.HIGHLIGHT_NEW_SETTINGS, "appearance", false, "wired"),
   str(SETTINGS.HIGHLIGHT_NEW_SETTINGS_DAYS, "appearance", "7", "wired", NEW_SETTING_DAYS),

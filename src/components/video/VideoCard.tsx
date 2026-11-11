@@ -46,6 +46,7 @@ import { backgroundTabClickProps, openedInBackgroundTab, routeForVideo } from '.
 import { openActions } from '../common/openActions';
 import { isLocalMediaId } from '../../lib/localMediaId';
 import { alignToEnd, growFromPoint } from "../../lib/direction";
+import { VideoHoverPreview } from './VideoHoverPreview';
 
 export interface VideoCardProps {
   video: VideoSummary;
@@ -227,6 +228,11 @@ function VideoCardComponent({
     [highResThumbnail, overriddenThumbnail, video.id, video.thumbnailUrl],
   );
   const { src: displayThumbnail, onError: handleThumbnailError } = useImageFallback(thumbnailCandidates);
+
+  // Channels, live streams, premieres and local files have no storyboard to preview.
+  const hoverPreview = isHovered && !isChannel && !isLiveVideo && !video.isUpcoming && !isLocalMediaId(video.id) ? (
+    <VideoHoverPreview videoId={video.id} durationSeconds={video.durationSeconds} thumbnailRef={thumbnailRef} />
+  ) : null;
 
   const handleMouseEnter = useCallback(() => {
     setIsHovered(true);
@@ -687,6 +693,7 @@ function VideoCardComponent({
           ) : (
             <div className="h-full w-full bg-chrome-zinc-800" />
           )}
+          {hoverPreview}
           {isLiveVideo ? (
             <LiveBadge className="absolute bottom-1 end-1" />
           ) : video.isUpcoming ? (
@@ -793,6 +800,7 @@ function VideoCardComponent({
           ) : (
             <div className="h-full w-full bg-chrome-zinc-800" />
           )}
+          {hoverPreview}
 
           {isLiveVideo ? (
             <LiveBadge className="absolute bottom-1 end-1" />
@@ -885,6 +893,7 @@ function VideoCardComponent({
         ) : (
           <div className="w-full h-full bg-chrome-zinc-800" />
         )}
+        {hoverPreview}
 
         {isLiveVideo ? (
           <LiveBadge className={`absolute end-1 ${isHistoryCard || isContinueCard ? 'bottom-2' : 'bottom-1'}`} />

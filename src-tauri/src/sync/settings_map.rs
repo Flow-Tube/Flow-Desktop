@@ -131,6 +131,7 @@ const DESKTOP_ONLY: &[&str] = &[
     "lyrics_provider_enabled_states",
     "music_player_background",
     "video_title_max_lines",
+    "video_hover_previews_enabled",
     "download_dialog_style",
     "home_feed_enabled",
     "show_app_logo_icon",

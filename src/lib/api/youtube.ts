@@ -2,6 +2,7 @@ import type {
   SearchSuggestion,
   SearchVideosRequest,
   SearchVideosResponse,
+  StoryboardLevel,
   VideoDetails,
   VideoMetadata,
   StreamInfo,
@@ -154,6 +155,12 @@ export async function getPaidPromotion(videoId: string): Promise<PaidPromotionLa
 export async function getVideoCategory(videoId: string): Promise<string | null> {
   if (!(await isTauriEnv())) return null;
   return invokeBackend<string | null>("get_video_category", { videoId });
+}
+
+/** Storyboard specification for hover previews and seek thumbnails. */
+export async function getVideoStoryboard(videoId: string): Promise<StoryboardLevel[]> {
+  if (!(await isTauriEnv())) return [];
+  return invokeBackend<StoryboardLevel[]>("get_video_storyboard", { videoId });
 }
 
 export async function getStreamInfo(videoId: string, refresh = false): Promise<StreamInfo> {

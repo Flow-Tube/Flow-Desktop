@@ -1,4 +1,4 @@
-import { act, createElement, type ComponentProps } from "react";
+import { act, createElement, Profiler, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SETTINGS } from "../../lib/settings/schema";
 import { useAppSettingsStore } from "../../store/useAppSettingsStore";
 import { useSettingsStore } from "../../store/useSettingsStore";
+import { useHoverPreviewStore } from "../../store/useHoverPreviewStore";
 import type { VideoSummary } from "../../types/video";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -228,3 +229,40 @@ describe("VideoCard on other libraries", () => {
   });
 });
 
+
+describe("VideoCard hover previews", () => {
+  let host: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    vi.stubGlobal("IntersectionObserver", FakeObserver);
+    useAppSettingsStore.setState({
+      values: { ...useAppSettingsStore.getState().values, [SETTINGS.VIDEO_HOVER_PREVIEWS_ENABLED]: "true" },
+    });
+    host = document.createElement("div");
+    document.body.append(host);
+    root = createRoot(host);
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+    useHoverPreviewStore.setState({ activeVideoId: null });
+  });
+
+  it("doesn't re-render cards when another card's preview starts or stops", () => {
+    const commits = new Map<string, number>();
+    const onRender = (id: string) => commits.set(id, (commits.get(id) ?? 0) + 1);
+    const card = (id: string) =>
+      createElement(Profiler, { id, onRender },
+        createElement(VideoCard, { video: { id, title: id, channelName: "A channel" } as VideoSummary, onPlay: vi.fn() }));
+    act(() => root.render(createElement(MemoryRouter, null, card("vcdhover0001"), card("vcdhover0002"))));
+    const before = new Map(commits);
+
+    act(() => useHoverPreviewStore.setState({ activeVideoId: "vcdhover0001" }));
+    act(() => useHoverPreviewStore.setState({ activeVideoId: null }));
+
+    expect(commits).toEqual(before);
+  });
+});

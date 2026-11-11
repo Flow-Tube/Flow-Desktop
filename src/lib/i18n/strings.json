@@ -1430,6 +1430,8 @@
   "settings_grid_columns_option": "%s per row",
   "settings_video_title_lines": "Video Title Lines",
   "settings_video_title_lines_desc": "Max lines for video titles (0 = unlimited)",
+  "settings_video_hover_previews": "Video Hover Previews",
+  "settings_video_hover_previews_desc": "Rest the pointer on a video to see frames from it. Flow asks YouTube for each video you rest on.",
   "settings_group_feed": "Feed",
   "settings_home_feed": "Home Feed",
   "settings_home_feed_desc": "Show home page recommendations",

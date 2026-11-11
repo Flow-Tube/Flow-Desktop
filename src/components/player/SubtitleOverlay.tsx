@@ -59,6 +59,8 @@ interface SubtitleOverlayProps {
   uprightVideo?: boolean;
   /** How far the captions move against the picture: later above zero, earlier below. */
   offsetMs?: number;
+  /** Captions over a card preview: no dragging, and clicks reach the card. */
+  still?: boolean;
 }
 
 function cleanCueText(text: string): string {
@@ -279,6 +281,7 @@ export const SubtitleOverlay: React.FC<SubtitleOverlayProps> = ({
   shouldShowControls,
   uprightVideo = false,
   offsetMs = 0,
+  still = false,
 }) => {
   const currentTime = playbackTime - offsetMs / 1000;
   const isFullscreen = usePlayerStore((s) => s.isVideoFullscreen);
@@ -550,7 +553,7 @@ export const SubtitleOverlay: React.FC<SubtitleOverlayProps> = ({
     <div ref={containerRef} className="pointer-events-none absolute inset-0 z-30 [container-type:size]">
       <div
         ref={anchorRef}
-        className={`pointer-events-auto absolute w-max max-w-[calc(100cqw-4rem)] cursor-move touch-none select-none ${CAPTION_SIZE} ${uprightVideo ? UPRIGHT_TALL_CAPTION_SIZE : ""} ${dragPosition ? "" : "transition-[bottom] duration-150"}`}
+        className={`${still ? "pointer-events-none" : "pointer-events-auto cursor-move touch-none"} absolute w-max max-w-[calc(100cqw-4rem)] select-none ${CAPTION_SIZE} ${uprightVideo ? UPRIGHT_TALL_CAPTION_SIZE : ""} ${dragPosition ? "" : "transition-[bottom] duration-150"}`}
         style={{
           left: `${position.x * 100}%`,
           bottom,

@@ -2,11 +2,14 @@ import { memo, type RefObject } from "react";
 import { useHoverPreview } from "../../lib/useHoverPreview";
 import { useHoverPreviewMode } from "../../lib/hoverPreviewMode";
 import { VideoThumbnailPreview } from "./VideoThumbnailPreview";
+import { VideoInlinePreview } from "./VideoInlinePreview";
 
 interface VideoHoverPreviewProps {
   videoId: string;
   durationSeconds?: number | null;
   thumbnailRef: RefObject<HTMLElement | null>;
+  /** The card has a button of its own in the thumbnail's top end corner. */
+  clearTopEnd?: boolean;
 }
 
 const devicePixelSize = (element: HTMLElement | null) => {
@@ -39,5 +42,6 @@ function FramesPreview({ videoId, durationSeconds, thumbnailRef }: VideoHoverPre
 export const VideoHoverPreview = memo(function VideoHoverPreview(props: VideoHoverPreviewProps) {
   const mode = useHoverPreviewMode();
   if (mode === "frames") return <FramesPreview {...props} />;
+  if (mode === "video") return <VideoInlinePreview videoId={props.videoId} clearTopEnd={props.clearTopEnd} />;
   return null;
 });

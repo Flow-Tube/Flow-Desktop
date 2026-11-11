@@ -1,5 +1,6 @@
 import { memo, type RefObject } from "react";
 import { useHoverPreview } from "../../lib/useHoverPreview";
+import { useHoverPreviewMode } from "../../lib/hoverPreviewMode";
 import { VideoThumbnailPreview } from "./VideoThumbnailPreview";
 
 interface VideoHoverPreviewProps {
@@ -14,11 +15,7 @@ const devicePixelSize = (element: HTMLElement | null) => {
   return { width: element.offsetWidth * dpr, height: element.offsetHeight * dpr };
 };
 
-/**
- * A card's hover preview. Cards mount it only while hovered, so the preview's timers and frame
- * changes re-render this layer alone, never the card or the rest of the feed.
- */
-export const VideoHoverPreview = memo(function VideoHoverPreview({ videoId, durationSeconds, thumbnailRef }: VideoHoverPreviewProps) {
+function FramesPreview({ videoId, durationSeconds, thumbnailRef }: VideoHoverPreviewProps) {
   const preview = useHoverPreview({
     videoId,
     isHovered: true,
@@ -33,4 +30,14 @@ export const VideoHoverPreview = memo(function VideoHoverPreview({ videoId, dura
       progressPercent={preview.progressPercent}
     />
   );
+}
+
+/**
+ * A card's hover preview, of the kind chosen in Settings. Cards mount it only while hovered, so
+ * the preview's timers and frame changes re-render this layer alone, never the card or the feed.
+ */
+export const VideoHoverPreview = memo(function VideoHoverPreview(props: VideoHoverPreviewProps) {
+  const mode = useHoverPreviewMode();
+  if (mode === "frames") return <FramesPreview {...props} />;
+  return null;
 });

@@ -10,10 +10,12 @@ import { GRID_COLUMN_OPTIONS, GRID_COLUMNS_DEFAULT } from '../../../lib/useGridC
 import { useHideWatched } from '../../../lib/useWatchedFilter';
 import { BlockedKeywordsPanel } from '../BlockedKeywordsPanel';
 import { LibrarySectionsGroup } from '../LibrarySectionsGroup';
+import { HOVER_PREVIEW_MODES, HOVER_PREVIEW_MODE_LABELS, useHoverPreviewMode } from '../../../lib/hoverPreviewMode';
 
 export function ContentTab() {
   const [titleMaxLines, setTitleMaxLines] = useNumberPref(SETTINGS.VIDEO_TITLE_MAX_LINES, 1);
-  const [hoverPreviews, setHoverPreviews] = useBoolPref(SETTINGS.VIDEO_HOVER_PREVIEWS_ENABLED, false);
+  const hoverPreviewMode = useHoverPreviewMode();
+  const [, setHoverPreviewMode] = usePreference(SETTINGS.VIDEO_HOVER_PREVIEW_MODE);
   const [gridColumns, setGridColumns] = useNumberPref(SETTINGS.GRID_COLUMNS, GRID_COLUMNS_DEFAULT);
   const [homeFeed, setHomeFeed] = useBoolPref(SETTINGS.HOME_FEED_ENABLED, true);
   const [appLogo, setAppLogo] = useBoolPref(SETTINGS.SHOW_APP_LOGO_ICON, true);
@@ -73,14 +75,15 @@ export function ContentTab() {
           ]} />
         </SettingItem>
         <SettingItem
-          title={getString('settings_video_hover_previews')}
-          description={getString('settings_video_hover_previews_desc')}
-          disabled={isSettingDisabledUntilWired(SETTINGS.VIDEO_HOVER_PREVIEWS_ENABLED)}
+          title={getString('settings_hover_previews')}
+          description={getString('settings_hover_previews_desc')}
+          disabled={isSettingDisabledUntilWired(SETTINGS.VIDEO_HOVER_PREVIEW_MODE)}
         >
-          <ToggleSwitch
-            checked={hoverPreviews}
-            onChange={setHoverPreviews}
-            disabled={isSettingDisabledUntilWired(SETTINGS.VIDEO_HOVER_PREVIEWS_ENABLED)}
+          <Select
+            value={hoverPreviewMode}
+            onChange={setHoverPreviewMode}
+            disabled={isSettingDisabledUntilWired(SETTINGS.VIDEO_HOVER_PREVIEW_MODE)}
+            options={HOVER_PREVIEW_MODES.map((mode) => ({ value: mode, label: getString(HOVER_PREVIEW_MODE_LABELS[mode]) }))}
           />
         </SettingItem>
       </SettingsGroup>

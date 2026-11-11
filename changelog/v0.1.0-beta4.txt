@@ -227,7 +227,7 @@ HOME
 - A Subscriptions on Home switch keeps channels you follow out of Home. Clicking Home again scrolls to the top, then refreshes, and you can turn the refresh off.
 - Cards from a channel you often watch now say so under the title. Explore says plainly when YouTube is limiting requests.
 - Card menus add Play next, Details and Mark as unwatched.
-- Video hover previews, in Settings > Content & UI, show frames from a video while you rest the pointer on its card. They are off by default, because Flow asks YouTube for each video you rest on.
+- Hover Previews, in Settings > Content & UI, shows frames from a video while you rest the pointer on its card. It is off by default, because Flow asks YouTube for each video you rest on.
 
 SEARCH
 - Searching again from your history brings back the filters you used. Shorts is now its own chip, next to All.

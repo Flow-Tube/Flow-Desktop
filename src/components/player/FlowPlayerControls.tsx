@@ -32,7 +32,7 @@ import type {
   VideoChapter,
 } from "../../types/video";
 import { HeatmapStrip } from "./HeatmapStrip";
-import { PREVIEW_WIDTH, pickStoryboardLevel, storyboardFrameAt } from "../../lib/seekPreview";
+import { PREVIEW_WIDTH, paintStoryboardTile, pickStoryboardLevel, storyboardTileHeight } from "../../lib/seekPreview";
 import { proxiedImage } from "../../lib/imageProxy";
 import { useImageProxyStore } from "../../store/useImageProxyStore";
 import { AutoplaySwitch } from "./AutoplaySwitch";
@@ -284,7 +284,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
   const timePillRef = useRef<HTMLDivElement>(null);
   const proxyBase = useImageProxyStore((state) => state.base);
   const previewLevel = pickStoryboardLevel(storyboard);
-  const previewHeight = previewLevel ? Math.round((previewLevel.height * PREVIEW_WIDTH) / previewLevel.width) : 0;
+  const previewHeight = previewLevel ? storyboardTileHeight(previewLevel) : 0;
 
   const segments = React.useMemo(() => {
     if (isLive || !chapters || chapters.length === 0) {
@@ -447,16 +447,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
     const time = (x / rect.width) * duration;
     const preview = hoverPreviewRef.current;
     if (preview && previewLevel) {
-      // Sheets load only here, on hover, and each holds dozens of frames.
-      const frame = storyboardFrameAt(previewLevel, time);
-      const scale = PREVIEW_WIDTH / previewLevel.width;
-      const url = proxiedImage(frame.url, proxyBase);
-      if (preview.dataset.url !== url) {
-        preview.dataset.url = url;
-        preview.style.backgroundImage = `url("${url}")`;
-      }
-      preview.style.backgroundSize = `${frame.sheetWidth * scale}px ${frame.sheetHeight * scale}px`;
-      preview.style.backgroundPosition = `-${frame.x * scale}px -${frame.y * scale}px`;
+      paintStoryboardTile(preview, previewLevel, time, (url) => proxiedImage(url, proxyBase));
     }
     if (hoverTextRef.current) {
       const chapter = segments?.find((c) => time >= c.startSeconds && time <= c.endSeconds);

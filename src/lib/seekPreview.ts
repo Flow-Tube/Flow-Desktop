@@ -33,6 +33,33 @@ export function storyboardFrameAt(level: StoryboardLevel, seconds: number): Stor
   };
 }
 
+/** The height of a preview frame drawn `width` wide. */
+export function storyboardTileHeight(level: StoryboardLevel, width = PREVIEW_WIDTH): number {
+  return Math.round((level.height * width) / level.width);
+}
+
+/**
+ * Draws the frame at `seconds` into `tile`, a box `width` wide, as a background. Sheets load
+ * only when drawn, and each holds dozens of frames, so moving along a bar rarely fetches.
+ */
+export function paintStoryboardTile(
+  tile: HTMLElement,
+  level: StoryboardLevel,
+  seconds: number,
+  imageUrl: (url: string) => string,
+  width = PREVIEW_WIDTH,
+): void {
+  const frame = storyboardFrameAt(level, seconds);
+  const scale = width / level.width;
+  const url = imageUrl(frame.url);
+  if (tile.dataset.url !== url) {
+    tile.dataset.url = url;
+    tile.style.backgroundImage = `url("${url}")`;
+  }
+  tile.style.backgroundSize = `${frame.sheetWidth * scale}px ${frame.sheetHeight * scale}px`;
+  tile.style.backgroundPosition = `-${frame.x * scale}px -${frame.y * scale}px`;
+}
+
 /**
  * The most-replayed graph as an SVG path over a `width` × `height` box: a filled
  * area along the bottom, one point per marker at its middle.

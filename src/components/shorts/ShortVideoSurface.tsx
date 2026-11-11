@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import * as dashjs from "dashjs";
+import { createProxiedDashPlayer } from "../../lib/dashSetup";
 import {
   AudioLines,
   Bug,
@@ -93,12 +94,6 @@ function formatTime(seconds: number) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
-}
-
-function proxyPrefix(dashUrl: string): string | null {
-  const marker = "?url=";
-  const index = dashUrl.indexOf(marker);
-  return index < 0 ? null : dashUrl.slice(0, index + marker.length);
 }
 
 export function ShortVideoSurface({
@@ -401,7 +396,7 @@ export function ShortVideoSurface({
       video.loop = shouldLoop;
       video.muted = mutedRef.current;
       video.volume = volumeRef.current;
-      const player = dashjs.MediaPlayer().create();
+      const player = createProxiedDashPlayer(dashUrl, { buffer: { bufferToKeep: 12, bufferTimeDefault: 3 } });
       const dashEvents = dashjs.MediaPlayer.events;
       const playDash = () => {
         void video.play().catch(() => {});
@@ -413,29 +408,6 @@ export function ShortVideoSurface({
         autoAdvanceFiredRef.current = true;
         onRequestAdvance?.();
       };
-      const prefix = proxyPrefix(dashUrl);
-      if (prefix) {
-        player.extend(
-          "RequestModifier",
-          () => ({
-            modifyRequestURL: (url: string) =>
-              url.startsWith("http://127.0.0.1:") || url.startsWith("blob:")
-                ? url
-                : `${prefix}${encodeURIComponent(url)}`,
-            modifyRequestHeader: (xhr: XMLHttpRequest) => xhr,
-          }),
-          true,
-        );
-      }
-      player.updateSettings({
-        streaming: {
-          capabilities: { useMediaCapabilitiesApi: false },
-          // dash.js otherwise keeps these in localStorage, which every profile shares.
-          lastBitrateCachingInfo: { enabled: false },
-          lastMediaSettingsCachingInfo: { enabled: false },
-          buffer: { bufferToKeep: 12, bufferTimeDefault: 3 },
-        },
-      });
       player.on(dashEvents.STREAM_INITIALIZED, playDash);
       player.on(dashEvents.ERROR, handleDashError);
       video.addEventListener("ended", handleEnded);

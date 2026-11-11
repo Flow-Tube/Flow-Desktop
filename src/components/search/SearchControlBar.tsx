@@ -4,6 +4,8 @@ import { FilterSelect } from '../ui/FilterSelect';
 import { getString } from '../../lib/i18n/index';
 import { isCategoryOffered } from '../../lib/searchResults';
 import { useShortsEnabled } from '../../lib/useShortsContent';
+import { useMusicEnabled } from '../../lib/useMusicContent';
+import { MUSIC_ONLY_CATEGORIES } from '../../lib/searchFilterState';
 import type { StringKey } from '../../lib/i18n/index';
 import type {
   AdvancedFilters,
@@ -48,9 +50,12 @@ export function SearchControlBar({
   offeredMusicFilters,
 }: SearchControlBarProps) {
   const shortsEnabled = useShortsEnabled();
-  const categories = CATEGORY_KEYS.filter(
-    (c) => (c.key === 'shorts' ? shortsEnabled : c.key === filterType || isCategoryOffered(c.key, offeredMusicFilters)),
-  ).map((c) => ({ key: c.key, label: getString(c.labelKey) }));
+  const musicEnabled = useMusicEnabled();
+  const categories = CATEGORY_KEYS.filter((c) => {
+    if (c.key === 'shorts') return shortsEnabled;
+    if (MUSIC_ONLY_CATEGORIES.has(c.key)) return musicEnabled && (c.key === filterType || isCategoryOffered(c.key, offeredMusicFilters));
+    return c.key === filterType || isCategoryOffered(c.key, offeredMusicFilters);
+  }).map((c) => ({ key: c.key, label: getString(c.labelKey) }));
   const labels = categories.map((c) => c.label);
   const activeLabel = categories.find((c) => c.key === filterType)?.label ?? labels[0];
 

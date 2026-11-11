@@ -17,6 +17,7 @@ import {
   sortLikedItems,
 } from "../lib/likedItems";
 import { useMultiSelect } from "../lib/useMultiSelect";
+import { useMusicEnabled } from "../lib/useMusicContent";
 import { useLikes, groupLikedItemsByDate } from "../lib/useLikes";
 import type { PlaylistSortOrder } from "../lib/playlistSort";
 
@@ -29,7 +30,9 @@ interface LikesProps {
 export const Likes: React.FC<LikesProps> = ({ onPlay }) => {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [filter, setFilter] = useState<LikesFilter>("all");
+  const [chosenFilter, setFilter] = useState<LikesFilter>("all");
+  const musicEnabled = useMusicEnabled();
+  const filter: LikesFilter = chosenFilter === "music" && !musicEnabled ? "all" : chosenFilter;
   const [sortOrder, setSortOrder] = useState<PlaylistSortOrder>(loadLikesSortOrder);
   const {
     items,
@@ -42,15 +45,16 @@ export const Likes: React.FC<LikesProps> = ({ onPlay }) => {
     () => [
       { key: "all" as const, label: getString("history_filter_all") },
       { key: "videos" as const, label: getString("history_filter_videos") },
-      { key: "music" as const, label: getString("history_filter_music") },
+      ...(musicEnabled ? [{ key: "music" as const, label: getString("history_filter_music") }] : []),
     ],
-    [],
+    [musicEnabled],
   );
   const activeLabel = filters.find((f) => f.key === filter)?.label ?? filters[0]?.label ?? "";
 
   const visibleItems = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     const filtered = items.filter((item) => {
+      if (!musicEnabled && item.kind === "music") return false;
       if (filter === "music" && item.kind !== "music") return false;
       if (filter === "videos" && item.kind !== "video") return false;
       if (query) {
@@ -64,7 +68,7 @@ export const Likes: React.FC<LikesProps> = ({ onPlay }) => {
       return true;
     });
     return sortLikedItems(filtered, sortOrder);
-  }, [filter, items, searchQuery, sortOrder]);
+  }, [filter, items, searchQuery, sortOrder, musicEnabled]);
 
   const visibleKeys = useMemo(() => visibleItems.map(likedItemKey), [visibleItems]);
   const selection = useMultiSelect(visibleKeys);

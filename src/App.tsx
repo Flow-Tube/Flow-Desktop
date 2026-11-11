@@ -73,6 +73,7 @@ import { GlobalMusicDock } from "./components/music/GlobalMusicDock";
 import { RemoteDock } from "./components/playon/RemoteDock";
 import { ConsentDialog } from "./components/playon/ConsentDialog";
 import { MusicOverlay } from "./components/music/MusicOverlay";
+import { MusicOnly } from "./components/music/MusicOnly";
 import { EqualizerDialog } from "./components/music/eq/EqualizerDialog";
 import { ContinueWatchingMini } from "./components/player/ContinueWatchingMini";
 import { GlobalVideoPlayer } from "./components/watch/GlobalVideoPlayer";
@@ -235,24 +236,27 @@ function App() {
           <Route path="feed" element={
             <FlowNeuroPersona />
           } />
-          <Route path="music" element={
-            <MusicHome />
-          } />
-          <Route path="music/moods" element={<MusicMoodsPage />} />
-          <Route path="music/browse" element={<MusicBrowsePage />} />
-          <Route path="music/mix/:id" element={<MusicMixPage />} />
-          <Route path="music/artist/:artistId" element={
-            <ArtistPage />
-          } />
-          <Route path="music/artist/:artistId/items" element={
-            <ArtistItemsPage />
-          } />
-          <Route path="music/album/:id" element={
-            <MusicCollectionPage kind="album" />
-          } />
-          <Route path="music/playlist/:id" element={
-            <MusicCollectionPage kind="playlist" />
-          } />
+          <Route element={<MusicOnly />}>
+            <Route path="music" element={
+              <MusicHome />
+            } />
+            <Route path="music/moods" element={<MusicMoodsPage />} />
+            <Route path="music/browse" element={<MusicBrowsePage />} />
+            <Route path="music/mix/:id" element={<MusicMixPage />} />
+            <Route path="music/artist/:artistId" element={
+              <ArtistPage />
+            } />
+            <Route path="music/artist/:artistId/items" element={
+              <ArtistItemsPage />
+            } />
+            <Route path="music/album/:id" element={
+              <MusicCollectionPage kind="album" />
+            } />
+            <Route path="music/playlist/:id" element={
+              <MusicCollectionPage kind="playlist" />
+            } />
+            <Route path="albums" element={<AlbumsLibrary />} />
+          </Route>
           <Route path="search" element={
             <Search onPlay={handlePlayVideo} onAddToQueue={handleAddToQueue} />
           } />
@@ -287,9 +291,6 @@ function App() {
           } />
           <Route path="library" element={
             <LibraryPage onPlay={handlePlayVideo} onAddToQueue={handleAddToQueue} />
-          } />
-          <Route path="albums" element={
-            <AlbumsLibrary />
           } />
           <Route path="notes" element={
             <Notes onPlay={handlePlayVideo} />

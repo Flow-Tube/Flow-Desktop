@@ -28,6 +28,7 @@ import { dateLabel, isEmptySummary, scopeOf } from "../lib/recap/recapFormat";
 import { useRecap, type RecapState } from "../lib/recap/useRecap";
 import { useRecapLinks } from "../lib/recap/useRecapLinks";
 import type { VideoSummary } from "../types/video";
+import { useMusicEnabled } from "../lib/useMusicContent";
 
 function EmptyPanel({ title, body }: { title: string; body?: string }) {
   return (
@@ -52,13 +53,14 @@ function LoadingCards() {
 
 function RecapCards({ recap, onPlay }: { recap: RecapState; onPlay: (video: VideoSummary) => void }) {
   const open = useRecapLinks(onPlay);
+  const musicEnabled = useMusicEnabled();
   const [storyOpen, setStoryOpen] = useState(false);
   const { summary, period, source, index } = recap;
   if (!summary || !index) return null;
   if (isEmptySummary(summary)) return <EmptyPanel title={getString("recap_period_empty")} />;
 
   const showVideo = source !== "MUSIC" && (summary.video.views > 0 || summary.video.activity.totalMs > 0);
-  const showMusic = source !== "VIDEO" && (summary.music.plays > 0 || summary.music.activity.totalMs > 0);
+  const showMusic = musicEnabled && source !== "VIDEO" && (summary.music.plays > 0 || summary.music.activity.totalMs > 0);
   const video = showVideo ? summary.video : null;
   const music = showMusic ? summary.music : null;
   const activity = summary.combined;

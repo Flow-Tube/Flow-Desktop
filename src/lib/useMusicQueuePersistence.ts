@@ -1,3 +1,4 @@
+import { musicEnabledNow } from "./useMusicContent";
 import { useEffect } from "react";
 import { onBeforeProfileSwitch } from "./profiles/beforeSwitch";
 
@@ -10,7 +11,8 @@ import { SETTINGS } from "./settings/schema";
 /** Saves land this long after a change, so a burst of edits or a playing song writes rarely. */
 const SAVE_DELAY_MS = 5_000;
 
-const restoreEnabled = () => getSettingValue(SETTINGS.MUSIC_RESTORE_QUEUE) !== "false";
+// A queue saved before Show Music went off stays saved, but doesn't come back while it is off.
+const restoreEnabled = () => getSettingValue(SETTINGS.MUSIC_RESTORE_QUEUE) !== "false" && musicEnabledNow();
 
 const settingsLoaded = (): Promise<void> =>
   new Promise((resolve) => {

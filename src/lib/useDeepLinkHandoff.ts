@@ -9,12 +9,13 @@ import { useProfilesStore } from "../store/useProfilesStore";
 
 import { getVideoDetails, resolveChannelId } from "./api/youtube";
 import { getMusicQueue, getMusicWatchQueue } from "./api/music";
-import { parseFlowUrl, type Handoff } from "./flowHandoff";
+import { handoffToOpen, parseFlowUrl, type Handoff } from "./flowHandoff";
 import { playLinkedPlaylist } from "./linkedPlaylist";
 import { addWatchRecord } from "./api/db";
 import { shouldRecordWatchHistory } from "./deepFlow";
 import { seekWhenVideoReady } from "./playerSeek";
 import { prefetchStreamInfo } from "./streamResolution";
+import { channelRoute } from "./youtubeUrl";
 import { getString } from "./i18n/index";
 import { useDownloadStore } from "../store/useDownloadStore";
 import { useMusicPlayerStore } from "../store/useMusicPlayerStore";
@@ -63,7 +64,8 @@ export function useDeepLinkHandoff() {
   pathnameRef.current = location.pathname;
 
   const route = useCallback(
-    async (handoff: Handoff) => {
+    async (received: Handoff) => {
+      const handoff = handoffToOpen(received);
       if (handoff.action === "page") {
         navigate(handoff.route);
         return;
@@ -72,7 +74,7 @@ export function useDeepLinkHandoff() {
       if (handoff.action === "channel") {
         try {
           const channelId = await resolveChannelId(handoff.url);
-          navigate(handoff.music ? `/music/artist/${channelId}` : `/channel/${channelId}`);
+          navigate(channelRoute(channelId, handoff.music));
         } catch {
           useUiStore.getState().showToast({ variant: "error", message: getString("handoff_link_unavailable") });
         }

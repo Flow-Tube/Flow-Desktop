@@ -154,6 +154,7 @@ const DESKTOP_ONLY: &[&str] = &[
     "shorts_playback_mode",
     "shorts_auto_scroll_seconds",
     "music_navigation_enabled",
+    "music_content_enabled",
     "categories_nav_tab_enabled",
     "subscription_refresh_on_startup",
     "subscription_collaborations_enabled",

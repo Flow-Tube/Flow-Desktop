@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import { availableWith, type SearchFilterState } from "./searchFilterState";
 import type { UseCombinedSearchReturn } from "./useCombinedSearch";
 import { useShortsEnabled } from "./useShortsContent";
+import { useMusicEnabled } from "./useMusicContent";
 import { useSearchHistoryStore } from "../store/useSearchHistoryStore";
 
 export function currentFilterState(search: UseCombinedSearchReturn): SearchFilterState {
@@ -16,6 +17,7 @@ export function currentFilterState(search: UseCombinedSearchReturn): SearchFilte
 export function useSearchFilterMemory(search: UseCombinedSearchReturn, query: string) {
   const location = useLocation();
   const shortsEnabled = useShortsEnabled();
+  const musicEnabled = useMusicEnabled();
   const rememberFilters = useSearchHistoryStore((state) => state.rememberFilters);
   const { applyFilterState } = search;
   const latest = useRef(currentFilterState(search));
@@ -23,16 +25,15 @@ export function useSearchFilterMemory(search: UseCombinedSearchReturn, query: st
 
   useEffect(() => {
     const stored = (location.state as { searchFilters?: SearchFilterState } | null)?.searchFilters;
-    if (stored) applyFilterState(availableWith(stored, shortsEnabled));
+    if (stored) applyFilterState(availableWith(stored, shortsEnabled, musicEnabled));
     else if (query) rememberFilters(query, latest.current);
     // Once per navigation: a later change of the switch is handled below.
   }, [location.key]);
 
   useEffect(() => {
-    if (!shortsEnabled && latest.current.category === "shorts") {
-      applyFilterState(availableWith(latest.current, false));
-    }
-  }, [shortsEnabled, applyFilterState]);
+    const available = availableWith(latest.current, shortsEnabled, musicEnabled);
+    if (available !== latest.current) applyFilterState(available);
+  }, [shortsEnabled, musicEnabled, applyFilterState]);
 
   return useCallback(
     (next: SearchFilterState) => {

@@ -34,9 +34,18 @@ export function toggledHiddenSections(hidden: ReadonlySet<string>, id: LibrarySe
   return JSON.stringify([...next]);
 }
 
-/** Saved Shorts goes with the Show Shorts switch as well as its own. */
-export function hiddenOnLibraryPage(hidden: ReadonlySet<string>, shortsEnabled: boolean): ReadonlySet<string> {
-  return shortsEnabled ? hidden : new Set([...hidden, "SAVED_SHORTS"]);
+/** Saved Shorts goes with the Show Shorts switch as well as its own, and Albums and Music downloads with Show Music. */
+export function hiddenOnLibraryPage(
+  hidden: ReadonlySet<string>,
+  shortsEnabled: boolean,
+  musicEnabled = true,
+): ReadonlySet<string> {
+  if (shortsEnabled && musicEnabled) return hidden;
+  return new Set([
+    ...hidden,
+    ...(shortsEnabled ? [] : ["SAVED_SHORTS"]),
+    ...(musicEnabled ? [] : ["ALBUMS", "MUSIC_DOWNLOADS"]),
+  ]);
 }
 
 export function useHiddenLibrarySections(): ReadonlySet<string> {

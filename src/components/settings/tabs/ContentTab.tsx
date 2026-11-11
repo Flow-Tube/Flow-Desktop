@@ -45,6 +45,7 @@ export function ContentTab() {
   const [shortsPlaybackMode, setShortsPlaybackMode] = usePreference(SETTINGS.SHORTS_PLAYBACK_MODE, 'loop');
   const [shortsAutoScrollSeconds, setShortsAutoScrollSeconds] = useNumberPref(SETTINGS.SHORTS_AUTO_SCROLL_SECONDS, 10);
   const [musicNav, setMusicNav] = useBoolPref(SETTINGS.MUSIC_NAVIGATION_ENABLED, true);
+  const [musicContent, setMusicContent] = useBoolPref(SETTINGS.MUSIC_CONTENT_ENABLED, true);
   const [categoriesTab, setCategoriesTab] = useBoolPref(SETTINGS.CATEGORIES_NAV_TAB_ENABLED, false);
   const [homeMaxVideoAge, setHomeMaxVideoAge] = usePreference(SETTINGS.HOME_MAX_VIDEO_AGE, '0');
 
@@ -161,12 +162,16 @@ export function ContentTab() {
         )}
       </SettingsGroup>
 
+      <SettingsGroup title={getString('music')}>
+        <SettingItem title={getString('settings_show_music_content')} description={getString('settings_show_music_content_desc')}><ToggleSwitch checked={musicContent} onChange={setMusicContent} /></SettingItem>
+      </SettingsGroup>
+
       <LibrarySectionsGroup />
 
       <SettingsGroup title={getString('settings_group_nav_tabs')}>
         <SettingItem title={getString('settings_tabs_enabled')} description={getString('settings_tabs_enabled_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.TABS_ENABLED)}><ToggleSwitch checked={tabsOn} onChange={setTabsOn} disabled={isSettingDisabledUntilWired(SETTINGS.TABS_ENABLED)} /></SettingItem>
         <SettingItem title={getString('settings_shorts_tab')} disabled={!shortsContent || isSettingDisabledUntilWired(SETTINGS.SHORTS_NAVIGATION_ENABLED)}><ToggleSwitch checked={shortsNav} onChange={setShortsNav} disabled={!shortsContent || isSettingDisabledUntilWired(SETTINGS.SHORTS_NAVIGATION_ENABLED)} /></SettingItem>
-        <SettingItem title={getString('settings_music_tab')} disabled={isSettingDisabledUntilWired(SETTINGS.MUSIC_NAVIGATION_ENABLED)}><ToggleSwitch checked={musicNav} onChange={setMusicNav} disabled={isSettingDisabledUntilWired(SETTINGS.MUSIC_NAVIGATION_ENABLED)} /></SettingItem>
+        <SettingItem title={getString('settings_music_tab')} disabled={!musicContent || isSettingDisabledUntilWired(SETTINGS.MUSIC_NAVIGATION_ENABLED)}><ToggleSwitch checked={musicNav} onChange={setMusicNav} disabled={!musicContent || isSettingDisabledUntilWired(SETTINGS.MUSIC_NAVIGATION_ENABLED)} /></SettingItem>
         <SettingItem title={getString('settings_categories_tab')} description={getString('settings_categories_tab_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.CATEGORIES_NAV_TAB_ENABLED)}><ToggleSwitch checked={categoriesTab} onChange={setCategoriesTab} disabled={isSettingDisabledUntilWired(SETTINGS.CATEGORIES_NAV_TAB_ENABLED)} /></SettingItem>
       </SettingsGroup>
 

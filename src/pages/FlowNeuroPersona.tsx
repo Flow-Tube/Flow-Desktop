@@ -23,6 +23,7 @@ import { MusicTopArtists } from "../components/persona/MusicTopArtists";
 import { MusicGenreAffinity } from "../components/persona/MusicGenreAffinity";
 import { MusicListeningPatterns } from "../components/persona/MusicListeningPatterns";
 import { MusicBlockedArtists } from "../components/persona/MusicBlockedArtists";
+import { useMusicEnabled } from "../lib/useMusicContent";
 import { LearningActivity } from "../components/persona/LearningActivity";
 import { ProfileData } from "../components/persona/ProfileData";
 
@@ -56,6 +57,7 @@ export function FlowNeuroPersona() {
   const { choices, viewing, choose, activeId } = useViewedProfile();
   const readOnly = viewing !== null;
   const { brain, persona, musicProfile, loading, refreshing, failed, refresh } = usePersonaData(viewing?.id ?? null);
+  const musicEnabled = useMusicEnabled();
 
   const handleUnblockTopic = async (topic: string) => {
     try {
@@ -228,7 +230,7 @@ export function FlowNeuroPersona() {
         )}
 
         {/* Music taste profile — learned locally by the dedicated music engine */}
-        {musicProfile && (
+        {musicEnabled && musicProfile && (
           <>
             <div className="col-span-12">
               <MusicTasteOverview profile={musicProfile} />

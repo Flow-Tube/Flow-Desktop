@@ -49,7 +49,15 @@ export function sanitizeFilterState(raw: unknown): SearchFilterState | undefined
   };
 }
 
-/** The stored filters this device can still run: a Shorts search falls back to All once Shorts are hidden. */
-export function availableWith(state: SearchFilterState, shortsEnabled: boolean): SearchFilterState {
-  return !shortsEnabled && state.category === "shorts" ? { ...state, category: "all" } : state;
+/** Categories only YouTube Music answers. Artists and Playlists also have YouTube's channels and playlists. */
+export const MUSIC_ONLY_CATEGORIES: ReadonlySet<SearchCategory> = new Set(["songs", "albums", "podcasts", "episodes"]);
+
+/**
+ * The stored filters this device can still run: a Shorts search falls back to All once Shorts are
+ * hidden, and a music-only one once Show Music is off.
+ */
+export function availableWith(state: SearchFilterState, shortsEnabled: boolean, musicEnabled = true): SearchFilterState {
+  const hidden = (!shortsEnabled && state.category === "shorts")
+    || (!musicEnabled && MUSIC_ONLY_CATEGORIES.has(state.category));
+  return hidden ? { ...state, category: "all" } : state;
 }

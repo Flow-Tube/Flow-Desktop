@@ -611,6 +611,12 @@ export const Player: React.FC<PlayerProps> = ({
     !error &&
     videoFit === "fit" &&
     (isTheaterSurface || ambient.glow);
+  const ambientSpreadShown = showAmbient && ambient.glow;
+  const setIsAmbientSpreadShown = usePlayerStore((state) => state.setIsAmbientSpreadShown);
+  useEffect(() => {
+    setIsAmbientSpreadShown(ambientSpreadShown);
+    return () => setIsAmbientSpreadShown(false);
+  }, [ambientSpreadShown, setIsAmbientSpreadShown]);
   const effectivePoster = hasStartedPlayback || resumeTime > 0 || isSourceSwitching ? undefined : poster || undefined;
   const logPlayerEvent = useCallback((event: string, payload: Record<string, unknown> = {}) => {
     const entry = formatPlayerLogPayload({

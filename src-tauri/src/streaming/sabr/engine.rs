@@ -170,6 +170,20 @@ pub struct SabrEngine {
     started: AtomicBool,
     request_counter: AtomicU64,
     restart_request: AtomicBool,
+    failed: AtomicBool,
+}
+
+/// The web clients whose SABR sessions take Flow's own `BotGuard` token. When that token can't be
+/// refreshed, every one of their sessions stops at the same minute.
+const WEB_SABR_CLIENTS: [&str; 2] = ["MWEB", "WEB"];
+
+/// Attestation ran out with no way to renew it, so a retry under the same web clients stops at the
+/// same point. They go last for a while and the next resolve tries the direct clients first.
+fn bench_web_sabr_clients(session_id: &str) {
+    info!(session = %session_id, "SABR attestation can't be renewed; trying the web clients last for a while");
+    for client in WEB_SABR_CLIENTS {
+        crate::api::innertube::core::gate_tracker::gate(client);
+    }
 }
 
 impl SabrEngine {
@@ -237,6 +251,7 @@ impl SabrEngine {
             started: AtomicBool::new(false),
             request_counter: AtomicU64::new(0),
             restart_request: AtomicBool::new(false),
+            failed: AtomicBool::new(false),
         }
     }
 
@@ -259,6 +274,11 @@ impl SabrEngine {
         self.cancelled.store(true, Ordering::SeqCst);
         self.notify_demand.notify_waiters();
         self.notify_data.notify_waiters();
+    }
+
+    /// The session ended on an error, so a new resolve must start a session of its own.
+    pub fn has_failed(&self) -> bool {
+        self.failed.load(Ordering::SeqCst)
     }
 
     fn is_cancelled(&self) -> bool {
@@ -310,6 +330,7 @@ impl SabrEngine {
                         "sabr_attestation_refresh"
                     );
                     if !refreshed {
+                        bench_web_sabr_clients(&self.session_id);
                         let mut store = self.store.lock().await;
                         store.last_error = Some(SabrError::AttestationRequired);
                         self.notify_data.notify_waiters();
@@ -321,6 +342,9 @@ impl SabrEngine {
                 Err(err) => {
                     warn!(session = %self.session_id, code = err.code(), error = %err, "sabr_error");
                     if !err.is_retryable() || consecutive_errors >= self.config.max_retries {
+                        if matches!(err, SabrError::AttestationRequired) {
+                            bench_web_sabr_clients(&self.session_id);
+                        }
                         let mut store = self.store.lock().await;
                         store.last_error = Some(err);
                         self.notify_data.notify_waiters();
@@ -344,6 +368,9 @@ impl SabrEngine {
         {
             let mut store = self.store.lock().await;
             store.done = true;
+            if store.last_error.is_some() {
+                self.failed.store(true, Ordering::SeqCst);
+            }
         }
         self.notify_data.notify_waiters();
         info!(session = %self.session_id, "sabr_session_finished");

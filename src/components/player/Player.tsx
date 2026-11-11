@@ -609,7 +609,6 @@ export const Player: React.FC<PlayerProps> = ({
     !isPipMode &&
     !isFullscreen &&
     !error &&
-    videoFit === "fit" &&
     (isTheaterSurface || ambient.glow);
   const ambientSpreadShown = showAmbient && ambient.glow;
   const setIsAmbientSpreadShown = usePlayerStore((state) => state.setIsAmbientSpreadShown);

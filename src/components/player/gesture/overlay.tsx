@@ -358,10 +358,26 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
     };
     // Fullscreen, theater mode or the mini player resize the player under an open menu.
     let observedOnce = false;
-    const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => {
+    let initialWidth = layerRef.current?.offsetWidth ?? 0;
+    let initialHeight = layerRef.current?.offsetHeight ?? 0;
+    const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver((entries) => {
+      const entry = entries[0];
       if (!observedOnce) {
         observedOnce = true;
+        if (entry) {
+          initialWidth = entry.contentRect.width;
+          initialHeight = entry.contentRect.height;
+        }
         return;
+      }
+      if (entry) {
+        const dx = Math.abs(entry.contentRect.width - initialWidth);
+        const dy = Math.abs(entry.contentRect.height - initialHeight);
+        // Fullscreen, theater mode or the mini player resize the player by tens or hundreds of pixels.
+        // Minor subpixel reflows (e.g. from video-fit changes or scrollbars) must not dismiss settings.
+        if (dx < 16 && dy < 16) return;
+        initialWidth = entry.contentRect.width;
+        initialHeight = entry.contentRect.height;
       }
       setContextMenu(null);
       onCloseSettings();

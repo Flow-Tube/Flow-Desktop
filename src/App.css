@@ -340,7 +340,7 @@
 }
 
 .animate-section-crossfade {
-  animation: section-crossfade 0.12s ease-out forwards;
+  animation: section-crossfade var(--motion-menu-out) var(--motion-ease) forwards;
 }
 
 @keyframes shimmer {

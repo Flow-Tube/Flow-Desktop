@@ -9,6 +9,8 @@ import {
   FRAME_CYCLE_INTERVAL_MS,
 } from "./useHoverPreview";
 import { useHoverPreviewStore } from "../store/useHoverPreviewStore";
+import { useAppSettingsStore } from "../store/useAppSettingsStore";
+import { SETTINGS } from "./settings/schema";
 import * as youtubeApi from "./api/youtube";
 import type { StoryboardLevel } from "../types/video";
 
@@ -23,8 +25,7 @@ describe("useHoverPreview", () => {
     videoId: string;
     isHovered: boolean;
     durationSeconds?: number;
-    targetWidth?: number;
-    targetHeight?: number;
+    measure?: () => { width: number; height: number } | null;
     enabled?: boolean;
   }) {
     const result = useHoverPreview(props);
@@ -35,6 +36,7 @@ describe("useHoverPreview", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     useHoverPreviewStore.setState({ activeVideoId: null });
+    useAppSettingsStore.setState({ values: { [SETTINGS.VIDEO_HOVER_PREVIEWS_ENABLED]: "true" } });
     host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
@@ -47,6 +49,21 @@ describe("useHoverPreview", () => {
     });
     host.remove();
     vi.useRealTimers();
+    useAppSettingsStore.setState({ values: {} });
+  });
+
+  it("stays off until the setting is turned on", async () => {
+    useAppSettingsStore.setState({ values: {} });
+    const storyboard = vi.spyOn(youtubeApi, "getVideoStoryboard").mockResolvedValue([]);
+    act(() => {
+      root.render(createElement(TestComponent, { videoId: "vid_off", isHovered: true, durationSeconds: 60 }));
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(storyboard).not.toHaveBeenCalled();
+    expect(lastHookResult?.isPreviewActive).toBe(false);
+    storyboard.mockRestore();
   });
 
   it("remains inactive when isHovered is false", () => {
@@ -177,7 +194,7 @@ describe("useHoverPreview", () => {
             videoId: "vid_hires",
             isHovered: true,
             durationSeconds: 50,
-            targetWidth: 360,
+            measure: () => ({ width: 360, height: 0 }),
           })
         );
       });

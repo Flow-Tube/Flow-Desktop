@@ -11,7 +11,6 @@ import { SETTINGS } from "./settings/schema";
 const HOVER_INTENT_DELAY_MS = 400;
 export const FRAME_CYCLE_INTERVAL_MS = 125; // 8 FPS (~125ms per frame)
 export const TOTAL_PREVIEW_FRAMES = 24; // 24 frames * 125ms = 3.0 seconds exact duration
-const MAX_STORYBOARD_CACHE_ENTRIES = 100;
 
 /**
  * Determines the number of preview timeline sections based on video duration.
@@ -21,18 +20,6 @@ export function getPreviewClusterCount(durationSeconds: number): number {
   if (durationSeconds <= 30) return 1;
   if (durationSeconds <= 180) return 2;
   return 3;
-}
-
-const storyboardSpecCache = new Map<string, StoryboardLevel[]>();
-
-function cacheStoryboardSpec(videoId: string, levels: StoryboardLevel[]) {
-  if (storyboardSpecCache.size >= MAX_STORYBOARD_CACHE_ENTRIES) {
-    const oldestKey = storyboardSpecCache.keys().next().value;
-    if (oldestKey !== undefined) {
-      storyboardSpecCache.delete(oldestKey);
-    }
-  }
-  storyboardSpecCache.set(videoId, levels);
 }
 
 async function preloadImage(url: string): Promise<void> {
@@ -75,8 +62,8 @@ export interface UseHoverPreviewOptions {
   videoId: string;
   isHovered: boolean;
   durationSeconds?: number | null;
-  targetWidth?: number;
-  targetHeight?: number;
+  /** The card's size in device pixels, read when the preview starts rather than on every render. */
+  measure?: () => { width: number; height: number } | null;
   enabled?: boolean;
 }
 
@@ -91,14 +78,14 @@ export function useHoverPreview({
   videoId,
   isHovered,
   durationSeconds,
-  targetWidth,
-  targetHeight,
+  measure,
   enabled = true,
 }: UseHoverPreviewOptions): UseHoverPreviewResult {
+  // Off until turned on: each preview asks YouTube for the hovered video's storyboard.
   const settingEnabled = useAppSettingsStore(
-    (state) => state.values[SETTINGS.VIDEO_HOVER_PREVIEWS_ENABLED] !== "false"
+    (state) => state.values[SETTINGS.VIDEO_HOVER_PREVIEWS_ENABLED] === "true"
   );
-  const activeVideoId = useHoverPreviewStore((state) => state.activeVideoId);
+  const isActiveCard = useHoverPreviewStore((state) => state.activeVideoId === videoId);
   const setActiveVideoId = useHoverPreviewStore((state) => state.setActiveVideoId);
   const clearActive = useHoverPreviewStore((state) => state.clearActive);
   const proxyBase = useImageProxyStore((state) => state.base);
@@ -112,11 +99,8 @@ export function useHoverPreview({
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cycleIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const targetWidthRef = useRef(targetWidth);
-  targetWidthRef.current = targetWidth;
-
-  const targetHeightRef = useRef(targetHeight);
-  targetHeightRef.current = targetHeight;
+  const measureRef = useRef(measure);
+  measureRef.current = measure;
 
   const durationSecondsRef = useRef(durationSeconds);
   durationSecondsRef.current = durationSeconds;
@@ -133,7 +117,7 @@ export function useHoverPreview({
 
   // If another video card became active, deactivate this card immediately
   useEffect(() => {
-    if (activeVideoId !== videoId && isPreviewActive) {
+    if (!isActiveCard && isPreviewActive) {
       if (cycleIntervalRef.current) {
         clearInterval(cycleIntervalRef.current);
         cycleIntervalRef.current = null;
@@ -143,7 +127,7 @@ export function useHoverPreview({
       setCurrentLevel(null);
       setProgressPercent(0);
     }
-  }, [activeVideoId, videoId, isPreviewActive]);
+  }, [isActiveCard, isPreviewActive]);
 
   // Cancellation listeners for window blur and scroll
   useEffect(() => {
@@ -182,9 +166,7 @@ export function useHoverPreview({
     }
 
     if (!isHovered || !enabled || !settingEnabled) {
-      if (activeVideoId === videoId) {
-        clearActive(videoId);
-      }
+      clearActive(videoId);
       setIsPreviewActive(false);
       setCurrentFrame(null);
       setCurrentLevel(null);
@@ -208,14 +190,9 @@ export function useHoverPreview({
       setActiveVideoId(videoId);
 
       try {
-        let levels = storyboardSpecCache.get(videoId);
-        if (!levels) {
-          levels = await getVideoStoryboard(videoId);
-          if (!isMountedRef.current) return;
-          if (levels && levels.length > 0) {
-            cacheStoryboardSpec(videoId, levels);
-          }
-        }
+        // The backend caches each video's storyboard for as long as its signed sheet links last.
+        const levels = await getVideoStoryboard(videoId);
+        if (!isMountedRef.current) return;
 
         if (!levels || levels.length === 0) {
           clearActive(videoId);
@@ -223,14 +200,9 @@ export function useHoverPreview({
         }
 
         const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
-        const effectiveHeight =
-          targetHeightRef.current && targetHeightRef.current > 0
-            ? targetHeightRef.current
-            : 180 * dpr;
-        const effectiveWidth =
-          targetWidthRef.current && targetWidthRef.current > 0
-            ? targetWidthRef.current
-            : 320 * dpr;
+        const size = measureRef.current?.();
+        const effectiveHeight = size && size.height > 0 ? size.height : 180 * dpr;
+        const effectiveWidth = size && size.width > 0 ? size.width : 320 * dpr;
 
         const level = pickHoverPreviewLevel(levels, effectiveHeight, effectiveWidth);
         if (!level || !isMountedRef.current) {

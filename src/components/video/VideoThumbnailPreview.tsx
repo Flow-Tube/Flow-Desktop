@@ -230,7 +230,7 @@ export const VideoThumbnailPreview: React.FC<VideoThumbnailPreviewProps> = ({
       {progressPercent > 0 && (
         <div className="absolute bottom-0 inset-x-0 z-20 h-[2px] bg-chrome-black/40 pointer-events-none">
           <div
-            className="h-full bg-primary transition-all ease-linear"
+            className="h-full bg-primary transition-[width] ease-linear"
             style={{
               width: `${Math.min(100, Math.max(0, progressPercent))}%`,
               transitionDuration: isLoopReset ? "0ms" : "125ms",

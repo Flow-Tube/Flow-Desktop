@@ -25,7 +25,8 @@ const SHORTCUT_LABEL = IS_MACOS_RUNTIME ? '⌘K' : 'Ctrl K';
 export function TopbarSearch() {
   const navigate = useNavigate();
   const location = useLocation();
-  const isSettingsPage = location.pathname.startsWith('/settings');
+  // Only the Settings page itself; Import, Discover channels and Diagnostics live under /settings/ too.
+  const isSettingsPage = /^\/settings\/?$/.test(location.pathname);
   const settingsQuery = useSettingsSearchStore((s) => s.query);
   const setSettingsQuery = useSettingsSearchStore((s) => s.setQuery);
   const clearSettingsQuery = useSettingsSearchStore((s) => s.clearQuery);
@@ -253,11 +254,15 @@ export function TopbarSearch() {
           type="text"
           placeholder={getString(isSettingsPage ? 'settings_search_placeholder' : 'search_placeholder')}
           value={currentValue}
-          role="combobox"
-          aria-expanded={panelVisible}
-          aria-controls={panelVisible ? 'search-suggestions' : undefined}
-          aria-autocomplete="list"
-          aria-activedescendant={activeKey ? suggestionOptionId(activeKey) : undefined}
+          {...(isSettingsPage
+            ? { 'aria-label': getString('settings_search_placeholder') }
+            : {
+                role: 'combobox',
+                'aria-expanded': panelVisible,
+                'aria-controls': panelVisible ? 'search-suggestions' : undefined,
+                'aria-autocomplete': 'list' as const,
+                'aria-activedescendant': activeKey ? suggestionOptionId(activeKey) : undefined,
+              })}
           autoComplete="off"
           spellCheck={false}
           onFocus={() => {

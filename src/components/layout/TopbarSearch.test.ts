@@ -46,6 +46,24 @@ describe("TopbarSearch", () => {
     expect(input?.placeholder).toBe(getString("settings_search_placeholder"));
   });
 
+  it("keeps searching YouTube on the pages under /settings/", () => {
+    for (const path of ["/settings/import", "/settings/discover-channels", "/settings/diagnostics"]) {
+      act(() => root.unmount());
+      root = createRoot(host);
+      renderTopbarSearch(path);
+      const input = host.querySelector("input");
+      expect(input?.placeholder).toBe(getString("search_placeholder"));
+      expect(input?.getAttribute("role")).toBe("combobox");
+    }
+  });
+
+  it("is a plain search field, not a suggestions combobox, on /settings", () => {
+    renderTopbarSearch("/settings");
+    const input = host.querySelector("input");
+    expect(input?.getAttribute("role")).toBeNull();
+    expect(input?.getAttribute("aria-label")).toBe(getString("settings_search_placeholder"));
+  });
+
   it("updates useSettingsSearchStore when typing on /settings", () => {
     renderTopbarSearch("/settings");
     const input = host.querySelector("input")!;

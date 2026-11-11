@@ -231,7 +231,12 @@ function VideoCardComponent({
 
   // Channels, live streams, premieres and local files have no storyboard to preview.
   const hoverPreview = isHovered && !isChannel && !isLiveVideo && !video.isUpcoming && !isLocalMediaId(video.id) ? (
-    <VideoHoverPreview videoId={video.id} durationSeconds={video.durationSeconds} thumbnailRef={thumbnailRef} />
+    <VideoHoverPreview
+      videoId={video.id}
+      durationSeconds={video.durationSeconds}
+      thumbnailRef={thumbnailRef}
+      clearTopEnd={variant === 'history' && Boolean(onRemoveFromHistory)}
+    />
   ) : null;
 
   const handleMouseEnter = useCallback(() => {

@@ -4,7 +4,7 @@ import { SETTINGS } from "./settings/schema";
 export type HoverPreviewMode = "off" | "frames" | "video";
 
 /** The modes Settings offers, in order. */
-export const HOVER_PREVIEW_MODES: readonly HoverPreviewMode[] = ["off", "frames"];
+export const HOVER_PREVIEW_MODES: readonly HoverPreviewMode[] = ["off", "frames", "video"];
 
 export const HOVER_PREVIEW_MODE_LABELS = {
   off: "settings_hover_previews_off",

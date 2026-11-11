@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 
 import { useMusicPlayerStore } from "../store/useMusicPlayerStore";
-import { usePlayerStore } from "../store/usePlayerStore";
+import { pauseOtherPlayback } from "./pauseOtherPlayback";
 import { useSleepTimerStore } from "../store/useSleepTimerStore";
 import { musicAudioEngine } from "./audio/musicAudioEngine";
 import { quitApp } from "./api/process";
@@ -24,10 +24,7 @@ function stopFading(): void {
 function expire(): void {
   const { quitOnExpiry, cancel } = useSleepTimerStore.getState();
   cancel();
-  const music = useMusicPlayerStore.getState();
-  if (music.isPlaying) music.pause();
-  const video = usePlayerStore.getState();
-  if (video.isPlaying) video.setIsPlaying(false);
+  pauseOtherPlayback();
   stopFading();
   if (quitOnExpiry) setTimeout(() => void quitApp(), QUIT_DELAY_MS);
 }

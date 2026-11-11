@@ -38,7 +38,9 @@ fn flights() -> &'static PlayerFlights<Option<Vec<StoryboardLevel>>> {
 }
 
 fn cached_storyboard(video_id: &str) -> Option<Vec<StoryboardLevel>> {
-    let mut cache = storyboard_cache().lock().ok()?;
+    let mut cache = storyboard_cache()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let entry = cache.get(video_id)?;
     if entry.resolved_at.elapsed() >= STORYBOARD_TTL {
         cache.remove(video_id);
@@ -48,18 +50,17 @@ fn cached_storyboard(video_id: &str) -> Option<Vec<StoryboardLevel>> {
 }
 
 fn store_storyboard(video_id: &str, levels: Vec<StoryboardLevel>) {
-    let Ok(mut cache) = storyboard_cache().lock() else {
-        return;
-    };
+    let mut cache = storyboard_cache()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     cache.retain(|_, entry| entry.resolved_at.elapsed() < STORYBOARD_TTL);
-    if cache.len() >= STORYBOARD_CACHE_CAPACITY {
-        if let Some(oldest) = cache
+    if cache.len() >= STORYBOARD_CACHE_CAPACITY
+        && let Some(oldest) = cache
             .iter()
             .min_by_key(|(_, entry)| entry.resolved_at)
             .map(|(key, _)| key.clone())
-        {
-            cache.remove(&oldest);
-        }
+    {
+        cache.remove(&oldest);
     }
     cache.insert(
         video_id.to_string(),

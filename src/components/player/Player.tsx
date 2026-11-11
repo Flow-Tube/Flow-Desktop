@@ -82,6 +82,7 @@ import { openPopoutPlayer } from "../../lib/pipHandoff";
 import { sleepTimerTakesEnd } from "../../lib/useSleepTimerDriver";
 import { usePlaybackStartSpeed } from "../../lib/playbackStartSpeed";
 import { VIDEO_FIT_CLASS } from "../../lib/videoFit";
+import { ambientShown } from "../../lib/ambient/ambientShown";
 import {
   formatPlaybackRate,
   normalizePlaybackRate,
@@ -603,13 +604,13 @@ export const Player: React.FC<PlayerProps> = ({
     setIsPlayerChromeShown(shouldShowControls);
   }, [shouldShowControls, setIsPlayerChromeShown]);
   // The pop-out holds a window of its own, with no page around the video to light.
-  const showAmbient =
-    ambient.enabled &&
-    IS_MAIN_WINDOW &&
-    !isPipMode &&
-    !isFullscreen &&
-    !error &&
-    (isTheaterSurface || ambient.glow);
+  const showAmbient = ambientShown({
+    enabled: ambient.enabled,
+    glow: ambient.glow,
+    theater: isTheaterSurface,
+    videoFit,
+    blocked: !IS_MAIN_WINDOW || isPipMode || isFullscreen || Boolean(error),
+  });
   const ambientSpreadShown = showAmbient && ambient.glow;
   const setIsAmbientSpreadShown = usePlayerStore((state) => state.setIsAmbientSpreadShown);
   useEffect(() => {

@@ -173,24 +173,13 @@ export function PlayerSettingsMenu({
     if (!open || !wasOpen || from === null || duration <= 0 || typeof box.animate !== "function") return;
     const direction = PANE_DEPTH[pane] >= PANE_DEPTH[previous] ? 1 : -1;
     box.getAnimations().forEach((animation) => animation.cancel());
-    box.style.height = "";
-    box.style.opacity = "";
-    box.style.transform = "";
-    const animation = box.animate(
+    box.animate(
       [
-        { height: `${from}px`, opacity: 0.6, transform: `translateX(${direction * PANE_SLIDE_PX}px)` },
+        { height: `${from}px`, opacity: 0, transform: `translateX(${direction * PANE_SLIDE_PX}px)` },
         { height: `${to}px`, opacity: 1, transform: "none" },
       ],
-      { duration, easing: MOTION_EASE, fill: "both" },
+      { duration, easing: MOTION_EASE },
     );
-    animation.onfinish = () => {
-      animation.cancel();
-      if (box) {
-        box.style.height = "";
-        box.style.opacity = "";
-        box.style.transform = "";
-      }
-    };
   }, [pane, open]);
 
   const selectedCaption = captions.find((caption) => caption.id === selectedCaptionId) || null;

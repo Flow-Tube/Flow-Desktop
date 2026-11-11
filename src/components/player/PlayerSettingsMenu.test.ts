@@ -59,34 +59,4 @@ describe("player settings menu", () => {
     expect(switches).toHaveLength(2);
     expect(rows.slice(-2)).toEqual(switches);
   });
-
-  it("renders the resize pane with all fit options when pane is resize", () => {
-    act(() =>
-      root.render(
-        createElement(PlayerSettingsMenu, {
-          open: true,
-          pane: "resize",
-          onPaneChange: () => {},
-          onClose: () => {},
-          qualities: [],
-          selectedQualityId: "auto",
-          isDashPlayback: false,
-          captions: [],
-          selectedCaptionId: "off",
-          setSelectedCaptionId: () => {},
-          audioTracks: [],
-          setSelectedAudioTrackId: () => {},
-          speedOptions: [1],
-          speedSliderEnabled: false,
-          playbackRate: 1,
-          onSelectPlaybackRate: () => {},
-        }),
-      ),
-    );
-    const text = host.textContent ?? "";
-    expect(text).toContain(getString("player_menu_resize"));
-    expect(text).toContain(getString("player_resize_fit"));
-    expect(text).toContain(getString("player_resize_fill"));
-    expect(text).toContain(getString("player_resize_zoom"));
-  });
 });

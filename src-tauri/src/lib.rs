@@ -450,6 +450,7 @@ pub fn run() {
             std::fs::create_dir_all(&profile_root)?;
             extractor.keep_identity_in(profile_root.join("visitor_identity.json"));
             let youtube_service = YoutubeService::new(extractor.clone());
+            let link_resolver = commands::youtube::link_resolver(youtube_service.clone());
             app.manage(youtube_service);
             app.manage(extractor.clone());
 
@@ -586,6 +587,7 @@ pub fn run() {
 
             // Initialize and manage streaming proxy
             let (streaming_manager, proxy_listeners) = streaming::proxy::StreamingManager::new();
+            streaming_manager.set_link_resolver(link_resolver);
             tauri::async_runtime::spawn(streaming::proxy::start_proxy_server(
                 streaming_manager.clone(),
                 proxy_listeners.media,

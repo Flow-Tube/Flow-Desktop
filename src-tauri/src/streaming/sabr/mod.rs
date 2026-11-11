@@ -203,7 +203,10 @@ impl SabrSessionManager {
             }
         }
         {
-            let sessions = self.sessions.lock().unwrap();
+            let mut sessions = self.sessions.lock().unwrap();
+            // A session that ended on an error can't serve again: reusing it fails the new
+            // resolve's manifest and wastes the player's one automatic retry.
+            sessions.retain(|_, h| h.video_id != descriptor.video_id || !h.engine.has_failed());
             if let Some(handle) = sessions
                 .values()
                 .find(|h| h.video_id == descriptor.video_id)

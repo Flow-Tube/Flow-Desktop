@@ -226,7 +226,8 @@ pub(crate) fn apply_backend_setting(key: &str, value: Option<&str>) {
     }
     let enabled = value.is_some_and(|value| value.eq_ignore_ascii_case("true"));
     if key == remote_decoder::SETTING_KEY {
-        remote_decoder::set_enabled(enabled);
+        // On unless turned off, as on Flow for Android: it is the only way past a walled visitor.
+        remote_decoder::set_enabled(value.is_none_or(|value| value.eq_ignore_ascii_case("true")));
     } else if key == audio_preference::STABLE_VOLUME_SETTING {
         audio_preference::set_stable_volume(enabled);
     } else if key == locale::CONTENT_LANGUAGE_SETTING {

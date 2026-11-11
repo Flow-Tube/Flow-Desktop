@@ -16,7 +16,7 @@ export function NetworkTab() {
   const [maxBuffer, setMaxBuffer] = useNumberPref(SETTINGS.MAX_BUFFER_MS, 50000);
   const [playbackBuffer, setPlaybackBuffer] = useNumberPref(SETTINGS.BUFFER_FOR_PLAYBACK_MS, 2500);
   const [rebufferBuffer, setRebufferBuffer] = useNumberPref(SETTINGS.BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS, 5000);
-  const [remoteSignatures, setRemoteSignatures] = useBoolPref(SETTINGS.REMOTE_SIGNATURE_FALLBACK, false);
+  const [remoteSignatures, setRemoteSignatures] = useBoolPref(SETTINGS.REMOTE_SIGNATURE_FALLBACK, true);
   const [proxyEnabled, setProxyEnabled] = useBoolPref(SETTINGS.PROXY_ENABLED, false);
   const [proxyType, setProxyType] = usePreference(SETTINGS.PROXY_TYPE, 'http');
   const [proxyHost, setProxyHost] = usePreference(SETTINGS.PROXY_HOST, '');

@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use tauri::State;
 use tracing::{debug, info};
@@ -25,6 +26,7 @@ use crate::services::youtube_service::YoutubeService;
 use crate::streaming::codec::VideoCodecFamily;
 
 use crate::streaming::proxy::StreamingManager;
+use crate::streaming::swap::{LinkResolver, StreamLink};
 
 /// The channel a handle, `/c/` or `/user/` link names, through the site's own
 /// router.
@@ -426,6 +428,55 @@ pub async fn get_more_related_videos(
         .map_err(ErrorResponse::from)
 }
 
+/// The User-Agent `info`'s links are fetched with. Extraction appends the winning client's to
+/// `expires_at`; the fallback is the client that leads the ladder, so a missing suffix still
+/// fetches with an identity the registry knows rather than a stale literal.
+fn stream_user_agent(info: &StreamInfo) -> String {
+    info.expires_at
+        .split('|')
+        .nth(1)
+        .map_or_else(|| clients::VISIONOS.user_agent.to_string(), str::to_string)
+}
+
+/// Every googlevideo link in `info` the player may fetch, before the proxy takes them over.
+fn stream_links(info: &StreamInfo) -> Vec<StreamLink> {
+    let user_agent = stream_user_agent(info);
+    let progressive = std::iter::once(info.local_url.clone());
+    let variants = info
+        .variants
+        .iter()
+        .map(|variant| variant.local_url.clone());
+    let audio = info.audio_tracks.iter().map(|track| {
+        (
+            track.local_url.clone(),
+            track
+                .user_agent
+                .clone()
+                .unwrap_or_else(|| user_agent.clone()),
+        )
+    });
+    progressive
+        .chain(variants)
+        .map(|url| (url, user_agent.clone()))
+        .chain(audio)
+        .filter(|(url, _)| !url.is_empty())
+        .map(|(url, user_agent)| StreamLink::new(url, user_agent))
+        .collect()
+}
+
+/// Fresh links for a video one of whose links googlevideo refused mid-play. The refusal has
+/// already demoted the walled client, so this walks the ladder as a new video would.
+#[must_use]
+pub fn link_resolver(youtube_service: YoutubeService) -> LinkResolver {
+    Arc::new(move |video_id: String| {
+        let youtube_service = youtube_service.clone();
+        Box::pin(async move {
+            let info = youtube_service.get_stream_info(&video_id, true).await;
+            info.ok().map(|info| stream_links(&info))
+        })
+    })
+}
+
 #[tauri::command]
 #[tracing::instrument(skip_all, fields(video_id = %video_id))]
 pub async fn get_stream_info(
@@ -458,15 +509,13 @@ pub async fn get_stream_info(
 
     let token = uuid::Uuid::new_v4().to_string();
 
-    let parts: Vec<&str> = stream_info.expires_at.split('|').collect();
-    let clean_expires_at = parts[0].to_string();
-    // Extraction appends the winning client's User-Agent to `expires_at`; the
-    // fallback is the client that leads the ladder, so a missing suffix still
-    // fetches with an identity the registry knows rather than a stale literal.
-    let dynamic_user_agent = parts
-        .get(1)
-        .map(|&s| s.to_string())
-        .unwrap_or_else(|| clients::VISIONOS.user_agent.to_string());
+    let clean_expires_at = stream_info
+        .expires_at
+        .split('|')
+        .next()
+        .unwrap_or_default()
+        .to_string();
+    let dynamic_user_agent = stream_user_agent(&stream_info);
     let proxy_port = streaming_manager.get_port();
 
     if let Some(manifest_url) = stream_info
@@ -517,7 +566,8 @@ pub async fn get_stream_info(
     // an empty one only hands the player a route that fails on first request.
     let has_progressive_url = !stream_info.local_url.is_empty();
     if has_progressive_url {
-        streaming_manager.register_session(
+        streaming_manager.register_video_stream(
+            &video_id,
             token.clone(),
             stream_info.local_url.clone(),
             "video/mp4".to_string(),
@@ -538,7 +588,8 @@ pub async fn get_stream_info(
             .unwrap_or("video/mp4")
             .to_string();
 
-        streaming_manager.register_session(
+        streaming_manager.register_video_stream(
+            &video_id,
             variant_token.clone(),
             variant.local_url.clone(),
             mime_type,
@@ -574,7 +625,8 @@ pub async fn get_stream_info(
             .unwrap_or("audio/mp4")
             .to_string();
 
-        streaming_manager.register_session(
+        streaming_manager.register_video_stream(
+            &video_id,
             audio_token.clone(),
             audio_track.local_url.clone(),
             mime_type,

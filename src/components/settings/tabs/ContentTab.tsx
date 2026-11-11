@@ -13,7 +13,7 @@ import { LibrarySectionsGroup } from '../LibrarySectionsGroup';
 
 export function ContentTab() {
   const [titleMaxLines, setTitleMaxLines] = useNumberPref(SETTINGS.VIDEO_TITLE_MAX_LINES, 1);
-  const [hoverPreviews, setHoverPreviews] = useBoolPref(SETTINGS.VIDEO_HOVER_PREVIEWS_ENABLED, true);
+  const [hoverPreviews, setHoverPreviews] = useBoolPref(SETTINGS.VIDEO_HOVER_PREVIEWS_ENABLED, false);
   const [gridColumns, setGridColumns] = useNumberPref(SETTINGS.GRID_COLUMNS, GRID_COLUMNS_DEFAULT);
   const [homeFeed, setHomeFeed] = useBoolPref(SETTINGS.HOME_FEED_ENABLED, true);
   const [appLogo, setAppLogo] = useBoolPref(SETTINGS.SHOW_APP_LOGO_ICON, true);

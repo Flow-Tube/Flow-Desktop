@@ -712,7 +712,7 @@ export const SETTING_DEFINITIONS = [
   bool(SETTINGS.LYRICS_BLUR_OTHER_LINES, "player", true, "wired"),
 
   num(SETTINGS.VIDEO_TITLE_MAX_LINES, "content", 1, "wired", 0, 3),
-  bool(SETTINGS.VIDEO_HOVER_PREVIEWS_ENABLED, "content", true, "wired"),
+  bool(SETTINGS.VIDEO_HOVER_PREVIEWS_ENABLED, "content", false, "wired"),
   num(SETTINGS.GRID_COLUMNS, "content", 4, "wired", 2, 8),
   bool(SETTINGS.HIGHLIGHT_NEW_SETTINGS, "appearance", false, "wired"),
   str(SETTINGS.HIGHLIGHT_NEW_SETTINGS_DAYS, "appearance", "7", "wired", NEW_SETTING_DAYS),

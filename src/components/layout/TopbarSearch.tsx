@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Loader2, Search, X } from 'lucide-react';
 import { SearchSuggestionsPanel, suggestionOptionId } from '../search/SearchSuggestionsPanel';
 import { resolveChannelId } from '../../lib/api/youtube';
@@ -16,6 +16,7 @@ import { useMusicHiddenFilter } from '../../store/useMusicActionsStore';
 import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
 import { useMusicEnabled } from '../../lib/useMusicContent';
 import { useSearchHistoryStore, useVisibleSearchHistory } from '../../store/useSearchHistoryStore';
+import { useSettingsSearchStore } from '../../store/useSettingsSearchStore';
 import type { SearchFilterState } from '../../lib/searchFilterState';
 import { useUiStore } from '../../store/useUiStore';
 
@@ -23,6 +24,12 @@ const SHORTCUT_LABEL = IS_MACOS_RUNTIME ? '⌘K' : 'Ctrl K';
 
 export function TopbarSearch() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const isSettingsPage = location.pathname.startsWith('/settings');
+  const settingsQuery = useSettingsSearchStore((s) => s.query);
+  const setSettingsQuery = useSettingsSearchStore((s) => s.setQuery);
+  const clearSettingsQuery = useSettingsSearchStore((s) => s.clearQuery);
+
   const setSearchQuery = useUiStore((s) => s.setSearchQuery);
   const region = useAppSettingsStore((s) => s.values[SETTINGS.TRENDING_REGION]);
   const history = useVisibleSearchHistory();
@@ -41,13 +48,19 @@ export function TopbarSearch() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const musicEnabled = useMusicEnabled();
-  const { suggestions, musicItems } = useSearchSuggestions(text, region, suggestionsEnabled, musicEnabled);
+  const { suggestions, musicItems } = useSearchSuggestions(
+    isSettingsPage ? '' : text,
+    region,
+    suggestionsEnabled,
+    musicEnabled,
+  );
   const columns = useMemo(
-    () => buildSuggestionColumns({ query: text, history, suggestions, musicItems, isHiddenSong }),
-    [text, history, suggestions, musicItems, isHiddenSong],
+    () => buildSuggestionColumns({ query: isSettingsPage ? '' : text, history, suggestions, musicItems, isHiddenSong }),
+    [isSettingsPage, text, history, suggestions, musicItems, isHiddenSong],
   );
   const rows = useMemo(() => [...columns.main, ...columns.side], [columns]);
-  const panelVisible = open && rows.length > 0;
+  const panelVisible = !isSettingsPage && open && rows.length > 0;
+  const currentValue = isSettingsPage ? settingsQuery : text;
 
   // A changed row set invalidates whatever row the keyboard was on.
   useEffect(() => setActiveKey(null), [rows]);
@@ -113,13 +126,39 @@ export function TopbarSearch() {
   };
 
   const fill = (value: string) => {
-    setText(value);
-    setOpen(true);
+    if (isSettingsPage) {
+      setSettingsQuery(value);
+    } else {
+      setText(value);
+      setOpen(true);
+    }
     inputRef.current?.focus();
+  };
+
+  const onInputChange = (val: string) => {
+    if (isSettingsPage) {
+      setSettingsQuery(val);
+    } else {
+      setText(val);
+      setOpen(true);
+    }
+  };
+
+  const onClear = () => {
+    if (isSettingsPage) {
+      clearSettingsQuery();
+      inputRef.current?.focus();
+    } else {
+      fill('');
+    }
   };
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (isSettingsPage) {
+      inputRef.current?.blur();
+      return;
+    }
     const query = text.trim();
     if (!query || resolving) return;
 
@@ -156,12 +195,18 @@ export function TopbarSearch() {
       if (panelVisible) {
         setOpen(false);
         setActiveKey(null);
+      } else if (isSettingsPage) {
+        if (settingsQuery) {
+          clearSettingsQuery();
+        } else {
+          inputRef.current?.blur();
+        }
       } else {
         inputRef.current?.blur();
       }
       return;
     }
-    if (!panelVisible) return;
+    if (isSettingsPage || !panelVisible) return;
 
     const index = rows.findIndex((row) => row.key === activeKey);
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
@@ -197,8 +242,8 @@ export function TopbarSearch() {
         <button
           type="submit"
           disabled={resolving}
-          aria-label={getString('search_submit')}
-          title={getString('search_submit')}
+          aria-label={getString(isSettingsPage ? 'settings_search_placeholder' : 'search_submit')}
+          title={getString(isSettingsPage ? 'settings_search_placeholder' : 'search_submit')}
           className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-chrome-neutral-400 transition-colors hover:bg-surface-container-highest hover:text-chrome-neutral-100 disabled:opacity-70"
         >
           {resolving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
@@ -206,30 +251,29 @@ export function TopbarSearch() {
         <input
           ref={inputRef}
           type="text"
-          placeholder={getString('search_placeholder')}
-          value={text}
+          placeholder={getString(isSettingsPage ? 'settings_search_placeholder' : 'search_placeholder')}
+          value={currentValue}
           role="combobox"
           aria-expanded={panelVisible}
-          aria-controls="search-suggestions"
+          aria-controls={panelVisible ? 'search-suggestions' : undefined}
           aria-autocomplete="list"
           aria-activedescendant={activeKey ? suggestionOptionId(activeKey) : undefined}
           autoComplete="off"
           spellCheck={false}
-          onFocus={() => setOpen(true)}
-          onKeyDown={onKeyDown}
-          onChange={(event) => {
-            setText(event.target.value);
-            setOpen(true);
+          onFocus={() => {
+            if (!isSettingsPage) setOpen(true);
           }}
+          onKeyDown={onKeyDown}
+          onChange={(event) => onInputChange(event.target.value)}
           className="h-10 min-w-0 flex-1 bg-transparent text-sm text-chrome-neutral-100 outline-none placeholder:text-chrome-neutral-500"
         />
-        {text ? (
+        {currentValue ? (
           <button
             type="button"
             aria-label={getString('search_clear')}
             title={getString('search_clear')}
             onMouseDown={(event) => event.preventDefault()}
-            onClick={() => fill('')}
+            onClick={onClear}
             className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-chrome-neutral-400 transition-colors hover:bg-surface-container-highest hover:text-chrome-neutral-100"
           >
             <X className="h-4 w-4" />

@@ -27,7 +27,7 @@ import { usePageEnterMotion } from '../../lib/usePageEnterMotion';
 import { SETTINGS } from '../../lib/settings/schema';
 import { useAppSettingsStore } from '../../store/useAppSettingsStore';
 import { useNewSettingsStore } from '../../store/useNewSettingsStore';
-import { SearchInput } from '../ui/SearchInput';
+import { useSettingsSearchStore } from '../../store/useSettingsSearchStore';
 import { SettingsSearchResults } from './SettingsSearchResults';
 
 export type { SettingsCategory };
@@ -69,7 +69,8 @@ export function SettingsLayout({ children }: SettingsLayoutProps) {
   const [activeTab, setActiveTab] = useState<SettingsCategory>(
     requested && categories.some((cat) => cat.id === requested) ? requested : 'appearance',
   );
-  const [query, setQuery] = useState('');
+  const query = useSettingsSearchStore((state) => state.query);
+  const clearQuery = useSettingsSearchStore((state) => state.clearQuery);
   const [highlight, setHighlight] = useState<string | null>(null);
   const debouncedQuery = useDebounce(query, 120);
   const results = useMemo(() => searchSettings(debouncedQuery, SETTINGS_INDEX), [debouncedQuery]);
@@ -84,9 +85,15 @@ export function SettingsLayout({ children }: SettingsLayoutProps) {
     useNewSettingsStore.getState().refresh(highlightNew, highlightDays);
   }, [highlightNew, highlightDays]);
 
+  useEffect(() => {
+    return () => {
+      useSettingsSearchStore.getState().clearQuery();
+    };
+  }, []);
+
   const openResult = (entry: SettingEntry) => {
     setActiveTab(entry.category);
-    setQuery('');
+    clearQuery();
     setHighlight(getString(entry.title));
   };
 
@@ -106,19 +113,12 @@ export function SettingsLayout({ children }: SettingsLayoutProps) {
     <div className="mx-auto w-full h-[calc(100vh-64px)] flex">
       <nav className="w-56 shrink-0 border-e border-chrome-neutral-800 overflow-y-auto py-6 px-3 flex flex-col gap-1">
         <h2 className="text-lg font-bold text-chrome-neutral-100 px-3 mb-4">{getString('settings_title')}</h2>
-        <SearchInput
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder={getString('settings_search_placeholder')}
-          aria-label={getString('settings_search_placeholder')}
-          containerClassName="mb-3"
-        />
         {categories.map((cat) => (
           <button
             key={cat.id}
             onClick={() => {
               setActiveTab(cat.id);
-              setQuery('');
+              clearQuery();
             }}
             className={`px-4 py-2.5 rounded-full flex items-center gap-3 text-sm font-medium transition-colors cursor-pointer ${
               !searching && activeTab === cat.id

@@ -2812,7 +2812,7 @@ mod ladder_live {
             let ClientOutcome::Won(attempt) = outcome else {
                 continue;
             };
-            if !candidate.accepts_web_po_token() {
+            if !candidate.is_web_sabr() {
                 continue;
             }
             let streaming_data = &attempt.response["streamingData"];

@@ -2785,6 +2785,54 @@ mod ladder_live {
         );
     }
 
+    /// The proxy swaps a refused `VISIONOS` link for `TV_TIZEN`'s link to the same itag, `lmt` and
+    /// `clen`, which only works while both clients are handed the same encodes.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[ignore = "hits the network + nsig sidecar + remote signature decoder"]
+    async fn swap_twins_live() {
+        let client = fresh_client();
+        let video_id = video_id();
+        let visitor_data = client.fetch_visitor_data().await;
+        let mut files = Vec::new();
+        for candidate in [&clients::VISIONOS, &clients::TV_TIZEN] {
+            let ClientOutcome::Won(attempt) = client
+                .attempt_client(&video_id, candidate, visitor_data.as_deref())
+                .await
+            else {
+                panic!("{} did not resolve {video_id}", candidate.name);
+            };
+            let formats = attempt.response["streamingData"]["adaptiveFormats"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
+            files.push(
+                formats
+                    .iter()
+                    .map(|format| {
+                        (
+                            format["itag"].as_u64().unwrap_or_default(),
+                            format["lastModified"]
+                                .as_str()
+                                .unwrap_or_default()
+                                .to_string(),
+                            format["contentLength"]
+                                .as_str()
+                                .unwrap_or_default()
+                                .to_string(),
+                        )
+                    })
+                    .collect::<std::collections::HashSet<_>>(),
+            );
+        }
+        let shared = files[0].intersection(&files[1]).count();
+        println!(
+            "VISIONOS {} files, TV_TIZEN {} files, {shared} identical",
+            files[0].len(),
+            files[1].len()
+        );
+        assert!(shared > 0, "no file is served to both clients");
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     #[ignore = "hits the network + botguard + nsig sidecars"]
     async fn ladder_live_each_client() {

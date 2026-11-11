@@ -228,7 +228,7 @@ export const VideoThumbnailPreview: React.FC<VideoThumbnailPreviewProps> = ({
 
       {/* Sleek micro-progress bar indicating preview playback progress */}
       {progressPercent > 0 && (
-        <div className="absolute bottom-0 left-0 right-0 z-20 h-[2px] bg-chrome-black/40 pointer-events-none">
+        <div className="absolute bottom-0 inset-x-0 z-20 h-[2px] bg-chrome-black/40 pointer-events-none">
           <div
             className="h-full bg-primary transition-all ease-linear"
             style={{

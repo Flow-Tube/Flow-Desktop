@@ -176,6 +176,7 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   ...rows("content", [
     { title: "settings_grid_columns" },
     { title: "settings_video_title_lines", summary: "settings_video_title_lines_desc" },
+    { title: "settings_video_hover_previews", summary: "settings_video_hover_previews_desc", keywords: ["hover", "preview", "thumbnail", "storyboard"] },
     { title: "settings_home_feed", summary: "settings_home_feed_desc" },
     { title: "settings_app_logo", summary: "settings_app_logo_desc" },
     { title: "settings_shorts_shelf", summary: "settings_shorts_shelf_desc" },

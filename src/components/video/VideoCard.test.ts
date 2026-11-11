@@ -237,7 +237,7 @@ describe("VideoCard hover previews", () => {
   beforeEach(() => {
     vi.stubGlobal("IntersectionObserver", FakeObserver);
     useAppSettingsStore.setState({
-      values: { ...useAppSettingsStore.getState().values, [SETTINGS.VIDEO_HOVER_PREVIEWS_ENABLED]: "true" },
+      values: { ...useAppSettingsStore.getState().values, [SETTINGS.VIDEO_HOVER_PREVIEW_MODE]: "frames" },
     });
     host = document.createElement("div");
     document.body.append(host);

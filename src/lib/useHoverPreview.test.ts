@@ -9,8 +9,6 @@ import {
   FRAME_CYCLE_INTERVAL_MS,
 } from "./useHoverPreview";
 import { useHoverPreviewStore } from "../store/useHoverPreviewStore";
-import { useAppSettingsStore } from "../store/useAppSettingsStore";
-import { SETTINGS } from "./settings/schema";
 import * as youtubeApi from "./api/youtube";
 import type { StoryboardLevel } from "../types/video";
 
@@ -36,7 +34,6 @@ describe("useHoverPreview", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     useHoverPreviewStore.setState({ activeVideoId: null });
-    useAppSettingsStore.setState({ values: { [SETTINGS.VIDEO_HOVER_PREVIEWS_ENABLED]: "true" } });
     host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
@@ -49,14 +46,12 @@ describe("useHoverPreview", () => {
     });
     host.remove();
     vi.useRealTimers();
-    useAppSettingsStore.setState({ values: {} });
   });
 
-  it("stays off until the setting is turned on", async () => {
-    useAppSettingsStore.setState({ values: {} });
+  it("asks for nothing while disabled", async () => {
     const storyboard = vi.spyOn(youtubeApi, "getVideoStoryboard").mockResolvedValue([]);
     act(() => {
-      root.render(createElement(TestComponent, { videoId: "vid_off", isHovered: true, durationSeconds: 60 }));
+      root.render(createElement(TestComponent, { videoId: "vid_off", isHovered: true, durationSeconds: 60, enabled: false }));
     });
     await act(async () => {
       vi.advanceTimersByTime(1000);

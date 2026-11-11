@@ -3,10 +3,8 @@ import { getVideoStoryboard } from "./api/youtube";
 import { storyboardFrameAt, type StoryboardFrame } from "./seekPreview";
 import type { StoryboardLevel } from "../types/video";
 import { useHoverPreviewStore } from "../store/useHoverPreviewStore";
-import { useAppSettingsStore } from "../store/useAppSettingsStore";
 import { useImageProxyStore } from "../store/useImageProxyStore";
 import { proxiedImage } from "./imageProxy";
-import { SETTINGS } from "./settings/schema";
 
 const HOVER_INTENT_DELAY_MS = 400;
 export const FRAME_CYCLE_INTERVAL_MS = 125; // 8 FPS (~125ms per frame)
@@ -81,10 +79,6 @@ export function useHoverPreview({
   measure,
   enabled = true,
 }: UseHoverPreviewOptions): UseHoverPreviewResult {
-  // Off until turned on: each preview asks YouTube for the hovered video's storyboard.
-  const settingEnabled = useAppSettingsStore(
-    (state) => state.values[SETTINGS.VIDEO_HOVER_PREVIEWS_ENABLED] === "true"
-  );
   const isActiveCard = useHoverPreviewStore((state) => state.activeVideoId === videoId);
   const setActiveVideoId = useHoverPreviewStore((state) => state.setActiveVideoId);
   const clearActive = useHoverPreviewStore((state) => state.clearActive);
@@ -165,7 +159,7 @@ export function useHoverPreview({
       cycleIntervalRef.current = null;
     }
 
-    if (!isHovered || !enabled || !settingEnabled) {
+    if (!isHovered || !enabled) {
       clearActive(videoId);
       setIsPreviewActive(false);
       setCurrentFrame(null);
@@ -299,7 +293,6 @@ export function useHoverPreview({
     videoId,
     isHovered,
     enabled,
-    settingEnabled,
     proxyBase,
     setActiveVideoId,
     clearActive,

@@ -1,7 +1,7 @@
 use crate::api::innertube::InnertubeClient;
 use crate::api::innertube::core::botguard::generate_po_token;
 use crate::api::innertube::core::clients;
-use crate::api::innertube::core::gate_tracker::gated_last;
+use crate::api::innertube::core::gate_tracker::{self, is_gated};
 use crate::api::innertube::core::playback_session::{
     new_cpn, take_reload_token, with_session_params,
 };
@@ -81,6 +81,30 @@ const PLAYER_CLIENT_LADDER: &[&clients::YouTubeClient] = &[
     &clients::ANDROID_VR_1_43_32,
     &clients::ANDROID,
 ];
+
+/// The order to ask `ladder`'s clients in: demoted clients last. With VISIONOS demoted the
+/// visitor is walled, and the web clients' SABR sessions stop at the same minute, so `TV_TIZEN`,
+/// the measured way past that wall, goes first (Flow for Android #921).
+fn walk_order(
+    ladder: &[&'static clients::YouTubeClient],
+    gated: impl Fn(&str) -> bool,
+) -> Vec<&'static clients::YouTubeClient> {
+    type Client = &'static clients::YouTubeClient;
+    let (open, demoted): (Vec<Client>, Vec<Client>) = ladder
+        .iter()
+        .copied()
+        .partition(|client| !gated(client.name));
+    let mut order: Vec<Client> = open.into_iter().chain(demoted).collect();
+    if gated(clients::VISIONOS.name)
+        && let Some(index) = order
+            .iter()
+            .position(|client| client.name == clients::TV_TIZEN.name && !gated(client.name))
+    {
+        let tizen = order.remove(index);
+        order.insert(0, tizen);
+    }
+    order
+}
 
 /// A direct ladder that tops out below this height likely has its higher rungs
 /// served only over SABR, so the web clients are asked too (Flow for Android's
@@ -1381,6 +1405,7 @@ impl InnertubeClient {
                     );
                     return (Some(cached), None);
                 }
+                self.renew_walled_identity().await;
                 let visitor_data = self.fetch_visitor_data().await;
                 let mut restriction = None;
                 let attempt = self
@@ -1407,6 +1432,20 @@ impl InnertubeClient {
         outcome.0.clone()
     }
 
+    /// googlevideo walls the visitor, not the client: once it refused VISIONOS links, a fresh
+    /// identity is served on them again, so the demotions go with the old identity (Flow for
+    /// Android #921). Within the re-roll budget only; past it the ladder walks around the wall.
+    async fn renew_walled_identity(&self) {
+        if !gate_tracker::take_identity_walled() {
+            return;
+        }
+        let walled = self.fetch_visitor_data().await;
+        if self.refresh_visitor_data(walled.as_deref()).await.is_some() {
+            gate_tracker::forget_gates();
+            info!("Visitor walled on VISIONOS; new identity, client demotions lifted");
+        }
+    }
+
     /// `direct`, or a web SABR answer for the same video when `direct` tops out
     /// below [`SABR_UPGRADE_FLOOR`] and the SABR answer is taller. The web
     /// clients are asked within [`SABR_UPGRADE_BUDGET`] and under the same
@@ -1422,7 +1461,12 @@ impl InnertubeClient {
         }
         let visitor_data = direct.visitor_data.clone();
         let upgrade = tokio::time::timeout(SABR_UPGRADE_BUDGET, async {
-            for client in gated_last(SABR_UPGRADE_CLIENTS.iter().copied(), |client| client.name) {
+            // An upgrade is optional, so a demoted web client isn't asked at all.
+            for client in SABR_UPGRADE_CLIENTS
+                .iter()
+                .copied()
+                .filter(|client| !is_gated(client.name))
+            {
                 if let ClientOutcome::Won(attempt) = self
                     .attempt_client(video_id, client, visitor_data.as_deref())
                     .await
@@ -1464,7 +1508,7 @@ impl InnertubeClient {
         let mut visitor_data = visitor_data;
         let mut identity_refreshed = false;
         let mut fresh_identity_walled = false;
-        for client in gated_last(ladder.iter().copied(), |client| client.name) {
+        for client in walk_order(ladder, is_gated) {
             let mut outcome = self
                 .attempt_client(video_id, client, visitor_data.as_deref())
                 .await;
@@ -2314,6 +2358,49 @@ mod sabr_live_smoke {
 // client whose attestation our (web BotGuard) PO token actually satisfies.
 //   cargo test -p flow sabr_client_probe -- --ignored --nocapture
 #[cfg(test)]
+mod walk_order_tests {
+    use super::*;
+
+    fn names(order: &[&clients::YouTubeClient]) -> Vec<&'static str> {
+        order.iter().map(|client| client.name).collect()
+    }
+
+    #[test]
+    fn the_ladder_keeps_its_order_while_nothing_is_demoted() {
+        let order = walk_order(PLAYER_CLIENT_LADDER, |_| false);
+        assert_eq!(order.len(), PLAYER_CLIENT_LADDER.len());
+        assert_eq!(order[0].name, "VISIONOS");
+        assert_eq!(order[1].name, "MWEB");
+    }
+
+    #[test]
+    fn a_walled_visitor_goes_to_tv_tizen_before_the_web_clients() {
+        let order = walk_order(PLAYER_CLIENT_LADDER, |name| name == "VISIONOS");
+        let order = names(&order);
+        assert_eq!(&order[..3], ["TVHTML5", "MWEB", "WEB"]);
+        assert_eq!(order.last(), Some(&"VISIONOS"));
+    }
+
+    #[test]
+    fn web_clients_whose_attestation_ran_out_go_last() {
+        let order = walk_order(PLAYER_CLIENT_LADDER, |name| {
+            matches!(name, "VISIONOS" | "MWEB" | "WEB")
+        });
+        let order = names(&order);
+        assert_eq!(order[0], "TVHTML5");
+        assert_eq!(&order[order.len() - 3..], ["VISIONOS", "MWEB", "WEB"]);
+    }
+
+    #[test]
+    fn a_demoted_tv_tizen_isnt_brought_forward() {
+        let order = walk_order(PLAYER_CLIENT_LADDER, |name| {
+            matches!(name, "VISIONOS" | "TVHTML5")
+        });
+        assert_eq!(order[0].name, "MWEB");
+    }
+}
+
+#[cfg(test)]
 mod sabr_client_probe {
     use super::*;
     use crate::streaming::sabr::engine::{SabrEngine, SabrEngineConfig};
@@ -2725,7 +2812,7 @@ mod ladder_live {
             let ClientOutcome::Won(attempt) = outcome else {
                 continue;
             };
-            if !candidate.accepts_web_po_token() {
+            if !candidate.is_web_sabr() {
                 continue;
             }
             let streaming_data = &attempt.response["streamingData"];

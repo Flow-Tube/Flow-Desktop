@@ -185,6 +185,8 @@ PLAYER
 - The mini player comes in three sizes. A thin progress bar stays at the bottom of the video when the controls hide, and clicking the time switches to what's left.
 - Optional frame step buttons while paused and a paid promotion label. The Save button shows Saved, Stats for nerds has more rows and Copy, and the description lists its tags and can be copied.
 - An Autoplay switch sits next to the quality on the player bar, and the Queue button only shows when there's a queue.
+- When YouTube stops serving Flow's main playback client, Flow gets a new visitor identity and switches to the TV client first, instead of a web client that stopped videos about a minute in. A stream that has failed is never reused for the next try.
+- Remote signature fallback, in Settings > Network, is now on by default, as on Flow for Android: the TV client's streams are signed and only PipePipe's public decoder can solve them. It never receives the video id.
 
 SETTINGS
 - Settings rows now look like Flow for Android's: each row is its own surface, with a thin gap between rows and rounded group ends. Group titles are colored and no longer in capitals.

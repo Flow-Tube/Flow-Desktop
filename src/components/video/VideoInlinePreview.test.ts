@@ -118,6 +118,33 @@ describe("VideoInlinePreview", () => {
     expect(button(getString("music_mute"))).not.toBeNull();
   });
 
+  it("seeks along its bar with the time over the pointer, without opening the card", async () => {
+    api.resolveStreamInfo.mockResolvedValue({
+      ...info,
+      storyboard: [{ width: 160, height: 90, count: 50, columns: 5, rows: 5, intervalMs: 4000, urlTemplate: "https://i.ytimg.com/sb/v/M$M.jpg" }],
+    });
+    await startPlaying();
+    Object.defineProperty(video(), "duration", { configurable: true, value: 200 });
+    await act(async () => { video().dispatchEvent(new Event("durationchange")); });
+    expect(host.textContent).toContain("3:20");
+
+    const slider = host.querySelector<HTMLElement>('[role="slider"]')!;
+    slider.getBoundingClientRect = () => ({ left: 0, width: 400, top: 0, height: 16, right: 400, bottom: 16, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+    slider.setPointerCapture = () => {};
+    slider.releasePointerCapture = () => {};
+    const at = (type: string, clientX: number) =>
+      act(() => { slider.dispatchEvent(new PointerEvent(type, { bubbles: true, clientX, pointerId: 1 })); });
+
+    at("pointermove", 100);
+    expect(host.textContent).toContain("0:50");
+    expect(host.querySelector<HTMLElement>(".border-chrome-white")?.style.backgroundImage).toContain("M0.jpg");
+    at("pointerdown", 100);
+    at("pointerup", 200);
+    expect(video().currentTime).toBe(100);
+    act(() => slider.click());
+    expect(onCardClick).not.toHaveBeenCalled();
+  });
+
   it("records nothing while it plays", async () => {
     await startPlaying();
     await act(async () => { video().dispatchEvent(new Event("timeupdate")); });

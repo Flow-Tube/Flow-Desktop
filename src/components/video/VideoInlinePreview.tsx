@@ -12,6 +12,7 @@ import {
   type InlinePreviewSource,
 } from "../../lib/inlinePreview";
 import { pauseOtherPlayback } from "../../lib/pauseOtherPlayback";
+import { clearPreviewPosition, notePreviewPosition } from "../../lib/inlinePreviewHandoff";
 import { SETTINGS } from "../../lib/settings/schema";
 import { resolveStreamInfo } from "../../lib/streamResolution";
 import { useAppSettingsStore } from "../../store/useAppSettingsStore";
@@ -72,6 +73,8 @@ export function VideoInlinePreview({ videoId, clearTopEnd = false }: VideoInline
   const proxyBase = useImageProxyStore((state) => state.base);
   const preferredLanguage = useAppSettingsStore((state) => state.values[SETTINGS.PREFERRED_SUBTITLE_LANGUAGE] ?? "en");
   const reducedMotion = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
+  useEffect(() => () => clearPreviewPosition(videoId), [videoId]);
 
   useEffect(() => {
     if (reducedMotion) return;
@@ -180,7 +183,10 @@ export function VideoInlinePreview({ videoId, clearTopEnd = false }: VideoInline
         aria-hidden="true"
         tabIndex={-1}
         onPlaying={() => setPlaying(true)}
-        onTimeUpdate={(event) => setTime(event.currentTarget.currentTime)}
+        onTimeUpdate={(event) => {
+          setTime(event.currentTarget.currentTime);
+          notePreviewPosition(videoId, event.currentTarget.currentTime);
+        }}
         onDurationChange={(event) => setDuration(Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : 0)}
         onProgress={(event) => {
           const ranges = event.currentTarget.buffered;

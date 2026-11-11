@@ -47,6 +47,7 @@ import { openActions } from '../common/openActions';
 import { isLocalMediaId } from '../../lib/localMediaId';
 import { alignToEnd, growFromPoint } from "../../lib/direction";
 import { VideoHoverPreview } from './VideoHoverPreview';
+import { continueFromPreview } from '../../lib/inlinePreviewHandoff';
 
 export interface VideoCardProps {
   video: VideoSummary;
@@ -180,7 +181,10 @@ function VideoCardComponent({
   const play = useCallback((event?: React.MouseEvent) => {
     if (openedInBackgroundTab(event, route)) return;
     if (route.startsWith("/shorts/")) navigate(route);
-    else onPlay(video);
+    else {
+      onPlay(video);
+      continueFromPreview(video.id);
+    }
   }, [video, navigate, onPlay, route]);
   const tabClickProps = useMemo(() => backgroundTabClickProps(route), [route]);
 

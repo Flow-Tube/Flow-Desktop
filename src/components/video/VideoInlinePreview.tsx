@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
 import * as dashjs from "dashjs";
 import { Captions, Volume2, VolumeX } from "lucide-react";
 import { createProxiedDashPlayer } from "../../lib/dashSetup";
@@ -16,8 +16,13 @@ import { SETTINGS } from "../../lib/settings/schema";
 import { resolveStreamInfo } from "../../lib/streamResolution";
 import { useAppSettingsStore } from "../../store/useAppSettingsStore";
 import { usePlayerStore } from "../../store/usePlayerStore";
-import type { CaptionTrack } from "../../types/video";
+import { formatTime } from "../../lib/musicFormat";
+import { paintStoryboardTile, pickStoryboardLevel, storyboardTileHeight } from "../../lib/seekPreview";
+import { proxiedImage } from "../../lib/imageProxy";
+import { useImageProxyStore } from "../../store/useImageProxyStore";
+import type { CaptionTrack, StoryboardLevel } from "../../types/video";
 import { SubtitleOverlay } from "../player/SubtitleOverlay";
+import { MediaScrubber } from "../ui/MediaScrubber";
 
 interface VideoInlinePreviewProps {
   videoId: string;
@@ -26,6 +31,8 @@ interface VideoInlinePreviewProps {
 }
 
 const RESOLVE_TIMEOUT_MS = 12_000;
+// About a third of a grid card, as YouTube draws it.
+const SEEK_TILE_WIDTH = 112;
 
 function supportsCodec(codec: string): boolean {
   return typeof MediaSource === "undefined" || typeof MediaSource.isTypeSupported !== "function" || MediaSource.isTypeSupported(codec);
@@ -57,6 +64,12 @@ export function VideoInlinePreview({ videoId, clearTopEnd = false }: VideoInline
   const [muted, setMuted] = useState(true);
   const [captionsOn, setCaptionsOn] = useState(true);
   const [time, setTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [buffered, setBuffered] = useState(0);
+  const [storyboard, setStoryboard] = useState<StoryboardLevel[]>([]);
+  const [hoverRatio, setHoverRatio] = useState<number | null>(null);
+  const tileRef = useRef<HTMLDivElement>(null);
+  const proxyBase = useImageProxyStore((state) => state.base);
   const preferredLanguage = useAppSettingsStore((state) => state.values[SETTINGS.PREFERRED_SUBTITLE_LANGUAGE] ?? "en");
   const reducedMotion = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
@@ -71,6 +84,7 @@ export function VideoInlinePreview({ videoId, clearTopEnd = false }: VideoInline
           if (!picked) setFailed(true);
           setSource(picked);
           setCaptions(info.captions ?? []);
+          setStoryboard(info.storyboard ?? []);
         })
         .catch(() => !cancelled && setFailed(true));
     }, INLINE_RESOLVE_DELAY_MS);
@@ -129,6 +143,15 @@ export function VideoInlinePreview({ videoId, clearTopEnd = false }: VideoInline
     };
   }, [source, due]);
 
+  const seekLevel = pickStoryboardLevel(storyboard, SEEK_TILE_WIDTH);
+  const readClock = useCallback(() => videoRef.current?.currentTime ?? 0, []);
+
+  useEffect(() => {
+    const tile = tileRef.current;
+    if (!tile || !seekLevel || hoverRatio === null || !(duration > 0)) return;
+    paintStoryboardTile(tile, seekLevel, hoverRatio * duration, (url) => proxiedImage(url, proxyBase), SEEK_TILE_WIDTH);
+  }, [seekLevel, hoverRatio, duration, proxyBase]);
+
   if (reducedMotion || failed) return null;
 
   const captionId = captionsOn ? inlinePreviewCaptionId(captions, preferredLanguage) : null;
@@ -158,7 +181,16 @@ export function VideoInlinePreview({ videoId, clearTopEnd = false }: VideoInline
         tabIndex={-1}
         onPlaying={() => setPlaying(true)}
         onTimeUpdate={(event) => setTime(event.currentTarget.currentTime)}
+        onDurationChange={(event) => setDuration(Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : 0)}
+        onProgress={(event) => {
+          const ranges = event.currentTarget.buffered;
+          setBuffered(ranges.length ? ranges.end(ranges.length - 1) : 0);
+        }}
         className={`absolute inset-0 h-full w-full bg-chrome-black object-contain transition-opacity duration-150 ease-out ${playing ? "opacity-100" : "opacity-0"}`}
+      />
+      {/* Seeking dims the picture so the frame being sought stands out. */}
+      <div
+        className={`pointer-events-none absolute inset-0 bg-chrome-black/30 transition-opacity duration-150 ease-out ${hoverRatio === null ? "opacity-0" : "opacity-100"}`}
       />
       {playing && captionId && (
         <SubtitleOverlay captions={captions} selectedCaptionId={captionId} currentTime={time} shouldShowControls={false} still />
@@ -187,6 +219,51 @@ export function VideoInlinePreview({ videoId, clearTopEnd = false }: VideoInline
             </button>
           )}
         </div>
+      )}
+      {playing && duration > 0 && (
+        <>
+          <span className="pointer-events-none absolute bottom-2.5 end-1.5 rounded bg-chrome-black/80 px-1 py-px text-[12px] font-medium leading-tight tracking-wide text-chrome-white">
+            {formatTime(Math.max(0, duration - time))}
+          </span>
+          {hoverRatio !== null && (
+            <div
+              className="pointer-events-none absolute bottom-4 flex flex-col items-center gap-1"
+              // A timeline runs left to right in every language, as the bar under it does.
+              style={{
+                left: `clamp(${SEEK_TILE_WIDTH / 2 + 4}px, ${hoverRatio * 100}%, calc(100% - ${SEEK_TILE_WIDTH / 2 + 4}px))`,
+                transform: "translateX(-50%)",
+              }}
+            >
+              {seekLevel && (
+                <div
+                  ref={tileRef}
+                  className="overflow-hidden rounded-lg border-2 border-chrome-white bg-chrome-black bg-no-repeat"
+                  style={{ width: SEEK_TILE_WIDTH, height: storyboardTileHeight(seekLevel, SEEK_TILE_WIDTH) }}
+                />
+              )}
+              <span className="text-[13px] font-semibold text-chrome-white [text-shadow:0_1px_2px_rgb(0_0_0/0.8)]">
+                {formatTime(hoverRatio * duration)}
+              </span>
+            </div>
+          )}
+          {/* Clicks on the bar seek; they mustn't open the card. */}
+          <div className="absolute inset-x-0 bottom-0 z-30" onClick={(event) => { event.preventDefault(); event.stopPropagation(); }}>
+            <MediaScrubber
+              variant="edge"
+              progress={time}
+              duration={duration}
+              buffered={buffered}
+              onSeek={(seconds) => {
+                const video = videoRef.current;
+                if (video) video.currentTime = seconds;
+                setTime(seconds);
+              }}
+              onHover={setHoverRatio}
+              clock={readClock}
+              playing
+            />
+          </div>
+        </>
       )}
     </div>
   );

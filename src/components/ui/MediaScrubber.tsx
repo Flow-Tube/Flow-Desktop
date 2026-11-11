@@ -25,6 +25,10 @@ interface MediaScrubberProps {
    */
   clock?: () => number;
   playing?: boolean;
+  /** Seconds already loaded ahead, drawn lighter behind the fill. */
+  buffered?: number;
+  /** Where the pointer is along the bar, 0 to 1, while it hovers or drags; null once it leaves. */
+  onHover?: (ratio: number | null) => void;
 }
 
 export function MediaScrubber({
@@ -41,6 +45,8 @@ export function MediaScrubber({
   barStyle = "default",
   clock,
   playing = false,
+  buffered = 0,
+  onHover,
 }: MediaScrubberProps) {
   const expressiveEnabled = useExpressiveSliders();
   const isExpressive = expressive && expressiveEnabled;
@@ -97,6 +103,7 @@ export function MediaScrubber({
   const moveDrag = (r: number) => {
     dragRatioRef.current = r;
     setDragRatio(r);
+    onHover?.(r);
   };
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -107,8 +114,13 @@ export function MediaScrubber({
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragging || duration <= 0) return;
-    moveDrag(ratioFromClientX(e.clientX));
+    if (duration <= 0) return;
+    if (dragging) moveDrag(ratioFromClientX(e.clientX));
+    else onHover?.(ratioFromClientX(e.clientX));
+  };
+
+  const onPointerLeave = () => {
+    if (!dragging) onHover?.(null);
   };
 
   const endDrag = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -120,6 +132,7 @@ export function MediaScrubber({
     }
     if (e.type === "pointerup") moveDrag(ratioFromClientX(e.clientX));
     setDragging(false);
+    onHover?.(null);
     onSeek(dragRatioRef.current * duration);
   };
 
@@ -169,6 +182,7 @@ export function MediaScrubber({
     onPointerMove,
     onPointerUp: endDrag,
     onPointerCancel: endDrag,
+    onPointerLeave,
     onKeyDown,
     onWheel,
   };
@@ -192,6 +206,12 @@ export function MediaScrubber({
       className={`group/scrub relative flex ${hitH} flex-1 cursor-pointer touch-none outline-none`}
     >
       <div className={`relative ${trackH} w-full overflow-hidden ${trackShape}`}>
+        {buffered > 0 && duration > 0 && (
+          <div
+            className={`absolute inset-y-0 start-0 bg-chrome-white/35 ${fillShape}`}
+            style={{ width: `${toRatio(buffered) * 100}%` }}
+          />
+        )}
         <div
           ref={fillRef}
           className={`absolute inset-y-0 start-0 bg-[var(--color-primary)] ${fillShape}`}

@@ -817,7 +817,7 @@ export const SETTING_DEFINITIONS = [
   num(SETTINGS.MAX_BUFFER_MS, "network", 50000, "wired", 25000, 120000),
   num(SETTINGS.BUFFER_FOR_PLAYBACK_MS, "network", 2500, "partial", 500, 5000),
   num(SETTINGS.BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS, "network", 5000, "partial", 2500, 10000),
-  bool(SETTINGS.REMOTE_SIGNATURE_FALLBACK, "network", false, "wired"),
+  bool(SETTINGS.REMOTE_SIGNATURE_FALLBACK, "network", true, "wired"),
   bool(SETTINGS.PROXY_ENABLED, "network", false, "wired"),
   str(SETTINGS.PROXY_TYPE, "network", "http", "wired", ["http", "socks5", "socks4"]),
   str(SETTINGS.PROXY_HOST, "network", "", "wired"),

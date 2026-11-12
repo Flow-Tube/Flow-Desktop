@@ -199,6 +199,30 @@ pub fn get_graphics_mode(app: tauri::AppHandle) -> &'static str {
     }
 }
 
+/// How this Linux system installs video decoders ("apt", "dnf", "pacman",
+/// "appimage", "flatpak" or "other"), for the no-picture banner's steps.
+/// Always "other" on other platforms.
+#[tauri::command]
+#[must_use]
+pub fn linux_codec_source() -> &'static str {
+    #[cfg(target_os = "linux")]
+    {
+        use crate::linux_system::CodecSource;
+        match crate::linux_system::detect_codec_source() {
+            CodecSource::Apt => "apt",
+            CodecSource::Dnf => "dnf",
+            CodecSource::Pacman => "pacman",
+            CodecSource::Appimage => "appimage",
+            CodecSource::Flatpak => "flatpak",
+            CodecSource::Other => "other",
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        "other"
+    }
+}
+
 /// Stores the Linux graphics compatibility mode for the next launch.
 #[tauri::command]
 pub fn set_graphics_mode(app: tauri::AppHandle, mode: String) -> Result<(), ErrorResponse> {

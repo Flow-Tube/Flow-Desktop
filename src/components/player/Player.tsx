@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as dashjs from "dashjs";
 import Hls from "hls.js";
-import { AlertTriangle, Loader2, RotateCcw } from "lucide-react";
+import { Loader2, RotateCcw } from "lucide-react";
 import { PlayerErrorState } from "../ui/PlayerErrorState";
 import { CurrentVideoReminderButton } from "../watch/UpcomingReminderButton";
 import type { PlayerErrorInfo } from "../../lib/playerError";
@@ -16,6 +16,7 @@ import type {
   StreamVariant,
   VideoChapter,
 } from "../../types/video";
+import { CodecMissingBanner } from "./CodecMissingBanner";
 import { FlowPlayerControls } from "./FlowPlayerControls";
 import { MiniPlayerControls } from "./MiniPlayerControls";
 import {
@@ -2715,35 +2716,12 @@ export const Player: React.FC<PlayerProps> = ({
       )}
 
       {videoCodecUnsupported && !isLoading && !error && !errorInfo && (
-        <div className="absolute inset-x-4 top-4 z-40 mx-auto max-w-md rounded-2xl border border-chrome-toast-border bg-chrome-toast/95 px-4 py-3">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 shrink-0 text-primary" size={18} />
-            <div className="min-w-0 space-y-2">
-              <div className="text-sm font-bold text-chrome-neutral-100">
-                {getString("player_codec_missing_title")}
-              </div>
-              <p className="text-xs text-chrome-neutral-300">
-                {getString("player_codec_missing_hint")}
-              </p>
-              <p className="text-xs text-chrome-neutral-400">
-                {getString("player_codec_missing_command_hint")}
-              </p>
-              <code className="block overflow-x-auto rounded-md bg-chrome-black/60 px-2 py-1.5 font-mono text-[11px] text-chrome-neutral-200">
-                sudo apt install gstreamer1.0-libav gstreamer1.0-plugins-bad gstreamer1.0-plugins-good gstreamer1.0-plugins-ugly
-              </code>
-              <button
-                type="button"
-                onClick={() => {
-                  codecWarningDismissedRef.current = true;
-                  setVideoCodecUnsupported(false);
-                }}
-                className="text-xs font-semibold text-chrome-neutral-400 transition-colors hover:text-chrome-neutral-100"
-              >
-                {getString("player_codec_missing_dismiss")}
-              </button>
-            </div>
-          </div>
-        </div>
+        <CodecMissingBanner
+          onDismiss={() => {
+            codecWarningDismissedRef.current = true;
+            setVideoCodecUnsupported(false);
+          }}
+        />
       )}
 
       {overlay}

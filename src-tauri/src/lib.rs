@@ -16,7 +16,6 @@ mod errors;
 pub mod flow_neuro;
 #[cfg(any(target_os = "linux", test))]
 mod linux_startup;
-#[cfg(any(target_os = "linux", test))]
 mod linux_system;
 mod local_media;
 #[cfg(target_os = "macos")]
@@ -55,8 +54,9 @@ use commands::db::{
 };
 use commands::diagnostics::{
     clear_logs, crash_report_delete, crash_report_dismiss, crash_report_read, get_graphics_mode,
-    linux_codec_source, log_frontend_event, logs_dir_path, read_logs, reset_visitor_identity,
-    reveal_logs_folder, set_graphics_mode, startup_render_ok, updates_supported,
+    graphics_report, linux_codec_source, log_frontend_event, logs_dir_path, read_logs,
+    reset_visitor_identity, reveal_logs_folder, set_graphics_mode, startup_render_ok,
+    updates_supported,
 };
 use commands::discord::{clear_discord_presence, set_discord_presence};
 use commands::downloads::{
@@ -843,6 +843,7 @@ pub fn run() {
             get_graphics_mode,
             set_graphics_mode,
             linux_codec_source,
+            graphics_report,
             updates_supported,
             set_player_fullscreen,
             commands::window::set_window_background,

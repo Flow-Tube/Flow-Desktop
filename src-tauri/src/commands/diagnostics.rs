@@ -223,6 +223,21 @@ pub fn linux_codec_source() -> &'static str {
     }
 }
 
+/// Graphics facts of this Linux launch for the About tab and bug reports;
+/// `None` on other platforms.
+#[tauri::command]
+#[must_use]
+pub fn graphics_report() -> Option<crate::linux_system::GraphicsReport> {
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux_system::graphics_report()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        None
+    }
+}
+
 /// Stores the Linux graphics compatibility mode for the next launch.
 #[tauri::command]
 pub fn set_graphics_mode(app: tauri::AppHandle, mode: String) -> Result<(), ErrorResponse> {

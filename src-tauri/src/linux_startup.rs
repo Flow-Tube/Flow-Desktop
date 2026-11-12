@@ -151,14 +151,45 @@ impl StartupState {
 }
 
 /// What [`begin`] applied this launch, logged once tracing is live.
-#[cfg(target_os = "linux")]
-#[derive(Clone, Copy)]
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Copy, Debug)]
 pub struct BootReport {
     pub tier: u8,
     pub failed_boots: u8,
     pub nvidia_preset: bool,
     pub safe_graphics: bool,
     pub mode: GraphicsMode,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl BootReport {
+    /// Why this launch used its tier, for the About tab and bug reports.
+    #[must_use]
+    pub fn tier_reason(self) -> &'static str {
+        if self.safe_graphics {
+            "safe-graphics-launch"
+        } else if self.tier == 0 {
+            "default"
+        } else if self.mode != GraphicsMode::Automatic && self.tier == self.mode.floor() {
+            "settings"
+        } else if self.failed_boots > 0 {
+            "failed-launches"
+        } else if self.nvidia_preset && self.tier == 1 {
+            "nvidia-wayland"
+        } else {
+            "remembered"
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+static BOOT_REPORT: std::sync::OnceLock<BootReport> = std::sync::OnceLock::new();
+
+/// What this launch applied, once [`begin`] ran.
+#[cfg(target_os = "linux")]
+#[must_use]
+pub fn boot_report() -> Option<BootReport> {
+    BOOT_REPORT.get().copied()
 }
 
 /// Mirrors Tauri's `app_data_dir()` on Linux (`$XDG_DATA_HOME` or
@@ -297,6 +328,7 @@ pub fn begin(identifier: &str, version: &str) -> BootReport {
         safe_graphics: facts.safe_graphics,
         mode: state.mode,
     };
+    let _ = BOOT_REPORT.set(report);
     state.launched(tier);
     if let Some(dir) = dir {
         save_state(&dir, &state);
@@ -334,8 +366,8 @@ pub fn set_graphics_mode(identifier: &str, mode: GraphicsMode) -> std::io::Resul
 #[cfg(test)]
 mod tests {
     use super::{
-        GraphicsMode, LaunchFacts, MAX_TIER, StartupState, drops_im_module, load_state, save_state,
-        tier_vars, x11_available,
+        BootReport, GraphicsMode, LaunchFacts, MAX_TIER, StartupState, drops_im_module, load_state,
+        save_state, tier_vars, x11_available,
     };
     use std::ffi::OsStr;
 
@@ -557,5 +589,35 @@ mod tests {
         save_state(&dir, &state);
         assert_eq!(load_state(&dir), state);
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn says_why_a_launch_used_its_tier() {
+        let report = |tier, failed_boots, nvidia_preset, safe_graphics, mode| BootReport {
+            tier,
+            failed_boots,
+            nvidia_preset,
+            safe_graphics,
+            mode,
+        };
+        let auto = GraphicsMode::Automatic;
+        assert_eq!(report(0, 0, false, false, auto).tier_reason(), "default");
+        assert_eq!(
+            report(3, 0, false, true, auto).tier_reason(),
+            "safe-graphics-launch"
+        );
+        assert_eq!(
+            report(1, 0, false, false, GraphicsMode::Compatible).tier_reason(),
+            "settings"
+        );
+        assert_eq!(
+            report(2, 1, false, false, GraphicsMode::Compatible).tier_reason(),
+            "failed-launches"
+        );
+        assert_eq!(
+            report(1, 0, true, false, auto).tier_reason(),
+            "nvidia-wayland"
+        );
+        assert_eq!(report(2, 0, false, false, auto).tier_reason(), "remembered");
     }
 }

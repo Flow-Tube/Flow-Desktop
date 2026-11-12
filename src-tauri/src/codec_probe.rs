@@ -57,6 +57,15 @@ fn bundled(dir: &Path, plugins: &[&str]) -> &'static str {
     label(Some(plugins.iter().any(|plugin| dir.join(plugin).exists())))
 }
 
+static SUMMARY: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// The startup probe's result in one line, once it has run; for the About tab
+/// and bug reports, so they need no second `gst-inspect-1.0` run.
+#[must_use]
+pub fn summary() -> Option<String> {
+    SUMMARY.get().cloned()
+}
+
 /// Probes decoders and logs the result at INFO. Best-effort; call once at
 /// startup (on a detached thread — it shells out to `gst-inspect-1.0`).
 pub fn log_probe() {
@@ -66,14 +75,23 @@ pub fn log_probe() {
     if let Some(dir) = bundled_plugin_dir() {
         // Hardware decoding also needs working host drivers; this only says
         // whether the bundle could use them.
+        let avdec_h264 = bundled(&dir, &["libgstlibav.so"]);
+        let vp9 = bundled(&dir, &["libgstvpx.so", "libgstlibav.so"]);
+        let av1 = bundled(&dir, &["libgstdav1d.so", "libgstaom.so"]);
+        let openh264 = bundled(&dir, &["libgstopenh264.so"]);
+        let va = bundled(&dir, &["libgstva.so"]);
+        let nvcodec = bundled(&dir, &["libgstnvcodec.so"]);
+        let _ = SUMMARY.set(format!(
+            "bundled: H.264 {avdec_h264}, VP9 {vp9}, AV1 {av1}, OpenH264 {openh264}, VA {va}, NVDEC {nvcodec}"
+        ));
         tracing::info!(
             source = "bundled",
-            avdec_h264 = bundled(&dir, &["libgstlibav.so"]),
-            vp9 = bundled(&dir, &["libgstvpx.so", "libgstlibav.so"]),
-            av1 = bundled(&dir, &["libgstdav1d.so", "libgstaom.so"]),
-            openh264 = bundled(&dir, &["libgstopenh264.so"]),
-            va = bundled(&dir, &["libgstva.so"]),
-            nvcodec = bundled(&dir, &["libgstnvcodec.so"]),
+            avdec_h264,
+            vp9,
+            av1,
+            openh264,
+            va,
+            nvcodec,
             libva_driver = ?libva_driver,
             libva_drivers_path = ?libva_drivers_path,
             "gstreamer_decoder_probe"
@@ -90,6 +108,15 @@ pub fn log_probe() {
     let va = any_present(&["vah264dec", "vaapih264dec"]);
     let nvcodec = any_present(&["nvh264dec"]);
 
+    let _ = SUMMARY.set(format!(
+        "system: H.264 {}, VP9 {}, AV1 {}, OpenH264 {}, VA {}, NVDEC {}",
+        label(h264),
+        label(vp9),
+        label(av1),
+        label(openh264),
+        label(va),
+        label(nvcodec)
+    ));
     tracing::info!(
         source = "host",
         avdec_h264 = label(h264),

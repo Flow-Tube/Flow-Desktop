@@ -100,6 +100,30 @@ export function codecToLeaveAfterDecodeError(
   return hasAlternative ? family : null;
 }
 
+/**
+ * The codec to leave when Linux plays sound but shows no picture. Unlike a decode
+ * error, this leaves H.264 too: on a system whose only H.264 decoder can't handle
+ * YouTube's profiles (Fedora's OpenH264), H.264 is the codec that fails. Only a codec
+ * this video hasn't already given up on counts as somewhere to go.
+ */
+export function codecToLeaveWhenNoPicture(
+  currentCodec: string | null | undefined,
+  qualities: StreamVariant[],
+  failures: DecodeFailures,
+  videoId: string,
+  now = Date.now(),
+): VideoCodecFamily | null {
+  const family = codecFamily(currentCodec);
+  if (!family) return null;
+  const hasAlternative = qualities.some((quality) => {
+    const other = codecFamily(quality.mimeType);
+    return (
+      quality.isVideoOnly && !!other && other !== family && !isCodecRuledOut(failures, quality.mimeType, videoId, now)
+    );
+  });
+  return hasAlternative ? family : null;
+}
+
 export function loadDecodeFailures(): DecodeFailures {
   try {
     const parsed = JSON.parse(profileStorage.getItem(STORAGE_KEY, "device") ?? "{}");

@@ -158,6 +158,8 @@ PLAYER
 - Auto now starts at a quality your connection can carry, based on the last videos you played.
 - When a video can't be decoded in AV1 or VP9, Flow carries on from the same spot in another codec, and remembers that for the video. This replaces about 30 seconds of black screen and a switch to a different source.
 - Preferred Codec in Settings greys out codecs this device can't play. A codec that keeps failing is greyed out too, with a Try again button, and comes back by itself after 30 days.
+- Linux: when a video plays sound but shows no picture, Flow now switches to another codec from the same spot, H.264 included. On Fedora, whose own H.264 decoder can't play most YouTube video, this means VP9.
+- Linux: if no codec shows a picture, the message now gives the install steps for your system (Debian and Ubuntu, Fedora with RPM Fusion, Arch), and the Fedora package now recommends gstreamer1-plugin-libav, the name Fedora uses today.
 - SponsorBlock now works in the pop-out player and for the next video in the mini player.
 - If SponsorBlock can't be reached, the next video plays without skips instead of skipping at the last video's times.
 - Rewinding to before a skipped segment skips it again, the same as Flow for Android. To watch it, seek inside the segment.

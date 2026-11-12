@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   codecFamily,
   codecToLeaveAfterDecodeError,
+  codecToLeaveWhenNoPicture,
   deviceSupportsCodec,
   isCodecFailingOnDevice,
   isCodecRuledOut,
@@ -172,5 +173,35 @@ describe("stored failures", () => {
     });
     expect(loadDecodeFailures()).toEqual({});
     expect(() => saveDecodeFailures(failed(["a"]))).not.toThrow();
+  });
+});
+
+describe("codecToLeaveWhenNoPicture", () => {
+  const h264 = variant('video/mp4; codecs="avc1.640028"');
+  const vp9 = variant('video/webm; codecs="vp09.00.10.08"');
+
+  it("leaves H.264 when another codec is on offer", () => {
+    expect(codecToLeaveWhenNoPicture(h264.mimeType, [h264, vp9], {}, "v")).toBe("h264");
+  });
+
+  it("while a decode error still never leaves H.264", () => {
+    expect(codecToLeaveAfterDecodeError(h264.mimeType, [h264, vp9])).toBeNull();
+  });
+
+  it("stays when every other codec already failed for this video", () => {
+    const failures = withDecodeFailure({}, "vp9", "v", true, 1000);
+    expect(codecToLeaveWhenNoPicture(h264.mimeType, [h264, vp9], failures, "v", 1000)).toBeNull();
+    expect(codecToLeaveWhenNoPicture(h264.mimeType, [h264, vp9], failures, "other", 1000)).toBe("h264");
+  });
+
+  it("stays when the video has only that codec, or only a muxed alternative", () => {
+    expect(codecToLeaveWhenNoPicture(h264.mimeType, [h264], {}, "v")).toBeNull();
+    expect(codecToLeaveWhenNoPicture(h264.mimeType, [h264, variant('video/webm; codecs="vp09.00.10.08"', false)], {}, "v")).toBeNull();
+  });
+
+  it("rules H.264 out on the device after three videos started in it show no picture", () => {
+    let failures: DecodeFailures = {};
+    for (const id of ["a", "b", "c"]) failures = withDecodeFailure(failures, "h264", id, true, 1000);
+    expect(isCodecFailingOnDevice(failures, "h264", 1000)).toBe(true);
   });
 });

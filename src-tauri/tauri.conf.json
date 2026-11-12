@@ -102,7 +102,7 @@
         ],
         "recommends": [
           "gstreamer1-plugins-bad-freeworld",
-          "gstreamer1-libav"
+          "gstreamer1-plugin-libav"
         ]
       }
     }

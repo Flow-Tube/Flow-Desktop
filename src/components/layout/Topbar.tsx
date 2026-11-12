@@ -12,6 +12,7 @@ import { toggleDeepFlow } from '../../lib/deepFlow';
 import { NotificationsBell } from '../notifications/NotificationsBell';
 import { activeTab, useTabsStore } from '../../store/useTabsStore';
 import { ProfileMenuButton } from '../profiles/ProfileMenuButton';
+import { useSidebarDrawer } from '../../lib/useSidebarDrawer';
 
 /** PageWrapper returns focus here when Escape closes the drawer. */
 export const SIDEBAR_MENU_BUTTON_ID = 'sidebar-menu-button';
@@ -24,7 +25,7 @@ export function Topbar() {
   const navigate = useNavigate();
   const location = useLocation();
   const isWatchPage = location.pathname.startsWith('/watch/');
-  const usesDrawer = isWatchPage || location.pathname.startsWith('/settings');
+  const usesDrawer = useSidebarDrawer();
   // Lets the glow above the player through. Solid again the moment the video reaches the bar,
   // with no fade, so the picture never shows behind the search box.
   const seeThrough = usePlayerStore((s) => s.isAmbientSpreadShown && s.isPlayerBelowTopbar) && isWatchPage;

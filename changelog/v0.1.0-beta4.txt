@@ -192,6 +192,7 @@ PLAYER
 - When YouTube refuses a video's stream partway through, Flow fetches the same file from another client and carries on from the same byte, so the video keeps playing instead of stopping or reloading.
 
 SETTINGS
+- Flow's windows can now shrink to 480 by 360, small enough for a half or quarter screen tile. In a narrow window the menu button opens the side menu over the page, as it does on the Watch page.
 - Settings rows now look like Flow for Android's: each row is its own surface, with a thin gap between rows and rounded group ends. Group titles are colored and no longer in capitals.
 - The FlowNeuro page is now called Your taste, the same name it has on Flow for Android. It stays in the same place and works the same way.
 - On the Settings page, the search box in the top bar searches settings, and its placeholder says so. It finds a setting by its name, description or a related word, the same way Flow for Android ranks them, then opens the right tab and points out the row.

@@ -71,6 +71,7 @@ pub fn log_probe() {
             avdec_h264 = bundled(&dir, &["libgstlibav.so"]),
             vp9 = bundled(&dir, &["libgstvpx.so", "libgstlibav.so"]),
             av1 = bundled(&dir, &["libgstdav1d.so", "libgstaom.so"]),
+            openh264 = bundled(&dir, &["libgstopenh264.so"]),
             va = bundled(&dir, &["libgstva.so"]),
             nvcodec = bundled(&dir, &["libgstnvcodec.so"]),
             libva_driver = ?libva_driver,
@@ -81,6 +82,9 @@ pub fn log_probe() {
     }
 
     let h264 = any_present(&["avdec_h264"]);
+    // OpenH264 decodes only the Constrained Baseline profile, not YouTube's Main and High,
+    // so a log can tell "no H.264 decoder" from "only Fedora's OpenH264".
+    let openh264 = any_present(&["openh264dec"]);
     let vp9 = any_present(&["vp9dec", "avdec_vp9"]);
     let av1 = any_present(&["dav1ddec", "av1dec", "avdec_av1"]);
     let va = any_present(&["vah264dec", "vaapih264dec"]);
@@ -91,6 +95,7 @@ pub fn log_probe() {
         avdec_h264 = label(h264),
         vp9 = label(vp9),
         av1 = label(av1),
+        openh264 = label(openh264),
         va = label(va),
         nvcodec = label(nvcodec),
         libva_driver = ?libva_driver,
@@ -101,8 +106,9 @@ pub fn log_probe() {
     if h264 == Some(false) {
         tracing::warn!(
             "System H.264 decoder (avdec_h264) not found — video may play audio \
-             only. Install gstreamer1.0-libav (Debian/Ubuntu) or enable RPM Fusion \
-             and install gstreamer1-libav (Fedora), or use the AppImage."
+             only. Install gstreamer1.0-libav (Debian/Ubuntu), gst-libav (Arch), or on \
+             Fedora enable RPM Fusion, swap ffmpeg-free for ffmpeg and install \
+             gstreamer1-plugin-libav; or use the AppImage."
         );
     }
 }

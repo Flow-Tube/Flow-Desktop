@@ -80,7 +80,7 @@ On Linux, video decoding goes through WebKitGTK and the system GStreamer plugins
 
 - **AppImage** — bundles the required GStreamer codec plugins (including `gst-libav` for H.264); no system codec packages are needed.
 - **`.deb`** — declares the codec plugins as dependencies. Install with `sudo apt install ./Flow_*.deb` so they are pulled in automatically.
-- **`.rpm`** — the freely licensed plugins are hard dependencies. On Fedora, H.264 decoding (`gstreamer1-libav`, `gstreamer1-plugins-bad-freeworld`) is only available from [RPM Fusion](https://rpmfusion.org/Configuration) for patent reasons: enable RPM Fusion and run `sudo dnf install gstreamer1-libav gstreamer1-plugins-bad-freeworld`, or use the AppImage instead.
+- **`.rpm`** — the freely licensed plugins are hard dependencies. On Fedora, a full H.264 decoder is only available through [RPM Fusion](https://rpmfusion.org/Configuration) for patent reasons (Fedora's own OpenH264 can't decode most YouTube video): enable RPM Fusion and run `sudo dnf swap ffmpeg-free ffmpeg --allowerasing` and `sudo dnf install gstreamer1-plugin-libav`, or use the AppImage instead. Without it, Flow plays VP9, which Fedora always has.
 
 ### Linux startup crashes and blank windows
 

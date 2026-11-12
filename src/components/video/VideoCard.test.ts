@@ -7,6 +7,8 @@ import { SETTINGS } from "../../lib/settings/schema";
 import { useAppSettingsStore } from "../../store/useAppSettingsStore";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import { useHoverPreviewStore } from "../../store/useHoverPreviewStore";
+import { useWatchProgressStore } from "../../store/useWatchProgressStore";
+import { useFeedActionsStore } from "../../store/useFeedActionsStore";
 import type { VideoSummary } from "../../types/video";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -264,5 +266,91 @@ describe("VideoCard hover previews", () => {
     act(() => useHoverPreviewStore.setState({ activeVideoId: null }));
 
     expect(commits).toEqual(before);
+  });
+});
+
+describe("VideoCard watch progress", () => {
+  let host: HTMLDivElement;
+  let root: Root;
+
+  const render = (props: Partial<ComponentProps<typeof VideoCard>> & { video: VideoSummary }) =>
+    act(() =>
+      root.render(createElement(MemoryRouter, null, createElement(VideoCard, { onPlay: vi.fn(), ...props }))),
+    );
+  const barWidth = () =>
+    (host.querySelector(".h-\\[3px\\] > div") as HTMLElement | null)?.style.width ?? null;
+  const watched = (videoId: string, watchedSeconds: number, totalSeconds = 600) =>
+    act(() =>
+      useWatchProgressStore.getState().apply({ kind: "record", videoId, watchedSeconds, totalSeconds, skipped: false }),
+    );
+  const setShowProgress = (on: boolean) =>
+    useAppSettingsStore.setState({
+      values: { ...useAppSettingsStore.getState().values, [SETTINGS.SHOW_WATCH_PROGRESS]: String(on) },
+    });
+
+  beforeEach(() => {
+    vi.stubGlobal("IntersectionObserver", FakeObserver);
+    useWatchProgressStore.setState({ progress: new Map() });
+    useFeedActionsStore.setState({ watchedVideoIds: new Set() });
+    setShowProgress(true);
+    host = document.createElement("div");
+    document.body.append(host);
+    root = createRoot(host);
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  });
+
+  it.each(["grid", "list", "compact"] as const)("shows how far a video was watched in the %s layout", (variant) => {
+    const id = freshId();
+    watched(id, 258);
+    render({ variant: variant === "grid" ? undefined : variant, video: { id, title: "A video", channelName: "A channel", durationSeconds: 600 } });
+    expect(barWidth()).toBe("43%");
+  });
+
+  it("draws nothing for a video not watched, and follows playback as it goes", () => {
+    const id = freshId();
+    render({ video: { id, title: "A video", channelName: "A channel" } });
+    expect(barWidth()).toBeNull();
+    watched(id, 300);
+    expect(barWidth()).toBe("50%");
+    watched(id, 560);
+    expect(barWidth()).toBe("100%");
+  });
+
+  it("fills a video marked as watched", () => {
+    const id = freshId();
+    useFeedActionsStore.setState({ watchedVideoIds: new Set([id]) });
+    render({ video: { id, title: "A video", channelName: "A channel" } });
+    expect(barWidth()).toBe("100%");
+  });
+
+  it("hides the bar with the switch off, except on History", () => {
+    const id = freshId();
+    watched(id, 300);
+    setShowProgress(false);
+    render({ video: { id, title: "A video", channelName: "A channel" } });
+    expect(barWidth()).toBeNull();
+    render({ variant: "history", video: { id, title: "A video", channelName: "A channel", watchProgressPercent: 50 } });
+    expect(barWidth()).toBe("50%");
+  });
+
+  it("leaves Shorts, live videos and a download's own overlay alone", () => {
+    const short = freshId();
+    const live = freshId();
+    const downloading = freshId();
+    for (const id of [short, live, downloading]) watched(id, 300);
+    render({ video: { id: short, title: "A Short", channelName: "A channel", isShort: true } });
+    expect(barWidth()).toBeNull();
+    render({ video: { id: live, title: "Live", channelName: "A channel", isLive: true } });
+    expect(barWidth()).toBeNull();
+    render({
+      video: { id: downloading, title: "Saving", channelName: "A channel" },
+      thumbnailOverlay: createElement("div", null, "42%"),
+    });
+    expect(barWidth()).toBeNull();
   });
 });

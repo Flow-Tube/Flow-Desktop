@@ -30,7 +30,8 @@ import { useUpcomingReminderStore } from '../../store/useUpcomingReminderStore';
 import { useWatchLaterStore } from '../../store/useWatchLaterStore';
 import { useWatchedVideoIds } from '../../lib/useWatchedFilter';
 import { isMusicVideo } from '../../lib/utils';
-import { useWatchProgressPercent } from '../../store/useWatchProgressStore';
+import { useWatchProgressPercent, useWatchProgressStore } from '../../store/useWatchProgressStore';
+import { isWatched as isWatchedPosition, type WatchedThreshold } from '../../lib/watchedThreshold';
 import { ThumbnailWatchProgress } from './ThumbnailWatchProgress';
 import { VideoDetailsDialog } from './VideoDetailsDialog';
 import { useUiStore } from '../../store/useUiStore';
@@ -160,9 +161,14 @@ function VideoCardComponent({
   const isDownloaded = useIsDownloaded(video.id);
   const [showMenu, setShowMenu] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
-  // History is read only with the menu open: a feed mounts hundreds of cards.
-  const historyWatched = useWatchedVideoIds(showMenu);
-  const isWatched = isMarkedWatched || historyWatched.has(video.id);
+  const watchedThreshold = useAppSettingsStore((s) => s.values[SETTINGS.WATCHED_THRESHOLD]) as WatchedThreshold;
+  const watchedInHistory = useWatchProgressStore((s) => {
+    const entry = s.progress.get(video.id);
+    return !!entry && isWatchedPosition(entry.watchedSeconds, entry.totalSeconds, watchedThreshold);
+  });
+  // The progress store leaves Shorts out; a Short's menu reads history itself, only while open.
+  const shortsWatched = useWatchedVideoIds(showMenu && !!video.isShort);
+  const isWatched = isMarkedWatched || watchedInHistory || shortsWatched.has(video.id);
   const [menuAnchor, setMenuAnchor] = useState<MenuAnchor | null>(null);
   const [dominantColor, setDominantColor] = useState<Rgb | null>(null);
   const [isHovered, setIsHovered] = useState(false);

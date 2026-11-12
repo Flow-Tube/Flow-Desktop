@@ -29,6 +29,9 @@ import { getString } from '../../lib/i18n/index';
 import { useUpcomingReminderStore } from '../../store/useUpcomingReminderStore';
 import { useWatchLaterStore } from '../../store/useWatchLaterStore';
 import { useWatchedVideoIds } from '../../lib/useWatchedFilter';
+import { isMusicVideo } from '../../lib/utils';
+import { useWatchProgressPercent } from '../../store/useWatchProgressStore';
+import { ThumbnailWatchProgress } from './ThumbnailWatchProgress';
 import { VideoDetailsDialog } from './VideoDetailsDialog';
 import { useUiStore } from '../../store/useUiStore';
 import { showSaveFailedToast, showSaveToast } from '../../lib/saveToast';
@@ -304,7 +307,21 @@ function VideoCardComponent({
   const isHistoryCard = variant === 'history';
   const isContinueCard = variant === 'continue';
   const isListVariant = variant === 'list';
-  const progressPercent = Math.min(100, Math.max(0, video.watchProgressPercent ?? 0));
+  const showWatchProgress = useAppSettingsStore((s) => s.values[SETTINGS.SHOW_WATCH_PROGRESS] !== 'false');
+  const historyPercent = useWatchProgressPercent(video.id);
+  // History and Continue Watching always show where you are; elsewhere the bar follows the switch.
+  const progressPercent = isHistoryCard || isContinueCard
+    ? Math.min(100, Math.max(0, video.watchProgressPercent ?? 0))
+    : showWatchProgress
+        && !isChannel
+        && !isLiveVideo
+        && !video.isUpcoming
+        && !video.isShort
+        && !isMusicVideo(video)
+        && !thumbnailOverlay
+      ? historyPercent || (isMarkedWatched ? 100 : 0)
+      : 0;
+  const showsProgressBar = isHistoryCard || isContinueCard || progressPercent > 0;
 
   useEffect(() => {
     setDominantColor(null);
@@ -708,10 +725,11 @@ function VideoCardComponent({
           ) : video.isUpcoming ? (
             <UpcomingBadge className="absolute bottom-1 end-1" />
           ) : video.durationSeconds ? (
-            <div className="absolute bottom-1 end-1 z-10 rounded bg-chrome-black/80 px-1 py-px text-[11px] font-medium leading-tight text-chrome-white">
+            <div className={`absolute end-1 z-10 rounded bg-chrome-black/80 px-1 py-px text-[11px] font-medium leading-tight text-chrome-white ${showsProgressBar ? 'bottom-2' : 'bottom-1'}`}>
               {formatDuration(video.durationSeconds)}
             </div>
           ) : null}
+          {showsProgressBar ? <ThumbnailWatchProgress percent={progressPercent} /> : null}
         </div>
 
         <div className="flex min-w-0 flex-1 flex-col">
@@ -816,10 +834,11 @@ function VideoCardComponent({
           ) : video.isUpcoming ? (
             <UpcomingBadge className="absolute bottom-1 end-1" />
           ) : video.durationSeconds ? (
-            <div className="absolute bottom-1 end-1 z-10 rounded bg-chrome-black/80 px-1 py-px text-[12px] font-medium leading-tight tracking-wide text-chrome-white">
+            <div className={`absolute end-1 z-10 rounded bg-chrome-black/80 px-1 py-px text-[12px] font-medium leading-tight tracking-wide text-chrome-white ${showsProgressBar ? 'bottom-2' : 'bottom-1'}`}>
               {formatDuration(video.durationSeconds)}
             </div>
           ) : null}
+          {showsProgressBar ? <ThumbnailWatchProgress percent={progressPercent} /> : null}
         </div>
 
         <div className="flex min-w-0 flex-1 flex-col">
@@ -905,24 +924,19 @@ function VideoCardComponent({
         {hoverPreview}
 
         {isLiveVideo ? (
-          <LiveBadge className={`absolute end-1 ${isHistoryCard || isContinueCard ? 'bottom-2' : 'bottom-1'}`} />
+          <LiveBadge className={`absolute end-1 ${showsProgressBar ? 'bottom-2' : 'bottom-1'}`} />
         ) : video.isUpcoming ? (
           <UpcomingBadge className="absolute bottom-1 end-1" />
         ) : video.durationSeconds ? (
-          <div className={`absolute end-1 z-10 bg-chrome-black/80 px-1 py-px rounded text-[12px] font-medium text-chrome-white leading-tight tracking-wide ${isHistoryCard || isContinueCard ? 'bottom-2' : 'bottom-1'}`}>
+          <div className={`absolute end-1 z-10 bg-chrome-black/80 px-1 py-px rounded text-[12px] font-medium text-chrome-white leading-tight tracking-wide ${showsProgressBar ? 'bottom-2' : 'bottom-1'}`}>
             {formatDuration(video.durationSeconds)}
           </div>
         ) : null}
 
+        {showsProgressBar ? <ThumbnailWatchProgress percent={progressPercent} /> : null}
+
         {isHistoryCard || isContinueCard ? (
           <>
-            <div className="absolute bottom-0 start-0 z-10 h-[3px] w-full bg-chrome-neutral-600">
-              <div
-                className="h-full bg-primary"
-                style={{ width: `${progressPercent}%` }}
-              />
-            </div>
-
             {isHistoryCard && onRemoveFromHistory ? (
               <button
                 type="button"

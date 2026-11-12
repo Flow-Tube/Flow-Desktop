@@ -37,6 +37,7 @@ import {
 import {
   codecFamily,
   codecToLeaveAfterDecodeError,
+  codecToLeaveWhenNoPicture,
   isCodecRuledOut,
   withoutRuledOutCodecs,
   type VideoCodecFamily,
@@ -790,7 +791,7 @@ export const Player: React.FC<PlayerProps> = ({
   const applyDashQualitySelectionRef = useRef(applyDashQualitySelection);
 
   // Re-resolving would fetch the same codec and fail again, then wait out a source switch.
-  const leaveFailingCodec = useCallback(() => {
+  const leaveFailingCodec = useCallback((reason: "decode-error" | "no-picture" = "decode-error") => {
     if (decodeFallbackPendingRef.current) return true;
     const player = dashPlayerRef.current;
     const video = videoRef.current;
@@ -798,11 +799,19 @@ export const Player: React.FC<PlayerProps> = ({
     if (!player || !video || !videoId || !Number.isFinite(video.duration)) return false;
 
     const current = player.getCurrentRepresentationForType("video");
-    const family = codecToLeaveAfterDecodeError(current?.codecs ?? current?.mimeType, supportedQualitiesRef.current);
+    const codec = current?.codecs ?? current?.mimeType;
+    const family =
+      reason === "no-picture"
+        ? codecToLeaveWhenNoPicture(codec, supportedQualitiesRef.current, useCodecHealthStore.getState().failures, videoId)
+        : codecToLeaveAfterDecodeError(codec, supportedQualitiesRef.current);
     if (!family) return false;
 
     const directStart = dashStartFamilyRef.current === null || dashStartFamilyRef.current === family;
-    logPlayerEventRef.current("dash-decode-fallback", { family, directStart, resumeAt: video.currentTime });
+    logPlayerEventRef.current(reason === "no-picture" ? "video-no-picture-fallback" : "dash-decode-fallback", {
+      family,
+      directStart,
+      resumeAt: video.currentTime,
+    });
     decodeFallbackPendingRef.current = true;
     decodeFallbackAtRef.current = video.currentTime;
     useCodecHealthStore.getState().recordFailure(family, videoId, directStart);
@@ -1034,6 +1043,11 @@ export const Player: React.FC<PlayerProps> = ({
         return;
       }
       if (video.currentTime - codecProbeBaselineRef.current >= CODEC_PROBE_SECONDS) {
+        // Another codec in the manifest may decode where this one can't; the banner is for when none is left.
+        if (leaveFailingCodecRef.current("no-picture")) {
+          codecProbeBaselineRef.current = null;
+          return;
+        }
         logPlayerEventRef.current("video-codec-unsupported", {
           currentTime: video.currentTime,
           readyState: video.readyState,

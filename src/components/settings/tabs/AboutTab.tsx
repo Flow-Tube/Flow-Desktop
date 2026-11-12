@@ -10,6 +10,7 @@ import { getString } from '../../../lib/i18n/index';
 import { openExternal } from '../../../lib/openExternal';
 import { getAppMetadata, type AppMetadata } from '../../../lib/appMetadata';
 import { getSystemMetadata, type SystemMetadata } from '../../../lib/systemMetadata';
+import { formatGraphics, getGraphicsReport, type GraphicsReport } from '../../../lib/graphicsReport';
 import { useUpdaterStore } from '../../../store/useUpdaterStore';
 import { updateBlockedStringKey } from '../../../lib/updateSupport';
 import { useUiStore } from '../../../store/useUiStore';
@@ -68,6 +69,7 @@ export function AboutTab() {
   const navigate = useNavigate();
   const [appMetadata, setAppMetadata] = useState<AppMetadata | null>(null);
   const [systemMetadata, setSystemMetadata] = useState<SystemMetadata | null>(null);
+  const [graphics, setGraphics] = useState<GraphicsReport | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [openDialog, setOpenDialog] = useState<'changelog' | 'notices' | null>(null);
   const autoCheck = useUpdaterStore((s) => s.autoCheck);
@@ -78,11 +80,12 @@ export function AboutTab() {
 
   useEffect(() => {
     let active = true;
-    Promise.all([getAppMetadata(), getSystemMetadata()])
-      .then(([app, system]) => {
+    Promise.all([getAppMetadata(), getSystemMetadata(), getGraphicsReport()])
+      .then(([app, system, graphicsReport]) => {
         if (!active) return;
         setAppMetadata(app);
         setSystemMetadata(system);
+        setGraphics(graphicsReport);
       })
       .catch(() => {
         if (!active) return;
@@ -203,6 +206,12 @@ export function AboutTab() {
         <LinkRow icon={<Monitor size={16} />} label={getString('settings_display')} value={systemMetadata?.display ?? unknown()} />
         <LinkRow icon={<Info size={16} />} label={getString('settings_metadata_source')} value={sourceLabel(systemMetadata?.source)} />
         <LinkRow icon={<Cpu size={16} />} label={getString('settings_user_agent')} value={systemMetadata?.userAgent ?? unknown()} />
+        {graphics ? (
+          <>
+            <LinkRow icon={<Monitor size={16} />} label={getString('settings_graphics')} value={formatGraphics(graphics)} />
+            <LinkRow icon={<Cpu size={16} />} label={getString('settings_video_decoders')} value={graphics.decoders ?? getString('settings_video_decoders_checking')} />
+          </>
+        ) : null}
       </SettingsGroup>
 
       <AnimatePresence>

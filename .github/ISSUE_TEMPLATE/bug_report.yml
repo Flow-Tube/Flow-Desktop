@@ -89,6 +89,25 @@ body:
       placeholder: "WebView2 149.0.4022.80 or WebKitGTK 2.x"
 
   - type: dropdown
+    id: graphics-mode
+    attributes:
+      label: Graphics compatibility tried (Linux)
+      description: Settings > Appearance > Graphics compatibility. Restart Flow after changing it. Many blank, black or flickering windows go away with Compatible.
+      options:
+        - Not tried
+        - Automatic
+        - Compatible
+        - Safe
+        - Not on Linux
+
+  - type: input
+    id: graphics
+    attributes:
+      label: Graphics details (Linux)
+      description: Copy the Graphics and Video decoders rows from Settings > About. Report on GitHub in Settings > Diagnostics & logs fills this in.
+      placeholder: "Tier 0 (default), Automatic mode, x11, appimage, WebKitGTK 2.48.3"
+
+  - type: dropdown
     id: area
     attributes:
       label: Affected area

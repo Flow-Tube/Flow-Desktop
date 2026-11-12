@@ -5,6 +5,7 @@
 use serde::Serialize;
 
 /// How this system installs the `GStreamer` video decoders.
+#[cfg(any(target_os = "linux", test))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum CodecSource {
@@ -22,6 +23,7 @@ pub enum CodecSource {
 }
 
 /// `ID` and `ID_LIKE` from an os-release file, lower case, unquoted.
+#[cfg(any(target_os = "linux", test))]
 fn os_ids(os_release: &str) -> Vec<String> {
     os_release
         .lines()
@@ -40,6 +42,7 @@ fn os_ids(os_release: &str) -> Vec<String> {
         .collect()
 }
 
+#[cfg(any(target_os = "linux", test))]
 pub fn codec_source(os_release: &str, appimage: bool, flatpak: bool) -> CodecSource {
     if flatpak {
         return CodecSource::Flatpak;
@@ -59,6 +62,7 @@ pub fn codec_source(os_release: &str, appimage: bool, flatpak: bool) -> CodecSou
 }
 
 #[cfg(target_os = "linux")]
+#[must_use]
 pub fn detect_codec_source() -> CodecSource {
     let os_release = std::fs::read_to_string("/etc/os-release")
         .or_else(|_| std::fs::read_to_string("/usr/lib/os-release"))
@@ -66,6 +70,67 @@ pub fn detect_codec_source() -> CodecSource {
     let flatpak =
         std::env::var_os("FLATPAK_ID").is_some() || std::path::Path::new("/.flatpak-info").exists();
     codec_source(&os_release, std::env::var_os("APPIMAGE").is_some(), flatpak)
+}
+
+/// The graphics facts a Linux bug report needs and the page cannot see.
+/// Nothing in it identifies the user.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphicsReport {
+    /// The startup tier this launch used (0 to 3), see `linux_startup`.
+    pub tier: u8,
+    pub tier_reason: &'static str,
+    /// Graphics compatibility in Settings.
+    pub mode: &'static str,
+    /// `XDG_SESSION_TYPE`: "wayland", "x11", or empty when unset.
+    pub session: String,
+    /// Drawn through X11 although the session may be Wayland (tier 3 or the user's own setting).
+    pub x11_backend: bool,
+    pub packaging: &'static str,
+    pub webkitgtk: String,
+    /// The startup decoder probe, until it finishes `None`.
+    pub decoders: Option<String>,
+}
+
+#[cfg(target_os = "linux")]
+fn packaging() -> &'static str {
+    use tauri::utils::config::BundleType;
+    match detect_codec_source() {
+        CodecSource::Flatpak => "flatpak",
+        CodecSource::Appimage => "appimage",
+        _ => match tauri::utils::platform::bundle_type() {
+            Some(BundleType::Deb) => "deb",
+            Some(BundleType::Rpm) => "rpm",
+            Some(_) => "package",
+            None => "unbundled",
+        },
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[must_use]
+pub fn graphics_report() -> Option<GraphicsReport> {
+    let boot = crate::linux_startup::boot_report()?;
+    // SAFETY: plain getters of the loaded WebKitGTK library's version numbers.
+    let webkitgtk = unsafe {
+        format!(
+            "{}.{}.{}",
+            webkit2gtk::ffi::webkit_get_major_version(),
+            webkit2gtk::ffi::webkit_get_minor_version(),
+            webkit2gtk::ffi::webkit_get_micro_version()
+        )
+    };
+    Some(GraphicsReport {
+        tier: boot.tier,
+        tier_reason: boot.tier_reason(),
+        mode: boot.mode.as_str(),
+        session: std::env::var("XDG_SESSION_TYPE").unwrap_or_default(),
+        x11_backend: std::env::var("GDK_BACKEND").is_ok_and(|backend| backend == "x11"),
+        packaging: packaging(),
+        webkitgtk,
+        decoders: crate::codec_probe::summary(),
+    })
 }
 
 #[cfg(test)]

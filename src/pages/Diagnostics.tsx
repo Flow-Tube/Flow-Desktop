@@ -8,7 +8,8 @@ import { openExternal } from "../lib/openExternal";
 import { confirmAction, pickSaveFile } from "../lib/dialogs";
 import { getString } from "../lib/i18n/index";
 import { copyText } from "../lib/clipboard";
-import { ISSUE_TEMPLATE, NEW_ISSUE_URL } from "../lib/crashReport";
+import { bugReportUrl } from "../lib/crashReport";
+import { getGraphicsReport } from "../lib/graphicsReport";
 import { useUiStore } from "../store/useUiStore";
 import { CrashReportSection } from "../components/diagnostics/CrashReportSection";
 
@@ -35,7 +36,7 @@ export const Diagnostics: React.FC = () => {
   const handleReport = async () => {
     // Copy first so the user only has to paste into the issue body.
     const copied = await copyLogs();
-    await openExternal(`${NEW_ISSUE_URL}?template=${ISSUE_TEMPLATE}`);
+    await openExternal(bugReportUrl(await getGraphicsReport()));
     showToast({
       message: getString(copied ? "diagnostics_report_copied" : "diagnostics_report_opened"),
       variant: "success",

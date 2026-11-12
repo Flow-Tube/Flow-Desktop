@@ -1492,6 +1492,8 @@
   "settings_hide_watched_subscriptions_desc": "Hide videos you've watched from Subscriptions",
   "settings_hide_watched_shorts": "Hide watched Shorts",
   "settings_hide_watched_shorts_desc": "Keep Shorts you finished out of shelves and the Shorts feed",
+  "settings_show_watch_progress": "Show watch progress",
+  "settings_show_watch_progress_desc": "A red bar on video thumbnails shows how much of each video you watched",
   "settings_watched_threshold": "Mark as watched when",
   "settings_watched_threshold_desc": "How much of a video you need to watch before it counts as watched",
   "settings_watched_threshold_90": "90% played",

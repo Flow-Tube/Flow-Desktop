@@ -8,6 +8,7 @@ import { ScrollContainerContext } from '../../lib/useScrollContainer';
 import { usePageEnterMotion } from '../../lib/usePageEnterMotion';
 import { SIDEBAR_MENU_BUTTON_ID } from './Topbar';
 import { recalledScroll, rememberScroll, restoreScroll } from '../../lib/tabs/scrollMemory';
+import { useSidebarDrawer } from '../../lib/useSidebarDrawer';
 
 export function PageWrapper() {
   const location = useLocation();
@@ -18,7 +19,7 @@ export function PageWrapper() {
   const isWatchSidebarOpen = useUiStore((s) => s.isWatchSidebarOpen);
   const setWatchSidebarOpen = useUiStore((s) => s.setWatchSidebarOpen);
   const isWatchPage = location.pathname.startsWith('/watch/');
-  const isSettingsPage = location.pathname.startsWith('/settings');
+  const usesDrawer = useSidebarDrawer();
   const isPlaylistDetailsPage =
     location.pathname.startsWith('/playlist/') ||
     location.pathname === '/watch-later';
@@ -64,10 +65,11 @@ export function PageWrapper() {
     return restoreScroll(main, navigationType === NavigationType.Pop ? recalledScroll(location.key) : 0);
   }, [location.key, navigationType, pagePath]);
 
-  // Leaving by Back, search or the mini player must not leave the drawer open for the next visit.
+  // Leaving by Back, search or the mini player must not leave the drawer open for the next visit,
+  // nor widening the window past the point where the rail shows again.
   useEffect(() => {
     setWatchSidebarOpen(false);
-  }, [location.pathname, setWatchSidebarOpen]);
+  }, [location.pathname, usesDrawer, setWatchSidebarOpen]);
 
   const drawerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -107,7 +109,7 @@ export function PageWrapper() {
           </ScrollContainerContext.Provider>
         </main>
       </div>
-      {(isWatchPage || isSettingsPage) && (
+      {usesDrawer && (
         <div
           data-open={isWatchSidebarOpen}
           inert={!isWatchSidebarOpen}

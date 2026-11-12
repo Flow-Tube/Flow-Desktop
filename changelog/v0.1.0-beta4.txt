@@ -75,6 +75,7 @@ LIBRARY
 - Save any playlist or music collection as a file from its menu, and import one with Import from file on the Playlists or Albums page. The files are the same ones Flow for Android saves and opens. A music playlist imports into your Albums.
 - Likes has a sort, and you can select many to queue, download or remove them with Undo. Download all and Save as file work on what the page shows. With songs and videos both on show, Play and Save as file take the videos.
 - History has a Shorts tab, Newest and Oldest first, and a year to narrow it to. A removed video can be brought back with Undo, and Delete Shorts from history clears only the Shorts.
+- Every video card now shows a red bar for how much of the video you watched, on Home, Search, channels, playlists and the Watch page, as in the Android app. It follows playback as you watch and fills once a video is marked as watched. Turn it off with Show watch progress in Settings > Content.
 - Hide any Library section in Settings > Content & UI.
 - A new Remove watched videos switch takes videos out of Watch Later once you finish them, and opening Watch Later clears any you watched elsewhere, with Undo.
 - Subscriptions has a Refresh button that refreshes only the group you have open. Refresh subscriptions at startup now works.

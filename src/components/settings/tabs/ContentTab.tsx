@@ -36,6 +36,7 @@ export function ContentTab() {
   const [, setHideWatchedSubscriptions] = usePreference(SETTINGS.HIDE_WATCHED_SUBSCRIPTIONS);
   const [hideWatchedShorts, setHideWatchedShorts] = useBoolPref(SETTINGS.HIDE_WATCHED_SHORTS, true);
   const [watchedThreshold, setWatchedThreshold] = usePreference(SETTINGS.WATCHED_THRESHOLD);
+  const [showWatchProgress, setShowWatchProgress] = useBoolPref(SETTINGS.SHOW_WATCH_PROGRESS, true);
   const [shortsContent, setShortsContent] = useBoolPref(SETTINGS.SHORTS_CONTENT_ENABLED, true);
   const [channelShortsTab, setChannelShortsTab] = useBoolPref(SETTINGS.CHANNEL_SHORTS_TAB_WHEN_HIDDEN, false);
   const [hideSeen, setHideSeen] = useBoolPref(SETTINGS.HIDE_SEEN_VIDEOS, false);
@@ -119,6 +120,7 @@ export function ContentTab() {
       </SettingsGroup>
 
       <SettingsGroup title={getString('settings_group_watched_videos')}>
+        <SettingItem title={getString('settings_show_watch_progress')} description={getString('settings_show_watch_progress_desc')}><ToggleSwitch checked={showWatchProgress} onChange={setShowWatchProgress} /></SettingItem>
         <SettingItem title={getString('settings_hide_watched_home')} description={getString('settings_hide_watched_home_desc')}><ToggleSwitch checked={hideWatchedHome} onChange={(on) => setHideWatchedHome(String(on))} /></SettingItem>
         <SettingItem title={getString('settings_hide_watched_subscriptions')} description={getString('settings_hide_watched_subscriptions_desc')}><ToggleSwitch checked={hideWatchedSubscriptions} onChange={(on) => setHideWatchedSubscriptions(String(on))} /></SettingItem>
         <SettingItem title={getString('settings_hide_watched_shorts')} description={getString('settings_hide_watched_shorts_desc')} disabled={!shortsContent}><ToggleSwitch checked={hideWatchedShorts} onChange={setHideWatchedShorts} disabled={!shortsContent} /></SettingItem>

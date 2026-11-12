@@ -191,6 +191,7 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     { title: "settings_video_notes", summary: "settings_video_notes_desc" },
     { title: "settings_related_videos", summary: "settings_related_videos_desc" },
     { title: "settings_live_chat", summary: "settings_live_chat_desc" },
+    { title: "settings_show_watch_progress", summary: "settings_show_watch_progress_desc", keywords: ["progress bar", "watched"] },
     { title: "settings_hide_watched_home", summary: "settings_hide_watched_home_desc" },
     { title: "settings_hide_watched_subscriptions", summary: "settings_hide_watched_subscriptions_desc" },
     { title: "settings_hide_watched_shorts", summary: "settings_hide_watched_shorts_desc" },

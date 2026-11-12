@@ -186,6 +186,21 @@ pub async fn get_watch_history(
     Ok(records)
 }
 
+/// How far each video was watched, as (video id, seconds watched, length): what every card's
+/// progress bar reads. Songs, Shorts and rows under 3% are left out here so a long history
+/// stays a small reply.
+pub async fn watch_progress(pool: &SqlitePool) -> AppResult<Vec<(String, i64, i64)>> {
+    sqlx::query_as::<_, (String, i64, i64)>(
+        "SELECT video_id, watch_duration_seconds, total_duration_seconds FROM watch_history
+         WHERE is_music = 0 AND is_short = 0
+           AND total_duration_seconds > 0
+           AND watch_duration_seconds * 100 >= total_duration_seconds * 3",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(AppError::from)
+}
+
 /// Titles of the latest videos watched, songs left out, newest first.
 pub async fn recent_video_titles(pool: &SqlitePool, limit: i64) -> AppResult<Vec<String>> {
     sqlx::query_scalar::<_, String>(
@@ -450,6 +465,42 @@ mod shorts_and_years_tests {
             is_music: false,
             is_short,
         }
+    }
+
+    #[tokio::test]
+    async fn watch_progress_leaves_out_songs_shorts_and_barely_started_videos() {
+        let pool = pool().await;
+        let row = |id: &str, watched: i64, total: Option<i64>| WatchHistoryRecord {
+            watch_duration_seconds: watched,
+            total_duration_seconds: total,
+            ..record(id, "2026-11-12T10:00:00Z", false)
+        };
+        for record in [
+            row("half", 300, Some(600)),
+            row("three_percent", 18, Some(600)),
+            row("two_percent", 12, Some(600)),
+            row("no_length", 40, None),
+            row("live", 40, Some(0)),
+            WatchHistoryRecord {
+                is_music: true,
+                ..row("song", 200, Some(200))
+            },
+            WatchHistoryRecord {
+                is_short: true,
+                ..row("short", 30, Some(40))
+            },
+        ] {
+            upsert_watch_record(&pool, &record).await.unwrap();
+        }
+        let mut progress = watch_progress(&pool).await.unwrap();
+        progress.sort();
+        assert_eq!(
+            progress,
+            vec![
+                ("half".to_string(), 300, 600),
+                ("three_percent".to_string(), 18, 600)
+            ]
+        );
     }
 
     #[tokio::test]

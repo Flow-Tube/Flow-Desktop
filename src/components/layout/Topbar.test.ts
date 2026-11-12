@@ -1,7 +1,7 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Topbar } from "./Topbar";
 import { usePlayerStore } from "../../store/usePlayerStore";
@@ -23,6 +23,8 @@ function barAt(path: string, flags: { spread: boolean; below: boolean }) {
 
 describe("Topbar", () => {
   beforeEach(() => {
+    // A wide window: the side rail shows, so only Watch and Settings use the drawer.
+    vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} }));
     host = document.createElement("div");
     document.body.append(host);
     root = createRoot(host);
@@ -31,6 +33,7 @@ describe("Topbar", () => {
   afterEach(() => {
     act(() => root.unmount());
     host.remove();
+    vi.unstubAllGlobals();
     usePlayerStore.setState({ isAmbientSpreadShown: false, isPlayerBelowTopbar: false });
   });
 

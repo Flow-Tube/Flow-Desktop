@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { crashIssueUrl, parseCrashSummary } from "./crashReport";
+import { bugReportUrl, crashIssueUrl, parseCrashSummary } from "./crashReport";
 
 const REPORT = [
   "Flow crash report",
@@ -42,5 +42,30 @@ describe("crash report", () => {
   it("keeps the link short enough to open however long the report is", () => {
     const long = `${REPORT}\nMessage: ${"x".repeat(5000)}\n${"frame\n".repeat(5000)}`;
     expect(crashIssueUrl(long).length).toBeLessThan(4000);
+  });
+});
+
+describe("bugReportUrl", () => {
+  it("opens the plain form off Linux", () => {
+    expect(bugReportUrl(null)).toBe("https://github.com/Flow-Tube/Flow-Desktop/issues/new?template=bug_report.yml");
+  });
+
+  it("fills in the WebKitGTK version and the graphics line on Linux", () => {
+    const url = new URL(
+      bugReportUrl({
+        tier: 1,
+        tierReason: "nvidia-wayland",
+        mode: "automatic",
+        session: "wayland",
+        x11Backend: false,
+        packaging: "rpm",
+        webkitgtk: "2.50.1",
+        decoders: "system: H.264 absent, VP9 present",
+      }),
+    );
+    expect(url.searchParams.get("webview")).toBe("WebKitGTK 2.50.1");
+    expect(url.searchParams.get("graphics")).toBe(
+      "Tier 1 (NVIDIA on Wayland), Automatic mode, wayland, rpm, WebKitGTK 2.50.1; system: H.264 absent, VP9 present",
+    );
   });
 });

@@ -6,6 +6,7 @@ import { deleteCrashReport, dismissCrashReport, readCrashReport, type CrashRepor
 import { copyText } from "./clipboard";
 import { getString } from "./i18n/index";
 import { openExternal } from "./openExternal";
+import { formatGraphics, type GraphicsReport } from "./graphicsReport";
 
 export const NEW_ISSUE_URL = "https://github.com/Flow-Tube/Flow-Desktop/issues/new";
 export const ISSUE_TEMPLATE = "bug_report.yml";
@@ -54,6 +55,16 @@ export function crashIssueUrl(report: string): string {
     .map(([key, text]) => `${key}=${encodeURIComponent(text)}`)
     .join("&");
   return `${NEW_ISSUE_URL}?${query}`;
+}
+
+/** The bug form, with what Flow knows about this Linux launch's graphics already filled in. */
+export function bugReportUrl(graphics: GraphicsReport | null): string {
+  const fields: Array<[string, string]> = [["template", ISSUE_TEMPLATE]];
+  if (graphics) {
+    fields.push(["webview", `WebKitGTK ${graphics.webkitgtk}`]);
+    fields.push(["graphics", [formatGraphics(graphics), graphics.decoders].filter(Boolean).join("; ")]);
+  }
+  return `${NEW_ISSUE_URL}?${fields.map(([key, text]) => `${key}=${encodeURIComponent(text)}`).join("&")}`;
 }
 
 /** Copies the full report, since a link only fits the top of it, and opens the bug form. */

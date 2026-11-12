@@ -1,5 +1,6 @@
 import { getAppMetadata } from "./appMetadata";
 import { getSystemMetadata } from "./systemMetadata";
+import { formatGraphics, getGraphicsReport } from "./graphicsReport";
 import { formatDiagnosticEvent, getDiagnosticEvents, recordDiagnostic } from "./diagnostics";
 import type { PlayerErrorInfo } from "./playerError";
 import { copyText } from "./clipboard";
@@ -28,7 +29,7 @@ function section(heading: string, lines: (string | null | undefined)[]): string 
  * Safe to call outside Tauri (falls back to browser metadata).
  */
 export async function buildPlayerReport(ctx: PlayerReportContext): Promise<string> {
-  const [app, sys] = await Promise.all([getAppMetadata(), getSystemMetadata()]);
+  const [app, sys, graphics] = await Promise.all([getAppMetadata(), getSystemMetadata(), getGraphicsReport()]);
 
   const environment = section("Environment", [
     `${app.name} ${app.version} (${app.bundleType})`,
@@ -37,6 +38,8 @@ export async function buildPlayerReport(ctx: PlayerReportContext): Promise<strin
     `OS: ${sys.osType} ${sys.osVersion} (${sys.platform}, ${sys.arch})`,
     `Locale: ${sys.locale}`,
     `User agent: ${sys.userAgent}`,
+    graphics ? `Graphics: ${formatGraphics(graphics)}` : null,
+    graphics?.decoders ? `Video decoders: ${graphics.decoders}` : null,
   ]);
 
   const detailLines = Object.entries(ctx.details ?? {}).map(

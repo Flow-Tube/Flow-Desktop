@@ -13,6 +13,7 @@ import { useNotesStore } from "./store/useNotesStore";
 import { useDownloadsLibraryStore } from "./store/useDownloadsLibraryStore";
 import { useDownloadCollectionsLibraryStore } from "./store/useDownloadCollectionsLibraryStore";
 import { useWatchLaterStore } from "./store/useWatchLaterStore";
+import { startWatchProgress } from "./store/useWatchProgressStore";
 import { useSubscriptionStore } from "./store/useSubscriptionStore";
 import { useNotificationStore } from "./store/useNotificationStore";
 import { getOnboardingStatus } from "./lib/api/recommendation";
@@ -169,6 +170,8 @@ function App() {
     void useNotificationStore.getState().loadChannelPreferences();
     if (IS_MAIN_WINDOW) void registerAutoBackup(getString("settings_backup_failed_notice")).catch(() => {});
   }, []);
+
+  useEffect(() => startWatchProgress(), []);
 
   // Check onboarding state from sqlite db setting
   useEffect(() => {

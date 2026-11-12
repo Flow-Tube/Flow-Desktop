@@ -9,6 +9,8 @@ export const OPEN_ROUTE_EVENT = "flow:open-route";
 export const MEDIA_COMMAND_EVENT = "flow:media-command";
 /** Asks the top bar to put the cursor in its search box. */
 export const FOCUS_SEARCH_EVENT = "flow:focus-search";
+/** Watch history changed: in this window as a DOM event, in the others through Tauri. */
+export const WATCH_HISTORY_WRITTEN_EVENT = "flow:watch-history-written";
 
 export interface DataChangedPayload {
   source: string;
@@ -17,6 +19,17 @@ export interface DataChangedPayload {
 
 /** Window-local bookkeeping that other windows must not reload for. */
 const PRIVATE_KEYS = new Set(["tab_session"]);
+
+/** One write to watch history, as much as a card's progress bar needs to follow it. */
+export type WatchHistoryWrite =
+  | { kind: "record"; videoId: string; watchedSeconds: number; totalSeconds: number; skipped: boolean }
+  | { kind: "removed"; videoId: string }
+  | { kind: "rewritten" };
+
+export interface WatchHistoryWrittenPayload {
+  source: string;
+  write: WatchHistoryWrite;
+}
 
 let pendingKeys = new Set<string>();
 
@@ -34,4 +47,13 @@ export function announceSettingWrite(key: string): void {
     pendingKeys = new Set();
     void emit(DATA_CHANGED_EVENT, { source: CURRENT_WINDOW_LABEL, keys } satisfies DataChangedPayload).catch(() => {});
   });
+}
+
+/** Tells this window and the others that watch history changed, so progress bars follow it. */
+export function announceWatchHistoryWrite(write: WatchHistoryWrite): void {
+  window.dispatchEvent(new CustomEvent<WatchHistoryWrite>(WATCH_HISTORY_WRITTEN_EVENT, { detail: write }));
+  void emit(WATCH_HISTORY_WRITTEN_EVENT, {
+    source: CURRENT_WINDOW_LABEL,
+    write,
+  } satisfies WatchHistoryWrittenPayload).catch(() => {});
 }

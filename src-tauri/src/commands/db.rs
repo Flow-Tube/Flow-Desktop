@@ -123,6 +123,16 @@ pub async fn get_watch_records(
         .map_err(ErrorResponse::from)
 }
 
+/// How far each video was watched, for the progress bar on every card.
+#[tauri::command]
+pub async fn get_watch_progress(
+    pool: State<'_, SqlitePool>,
+) -> Result<Vec<(String, i64, i64)>, ErrorResponse> {
+    watch_history::watch_progress(&pool)
+        .await
+        .map_err(ErrorResponse::from)
+}
+
 #[tauri::command]
 pub async fn get_watch_history_years(
     pool: State<'_, SqlitePool>,

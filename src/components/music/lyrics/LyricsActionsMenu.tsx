@@ -186,6 +186,7 @@ export function LyricsActionsMenu({ track, className }: { track: SongItem | null
     hasLyrics && <Tile key="edit" icon={<Pencil className="h-5 w-5" />} label={getString("lyrics_tile_edit")} title={getString("lyrics_edit")} onClick={run(() => setEditText(currentLyricsText()))} />,
     hasLyrics && <Tile key="copy" icon={<Copy className="h-5 w-5" />} label={getString("lyrics_tile_copy")} title={getString("lyrics_copy")} onClick={run(() => void copy())} />,
     hasLyrics && <Tile key="save" icon={<Save className="h-5 w-5" />} label={getString("save")} title={getString("lyrics_save_file")} onClick={run(() => void save())} />,
+    hasLyrics && <Tile key="share" icon={<Share2 className="h-5 w-5" />} label={getString("lyrics_tile_share")} title={getString("lyrics_share_card")} onClick={run(() => setShareOpen(true))} />,
   ].filter(Boolean);
 
   return (
@@ -208,7 +209,7 @@ export function LyricsActionsMenu({ track, className }: { track: SongItem | null
             animate={{ opacity: 1, scale: 1, transition: MENU_ENTER_TRANSITION }}
             exit={{ opacity: 0, scale: 0.98, transition: MENU_EXIT_TRANSITION }}
             style={{ transformOrigin: "top right" }}
-            className="absolute end-0 top-full z-30 mt-2 max-h-[calc(100dvh-var(--app-titlebar-height)-7rem)] w-84 overflow-y-auto overscroll-contain rounded-lg border border-chrome-neutral-800 bg-surface-container-high p-1.5 text-sm"
+            className="absolute end-0 top-full z-30 mt-2 max-h-[calc(100dvh-var(--app-titlebar-height)-7rem)] w-80 overflow-y-auto overscroll-contain rounded-lg border border-chrome-neutral-800 bg-surface-container-high p-1.5 text-sm"
           >
             <div className="px-1.5 pb-2 pt-1">
               <p className="font-medium text-chrome-neutral-100">{getString("music_lyrics")}</p>
@@ -220,19 +221,6 @@ export function LyricsActionsMenu({ track, className }: { track: SongItem | null
               <div className="grid gap-1 border-t border-chrome-neutral-800 pt-1.5" style={{ gridTemplateColumns: `repeat(${tiles.length}, minmax(0, 1fr))` }}>
                 {tiles}
               </div>
-            )}
-            {hasLyrics && (
-              <button
-                type="button"
-                role="menuitem"
-                onClick={run(() => setShareOpen(true))}
-                className={`mt-1 flex h-10 w-full items-center gap-3 rounded-md px-2.5 text-start text-sm font-medium text-chrome-neutral-100 ${HOVER}`}
-              >
-                <span className="grid h-4 w-4 shrink-0 place-items-center text-chrome-neutral-300">
-                  <Share2 className="h-4 w-4" />
-                </span>
-                <span className="min-w-0 flex-1 truncate">{getString("lyrics_share_card")}</span>
-              </button>
             )}
 
             <Separator />

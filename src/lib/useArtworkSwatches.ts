@@ -4,7 +4,8 @@ import { artworkSwatches, SAMPLE_SIDE, type ArtworkSwatches } from "./color/artw
 
 const cache = new Map<string, ArtworkSwatches | null>();
 
-function sample(image: HTMLImageElement): ArtworkSwatches | null {
+/** The cover's swatches, or null when the canvas may not read it back. */
+export function sampleArtworkSwatches(image: HTMLImageElement): ArtworkSwatches | null {
   if (image.naturalWidth === 0 || image.naturalHeight === 0) return null;
   // Palette scales the bitmap to about SAMPLE_SIDE² pixels, keeping its shape.
   const scale = Math.min(1, SAMPLE_SIDE / Math.sqrt(image.naturalWidth * image.naturalHeight));
@@ -42,7 +43,7 @@ export function useArtworkSwatches(src: string | null | undefined): ArtworkSwatc
     image.crossOrigin = "anonymous";
     image.decoding = "async";
     image.onload = () => {
-      const result = sample(image);
+      const result = sampleArtworkSwatches(image);
       cache.set(src, result);
       if (!cancelled) setSwatches(result);
     };

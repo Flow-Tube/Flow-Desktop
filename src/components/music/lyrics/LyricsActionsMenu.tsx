@@ -15,6 +15,7 @@ import {
   RefreshCw,
   Save,
   SearchCheck,
+  Share2,
   Timer,
   Type,
 } from "lucide-react";
@@ -33,6 +34,7 @@ import { lyricsBackgroundOptions, useLyricsBackground, type LyricsBackground } f
 import { ToggleSwitch } from "../../ui/ToggleSwitch";
 import { LyricsSourcesDialog } from "./LyricsSourcesDialog";
 import { LyricsEditDialog } from "./LyricsEditDialog";
+import { LyricsShareDialog } from "./LyricsShareDialog";
 
 const HOVER = "transition-colors duration-150 ease-out hover:bg-surface-container-highest focus-visible:bg-surface-container-highest focus-visible:outline-none";
 
@@ -122,6 +124,7 @@ const seconds = (ms: number): string => `${ms > 0 ? "+" : ""}${(ms / 1000).toFix
 export function LyricsActionsMenu({ track, className }: { track: SongItem | null; className: string }) {
   const [open, setOpen] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [editText, setEditText] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const providerName = useLyricsStore((s) => s.providerName);
@@ -183,6 +186,7 @@ export function LyricsActionsMenu({ track, className }: { track: SongItem | null
     hasLyrics && <Tile key="edit" icon={<Pencil className="h-5 w-5" />} label={getString("lyrics_tile_edit")} title={getString("lyrics_edit")} onClick={run(() => setEditText(currentLyricsText()))} />,
     hasLyrics && <Tile key="copy" icon={<Copy className="h-5 w-5" />} label={getString("lyrics_tile_copy")} title={getString("lyrics_copy")} onClick={run(() => void copy())} />,
     hasLyrics && <Tile key="save" icon={<Save className="h-5 w-5" />} label={getString("save")} title={getString("lyrics_save_file")} onClick={run(() => void save())} />,
+    hasLyrics && <Tile key="share" icon={<Share2 className="h-5 w-5" />} label={getString("lyrics_tile_share")} title={getString("lyrics_share_card")} onClick={run(() => setShareOpen(true))} />,
   ].filter(Boolean);
 
   return (
@@ -316,6 +320,7 @@ export function LyricsActionsMenu({ track, className }: { track: SongItem | null
         />
       )}
       {editText !== null && <LyricsEditDialog initialText={editText} onApply={applyEdited} onClose={() => setEditText(null)} />}
+      {shareOpen && <LyricsShareDialog track={track} initialAlign={isAlign(align) ? align : "center"} onClose={() => setShareOpen(false)} />}
     </div>
   );
 }

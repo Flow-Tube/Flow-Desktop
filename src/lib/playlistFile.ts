@@ -1,14 +1,13 @@
 import { parseViewCount } from "./playlistSort";
 import type { SongItem } from "../types/music";
+import { safeFileName } from "./fileName";
 import type { VideoSummary } from "../types/video";
 
 // Flow for Android's flow-playlist format (data/playlist/PlaylistFile.kt): both apps read each other's files.
 
 const FORMAT = "flow-playlist";
 const VERSION = 1;
-const MAX_FILE_NAME_LENGTH = 80;
 const VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
-const UNSAFE_FILE_NAME_CHARS = /[\\/:*?"<>|\p{Cc}]/gu;
 /** Far above any real playlist, low enough that a wrong file can't exhaust memory. */
 export const PLAYLIST_FILE_MAX_BYTES = 16 * 1024 * 1024;
 
@@ -128,8 +127,7 @@ export function decodePlaylistFile(raw: string): PlaylistFileRead {
 
 /** A name for the saved file that every file system accepts. */
 export function playlistFileName(playlistName: string): string {
-  const base = playlistName.replace(UNSAFE_FILE_NAME_CHARS, "_").trim().slice(0, MAX_FILE_NAME_LENGTH).trim();
-  return `${base || FORMAT}.json`;
+  return `${safeFileName(playlistName, FORMAT)}.json`;
 }
 
 export function videoToFileEntry(video: VideoSummary): PlaylistFileVideo {

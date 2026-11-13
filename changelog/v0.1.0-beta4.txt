@@ -136,6 +136,7 @@ MUSIC
 - Animated covers play again. Apple names a loop's video segments relative to its playlist, and through Flow's local proxy every one of them was asked for at the wrong address, so no loop ever started.
 - Lyrics in media controls, in Settings > Lyrics, shows the current line as the song title in your system's media controls and lock screen, with long lines in parts, repeats counted and notes during breaks. It is off by default and has its own timing slider.
 - The Podcasts category chip on Music Home now loads podcast shelves and episodes instead of showing an empty result.
+- Share lyrics as an image: pick up to five lines in Music mode, choose a color from the cover or your theme and an alignment, then copy the card or save it as a PNG. Lines in any language wrap inside the card.
 
 PLAYER
 - Live chat and chat replay beside a video can be closed. Show chat brings it back, as does the chat button on the player, which now works outside fullscreen too.

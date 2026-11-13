@@ -11,18 +11,15 @@ export function LyricsDialog({
   onClose,
   children,
   footer,
-  customHeader,
-  maxWidth = "max-w-lg",
-  contentClassName = "min-h-0 flex-1 overflow-y-auto px-4 py-4",
+  widthClass = "max-w-lg",
 }: {
-  title?: string;
-  titleId?: string;
+  title: string;
+  titleId: string;
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
-  customHeader?: ReactNode;
-  maxWidth?: string;
-  contentClassName?: string;
+  /** Wider for dialogs that show a preview beside their controls. */
+  widthClass?: string;
 }) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -36,7 +33,7 @@ export function LyricsDialog({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[90] flex items-center justify-center bg-chrome-black/75 p-4"
+      className="fixed inset-0 z-[90] flex items-center justify-center bg-chrome-black/70 p-4"
       role="presentation"
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose();
@@ -46,27 +43,23 @@ export function LyricsDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className={`animate-fade-in flex max-h-[min(720px,calc(100vh-3rem))] w-full ${maxWidth} flex-col rounded-3xl border border-chrome-neutral-800 bg-surface-container shadow-2xl`}
+        className={`animate-fade-in flex max-h-[min(640px,calc(100vh-4rem))] w-full ${widthClass} flex-col rounded-2xl border border-chrome-neutral-800 bg-surface-container`}
       >
-        {customHeader ? (
-          customHeader
-        ) : (
-          <div className="flex items-center justify-between border-b border-chrome-neutral-800 px-6 py-4">
-            <h2 id={titleId} className="text-base font-semibold text-chrome-neutral-100">
-              {title}
-            </h2>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label={getString("close")}
-              className="grid h-8 w-8 place-items-center rounded-full text-chrome-neutral-400 transition-colors hover:bg-surface-container-high hover:text-chrome-neutral-100"
-            >
-              <X size={18} />
-            </button>
-          </div>
-        )}
-        <div className={contentClassName}>{children}</div>
-        {footer && <div className="border-t border-chrome-neutral-800 px-6 py-4">{footer}</div>}
+        <div className="flex items-center justify-between border-b border-chrome-neutral-800 px-6 py-4">
+          <h2 id={titleId} className="text-base font-medium text-chrome-neutral-100">
+            {title}
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={getString("close")}
+            className="grid h-8 w-8 place-items-center rounded-full text-chrome-neutral-400 transition-colors hover:bg-surface-container-high hover:text-chrome-neutral-100"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">{children}</div>
+        {footer && <div className="flex justify-end gap-2 border-t border-chrome-neutral-800 px-6 py-3">{footer}</div>}
       </div>
     </div>,
     document.body,

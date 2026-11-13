@@ -273,6 +273,10 @@ LINUX
 - Stable, Beta and Nightly .deb and .rpm packages now install side by side. Their commands are flow-desktop, flow-desktop-beta and flow-desktop-nightly, so pin Flow to your dock again after updating.
 - Flow is listed under Sound and Video in app menus with sharper icons, and the .rpm installs on openSUSE as well as Fedora.
 - The Flatpak can use the keyring, the tray, Discord and Show in folder. A new Linux help page covers packages, graphics, codecs, sync and moving from Beta to Stable.
+- Graphics compatibility keeps the GPU on current WebKitGTK. Compatible used to switch Flow to software drawing, which made scrolling and video stutter, and NVIDIA on Wayland started there by default.
+- Opening a link or the launcher while Flow is already running no longer counts as a failed start, so Flow stops slipping into slower graphics modes on its own.
+- When the page keeps crashing after it opened, the next launch uses a safer graphics mode.
+- On Wayland, the pop-out player no longer offers Pin and Settings no longer offers Always on top, since Wayland doesn't let apps keep a window above others. The Shorts menu hides Mini player where it can't open.
 
 NIGHTLY BUILDS
 - Nightly builds of Flow Nightly are now on a Nightly release on GitHub, so anyone can download them without a GitHub account. Each new build replaces the files there, and a checksum file lists them.

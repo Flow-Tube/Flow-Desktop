@@ -72,7 +72,7 @@ Release builds are published through [GitHub Releases](https://github.com/Flow-T
 | macOS | macOS 13 Ventura or later | Intel x64, Apple Silicon | DMG |
 | Linux | Ubuntu 22.04+, Debian 12+, and comparable modern distributions | x64, ARM64 | AppImage, `.deb`, `.rpm` |
 
-Linux builds require a compatible glibc, GTK 3, and WebKitGTK 4.1 environment. Legacy 32-bit systems are not supported.
+Linux builds require a compatible glibc, GTK 3, and WebKitGTK 4.1 environment. Legacy 32-bit systems are not supported. See [docs/LINUX.md](docs/LINUX.md) for which package to pick, graphics problems, codecs, sync and moving from Beta to Stable.
 
 ### Linux media codecs
 

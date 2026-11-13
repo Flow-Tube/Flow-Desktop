@@ -363,6 +363,16 @@ jobs:
               ;;
           esac
 
+      - name: Start the built packages
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for pkg in nightly-assets/*.deb nightly-assets/*.AppImage; do
+            bash scripts/smoke-test-linux.sh "$pkg"
+          done
+
       - name: Upload nightly release assets
         uses: actions/upload-artifact@v7
         with:

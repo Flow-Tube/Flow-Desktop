@@ -38,7 +38,7 @@ source_aarch64=("$pkgname-$pkgver-aarch64.deb::$url/releases/download/v$_tag/Flo
 sha256sums_x86_64=('9590693b8c4862a0e55ec2d71a56b3685b8b27fc2cafcbd2cee7b2c64660dfcc')
 sha256sums_aarch64=('8b50812b8b5102aefe0670cb0731dc4695e2823e92528cb36778e89caa059568')
 
-# --- Shared flow-desktop install steps: keep identical in both PKGBUILDs. ---
+# --- Shared flow-desktop install steps: keep identical in every PKGBUILD. ---
 
 # The release workflow builds every tag with a "-" (betas, release
 # candidates) with src-tauri/tauri.prerelease.conf.json, which renames the app.

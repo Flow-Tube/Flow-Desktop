@@ -36,7 +36,7 @@ options=('!debug')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$_tag.tar.gz")
 sha256sums=('96bf1ee079042b181102f8f32a866aef6546d99d03cbb49850abb50f376f431a')
 
-# --- Shared flow-desktop install steps: keep identical in both PKGBUILDs. ---
+# --- Shared flow-desktop install steps: keep identical in every PKGBUILD. ---
 
 # The release workflow builds every tag with a "-" (betas, release
 # candidates) with src-tauri/tauri.prerelease.conf.json, which renames the app.

@@ -4,6 +4,14 @@
   "identifier": "io.github.aedev.flow.desktop.beta",
   "bundle": {
     "shortDescription": "Prerelease testing build of Flow Desktop.",
-    "longDescription": "A beta or release-candidate build of Flow Desktop. Prerelease builds use isolated application data and may be unstable."
+    "longDescription": "A beta or release-candidate build of Flow Desktop. Prerelease builds use isolated application data and may be unstable.",
+    "linux": {
+      "deb": {
+        "files": null
+      },
+      "rpm": {
+        "files": null
+      }
+    }
   }
 }

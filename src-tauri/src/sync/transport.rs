@@ -170,9 +170,19 @@ pub async fn connect(ip: &str, port: u16) -> Result<WsChannel<ClientStream>, Syn
     tracing::info!(target: "flow::sync::transport", %url, "dialing host");
     let (ws, _resp) = connect_async(&url).await.map_err(|e| {
         tracing::warn!(target: "flow::sync::transport", %url, "WebSocket connect failed: {e}");
-        SyncError::from(e)
+        dial_error(e)
     })?;
     Ok(WsChannel::new(ws))
+}
+
+/// A refused dial says something different from one that never got through, so it keeps its own
+/// error.
+fn dial_error(error: WsError) -> SyncError {
+    match &error {
+        WsError::Io(io) if io.kind() == std::io::ErrorKind::ConnectionRefused => SyncError::Refused,
+        WsError::Io(io) if io.kind() == std::io::ErrorKind::TimedOut => SyncError::NoAnswer,
+        _ => SyncError::from(error),
+    }
 }
 
 /// Interface-name prefixes that mean "virtual, container, or VPN adapter". Matched on the start of
@@ -305,6 +315,18 @@ mod tests {
             .port();
         let (_listener, port) = bind_preferring(free).await.unwrap();
         assert_eq!(port, free);
+    }
+
+    #[tokio::test]
+    async fn a_closed_port_is_reported_as_refused() {
+        let closed = TcpListener::bind("127.0.0.1:0")
+            .await
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        let error = super::connect("127.0.0.1", closed).await.err().unwrap();
+        assert_eq!(error.kind(), "syncRefused");
     }
 
     #[tokio::test]

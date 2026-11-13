@@ -2796,6 +2796,8 @@
   "sync_error_unreachable": "Couldn't reach the other device. Check that both devices are on the same Wi-Fi and that a VPN or firewall isn't blocking the connection.",
   "sync_error_peer_closed": "The other device closed the connection. Check it for a message, then try again.",
   "sync_error_timeout": "The other device stopped responding. Keep Flow open on both devices and try again.",
+  "sync_error_refused": "The other device turned the connection down. Check that Flow on it is still showing its sync code, then scan the code again.",
+  "sync_error_no_answer": "The other device didn't answer. Check that both devices are on the same Wi-Fi, not a guest network, and that no VPN is on. A firewall on the other device can also cause this.",
   "sync_error_peer": "The other device reported a problem: %s",
   "sync_error_code_rejected": "The other device didn't confirm the verification code, so nothing was sent.",
   "sync_error_unsupported_version": "The other device runs a version of Flow this one can't sync with. Update Flow on both devices.",

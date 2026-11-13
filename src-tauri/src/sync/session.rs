@@ -863,12 +863,18 @@ async fn connect_any(
     let addresses = payload.dial_addresses();
     let per_address = (CONNECT_TIMEOUT / u32::try_from(addresses.len()).unwrap_or(1).max(1))
         .max(MIN_CONNECT_PER_ADDRESS);
-    let mut last_error = SyncError::Transport("connection timed out".into());
+    let mut last_error = SyncError::NoAnswer;
     for ip in addresses {
         match timeout(per_address, transport::connect(ip, payload.p)).await {
             Ok(Ok(ch)) => return Ok(ch),
-            Ok(Err(e)) => last_error = e,
-            Err(_) => last_error = SyncError::Transport(format!("{ip} did not answer")),
+            // A refusal from any address means the device is there; keep that over a silent one.
+            Ok(Err(e)) if !matches!(last_error, SyncError::Refused) => last_error = e,
+            Ok(Err(_)) => {}
+            Err(_) => {
+                if !matches!(last_error, SyncError::Refused) {
+                    last_error = SyncError::NoAnswer;
+                }
+            }
         }
         tracing::info!(target: "flow::sync::session", %ip, "address unreachable: {last_error}");
     }

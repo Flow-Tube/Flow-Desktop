@@ -58,6 +58,9 @@ SYNC
 - Linked devices sign in to your Flow server about once every 15 minutes instead of before every sync.
 - Notes sync with Flow for Android, over the QR code and Linked devices, and are part of backups. Notes your phone sent before this version come back on the next sync, and a device that joins later gets them from this computer.
 - Saved Shorts sync with your phone in both directions, as the same list on each device, once the phone has saved a Short of its own. Saved Shorts that an earlier sync brought in as a playlist move to the Saved Shorts page.
+- Sync now listens on fixed ports when they are free: 47900 for Linked devices and 47901 for a one-time transfer, so a firewall rule made once keeps working. The Linux packages include a firewalld service and a ufw profile named flow-desktop.
+- When the phone can't reach this computer, the pairing screen now says what to do on this system. On Linux it shows the command for your firewall, ready to copy, and Linked devices shows the same help.
+- A connection that fails now says whether the other device turned it down or never answered, instead of one message for both.
 
 LIBRARY
 - Notes on videos and channels: a Note button on the Watch and Channel pages, a small card that shows the note. Times like 12:34 in a video's note jump there. Settings > Content has the switches.

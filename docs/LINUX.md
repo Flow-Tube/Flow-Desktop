@@ -96,26 +96,42 @@ YouTube's bot check. The packages recommend `nodejs`. Ubuntu 22.04's own
 ## Sync with Flow for Android
 
 Sync talks to your phone over your local network. If your firewall blocks
-incoming connections, allow two things:
+incoming connections, allow these:
 
-- incoming TCP on the port Flow listens on. The pairing screen shows it as
-  the last part of **This PC: address:port**;
+- TCP port 47900 for Linked devices and 47901 for a one-time transfer. Flow
+  uses another port only when one of these is taken; the pairing screen shows
+  the port in use as the last part of **This PC: address:port**;
 - UDP port 5353, which devices use to find each other (mDNS).
 
-With `ufw` (Ubuntu and others), replace `<port>` with Flow's port:
+The stable `.deb` and `.rpm` include a `flow-desktop` profile for both
+firewalls, which opens nothing until you enable it. With `ufw` (Ubuntu, CachyOS
+and others):
 
 ```sh
-sudo ufw allow <port>/tcp
-sudo ufw allow 5353/udp
+sudo ufw allow flow-desktop
 ```
 
 With `firewalld` (Fedora, openSUSE and others):
 
 ```sh
-sudo firewall-cmd --add-port=<port>/tcp --permanent
-sudo firewall-cmd --add-service=mdns --permanent
+sudo firewall-cmd --add-service=flow-desktop --permanent
 sudo firewall-cmd --reload
 ```
+
+Without the profile (AppImage, Beta, Nightly), open the ports by number:
+
+```sh
+sudo ufw allow 47900:47901/tcp
+sudo ufw allow 5353/udp
+```
+
+```sh
+sudo firewall-cmd --add-port=47900-47901/tcp --add-service=mdns --permanent
+sudo firewall-cmd --reload
+```
+
+If the phone still can't connect after 45 seconds, the pairing screen shows the
+command for your firewall with the port Flow is using, ready to copy.
 
 Both devices must be on the same network, and a VPN can block the
 connection.

@@ -38,6 +38,9 @@ const nightlyConfig = {
     // The publish job signs the packages, so the signing key never reaches the
     // build or its dependencies.
     createUpdaterArtifacts: false,
+    // The firewall profiles belong to the stable package: two channels shipping the same files
+    // can't be installed side by side. `null` removes them in Tauri's config merge.
+    linux: { deb: { files: null }, rpm: { files: null } },
     shortDescription: "Nightly testing build of Flow Desktop.",
     longDescription:
       "An automatically generated testing build of Flow Desktop. Nightly builds use isolated application data and may be unstable.",

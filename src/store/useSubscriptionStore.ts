@@ -37,6 +37,8 @@ export interface UnsubscribedChannel {
 interface SubscriptionState {
   subscriptions: SubscribedChannel[];
   subscriptionGroups: SubscriptionGroup[];
+  /** False until the saved groups were read, so an empty list is not mistaken for "no groups". */
+  subscriptionGroupsLoaded: boolean;
   loading: boolean;
   loadSubscriptions: () => Promise<void>;
   /** `learn` tells the recommendation engine; bulk imports and music artists leave it off. */
@@ -125,6 +127,7 @@ async function persistGroups(groups: SubscriptionGroup[]) {
 export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
   subscriptions: [],
   subscriptionGroups: [],
+  subscriptionGroupsLoaded: false,
   loading: false,
 
   loadSubscriptions: async () => {
@@ -271,10 +274,10 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
         .map((group, index) => cleanGroup(group, group.sortOrder ?? index))
         .sort((a, b) => a.sortOrder - b.sortOrder)
         .map((group, index) => ({ ...group, sortOrder: index }));
-      set({ subscriptionGroups: groups });
+      set({ subscriptionGroups: groups, subscriptionGroupsLoaded: true });
     } catch (e) {
       console.error("Failed to load subscription groups", e);
-      set({ subscriptionGroups: [] });
+      set({ subscriptionGroups: [], subscriptionGroupsLoaded: true });
     }
   },
 

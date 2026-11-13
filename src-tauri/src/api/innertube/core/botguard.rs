@@ -246,7 +246,7 @@ mod tests {
             "nsig.cjs",
             Some(Path::new("/usr/lib/Flow Beta")),
             None,
-            Some(Path::new("/usr/bin/flow")),
+            Some(Path::new("/usr/bin/flow-desktop-beta")),
         );
         assert_eq!(
             candidates.first(),

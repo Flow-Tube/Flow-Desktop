@@ -21,6 +21,17 @@ finish-args:
   - --device=dri
   # tauri-plugin-notification talks to the notification daemon directly.
   - --talk-name=org.freedesktop.Notifications
+  # Sync device keys and scrobbling sign-ins live in the Secret Service keyring.
+  - --talk-name=org.freedesktop.secrets
+  # Show in folder for downloads asks the file manager over D-Bus.
+  - --talk-name=org.freedesktop.FileManager1
+  # Playback controls in the tray: the StatusNotifierItem host reads the icon
+  # image tray-icon writes under $XDG_RUNTIME_DIR/tray-icon.
+  - --talk-name=org.kde.StatusNotifierWatcher
+  - --filesystem=xdg-run/tray-icon:create
+  # Discord Rich Presence, through the socket of a native or Flatpak Discord.
+  - --filesystem=xdg-run/discord-ipc-0
+  - --filesystem=xdg-run/app/com.discordapp.Discord:create
   - --filesystem=xdg-videos/Flow:create
   - --filesystem=xdg-music/Flow:create
   - --filesystem=xdg-download
@@ -31,6 +42,10 @@ finish-args:
   - --env=FLOW_NSIG_SCRIPT=/app/lib/Flow/sidecar/nsig.cjs
 
 modules:
+  # The tray needs libayatana-appindicator, which the GNOME runtime lacks.
+  # Copied from flathub/shared-modules, see README.md.
+  - modules/libayatana-appindicator-gtk3.json
+
   - name: node
     buildsystem: simple
     build-commands:
@@ -88,5 +103,5 @@ modules:
       - install -Dm644 src-tauri/icons/32x32.png ${FLATPAK_DEST}/share/icons/hicolor/32x32/apps/${FLATPAK_ID}.png
       - install -Dm644 src-tauri/icons/64x64.png ${FLATPAK_DEST}/share/icons/hicolor/64x64/apps/${FLATPAK_ID}.png
       - install -Dm644 src-tauri/icons/128x128.png ${FLATPAK_DEST}/share/icons/hicolor/128x128/apps/${FLATPAK_ID}.png
-      - install -Dm644 src-tauri/icons/128x128@2x.png ${FLATPAK_DEST}/share/icons/hicolor/256x256/apps/${FLATPAK_ID}.png
-      - install -Dm644 src-tauri/icons/icon.png ${FLATPAK_DEST}/share/icons/hicolor/512x512/apps/${FLATPAK_ID}.png
+      - install -Dm644 src-tauri/icons/256x256.png ${FLATPAK_DEST}/share/icons/hicolor/256x256/apps/${FLATPAK_ID}.png
+      - install -Dm644 src-tauri/icons/512x512.png ${FLATPAK_DEST}/share/icons/hicolor/512x512/apps/${FLATPAK_ID}.png

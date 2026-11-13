@@ -63,10 +63,18 @@ _flow_install() {
     return 1
   fi
 
-  # /usr/bin/flow belongs to the AUR's flow and flow-bin packages.
-  mv "$pkgdir/usr/bin/flow" "$pkgdir/usr/bin/flow-desktop"
-  sed -Ei 's/^(Exec|StartupWMClass)=flow( |$)/\1=flow-desktop\2/' "$desktop"
-  if grep -Eq '^Exec=flow( |$)' "$desktop"; then
+  # The AUR ships one name for every channel. Releases up to 0.1.0-beta3
+  # install /usr/bin/flow, which belongs to the AUR's flow and flow-bin
+  # packages; later ones install flow-desktop, or flow-desktop-beta for betas.
+  local bin
+  for bin in flow flow-desktop-beta; do
+    if [[ -e $pkgdir/usr/bin/$bin ]]; then
+      mv "$pkgdir/usr/bin/$bin" "$pkgdir/usr/bin/flow-desktop"
+    fi
+  done
+  sed -Ei 's/^(Exec|StartupWMClass)=flow(-desktop-beta)?( |$)/\1=flow-desktop\3/' "$desktop"
+  if [[ ! -x $pkgdir/usr/bin/flow-desktop ]] ||
+    grep -E '^Exec=' "$desktop" | grep -Evq '^Exec=flow-desktop( |$)'; then
     error "Could not point $product.desktop at flow-desktop."
     return 1
   fi

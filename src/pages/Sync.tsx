@@ -322,7 +322,7 @@ function PairingState() {
         {expired ? getString("sync_expired") : getString("sync_waiting_connect")}
       </div>
       {!expired && <p className="mt-2 font-mono text-xs text-chrome-neutral-500">{getString("sync_expires_in", remaining)}</p>}
-      {!expired && <NotConnectingHint since={hostInfo.qr} />}
+      {!expired && <NotConnectingHint since={hostInfo.qr} port={hostInfo.port} scanInstead />}
 
       <CopyConnectionData data={hostInfo.qr} />
 

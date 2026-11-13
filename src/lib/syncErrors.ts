@@ -10,6 +10,8 @@ const SYNC_ERROR_KEYS: Record<string, StringKey> = {
   syncUnreachable: "sync_error_unreachable",
   syncPeerClosed: "sync_error_peer_closed",
   syncTimeout: "sync_error_timeout",
+  syncRefused: "sync_error_refused",
+  syncNoAnswer: "sync_error_no_answer",
   syncCodeRejected: "sync_error_code_rejected",
   syncUnsupportedVersion: "sync_error_unsupported_version",
   syncCorrupted: "sync_error_corrupted",

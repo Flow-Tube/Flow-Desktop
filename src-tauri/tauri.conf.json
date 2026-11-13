@@ -57,6 +57,8 @@
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
+      "icons/256x256.png",
+      "icons/512x512.png",
       "icons/icon.icns",
       "icons/icon.ico"
     ],
@@ -81,6 +83,10 @@
       },
       "deb": {
         "desktopTemplate": "linux/flow.desktop",
+        "files": {
+          "/usr/lib/firewalld/services/flow-desktop.xml": "linux/firewall/flow-desktop.xml",
+          "/etc/ufw/applications.d/flow-desktop": "linux/firewall/flow-desktop.ufw"
+        },
         "depends": [
           "gstreamer1.0-plugins-base",
           "gstreamer1.0-plugins-good",
@@ -90,19 +96,27 @@
         ],
         "recommends": [
           "gstreamer1.0-plugins-ugly",
-          "gstreamer1.0-tools"
+          "gstreamer1.0-tools",
+          "nodejs"
         ]
       },
       "rpm": {
         "desktopTemplate": "linux/flow.desktop",
+        "files": {
+          "/usr/lib/firewalld/services/flow-desktop.xml": "linux/firewall/flow-desktop.xml",
+          "/etc/ufw/applications.d/flow-desktop": "linux/firewall/flow-desktop.ufw"
+        },
         "depends": [
-          "gstreamer1-plugins-base",
-          "gstreamer1-plugins-good",
-          "gstreamer1-plugins-bad-free"
+          "(gstreamer1-plugins-base or gstreamer-plugins-base)",
+          "(gstreamer1-plugins-good or gstreamer-plugins-good)",
+          "(gstreamer1-plugins-bad-free or gstreamer-plugins-bad)"
         ],
         "recommends": [
           "gstreamer1-plugins-bad-freeworld",
-          "gstreamer1-plugin-libav"
+          "(gstreamer1-plugin-libav or gstreamer-plugins-libav)",
+          "gstreamer1-plugin-openh264",
+          "gstreamer1-plugin-dav1d",
+          "nodejs"
         ]
       }
     }

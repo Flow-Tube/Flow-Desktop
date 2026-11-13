@@ -8,6 +8,7 @@ import { useLinkedDevicesStore } from "../../../store/useLinkedDevicesStore";
 import { Button } from "../../ui/Button";
 import { Spinner, VerificationCode } from "../SyncParts";
 import { CodeEntry } from "./CodeEntry";
+import { NotConnectingHint } from "../PairingHelp";
 
 function Waiting({ label }: { label: string }) {
   return (
@@ -50,6 +51,7 @@ export function LinkPanel({ link, joining }: { link: LinkPhase; joining: boolean
             <div className="rounded-3xl bg-chrome-white p-6">
               <QRCodeSVG value={link.code} size={232} level="M" marginSize={1} />
             </div>
+            <NotConnectingHint since={link.code} linked />
             {!joining && (
               <div className="flex w-full max-w-sm flex-col gap-3 text-start">
                 <p className="text-sm text-chrome-neutral-400">{getString("linked_scan_theirs")}</p>

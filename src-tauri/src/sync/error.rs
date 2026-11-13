@@ -28,6 +28,14 @@ pub enum SyncError {
     Io(#[from] std::io::Error),
     #[error("timed out waiting for {0}")]
     Timeout(&'static str),
+    /// Dialing the other device got an answer turning it down: nothing listens on that port, so
+    /// its code is gone or Flow there closed it.
+    #[error("the other device turned the connection down")]
+    Refused,
+    /// Dialing the other device got no answer at all: a different network, client isolation on
+    /// the Wi-Fi, a VPN, or a firewall that drops instead of refusing.
+    #[error("the other device didn't answer")]
+    NoAnswer,
     #[error("the other device reported an error [{code}]: {message}")]
     Peer { code: String, message: String },
     #[error("the other device uses sync protocol {0}, which this version doesn't support")]
@@ -60,6 +68,8 @@ impl SyncError {
             SyncError::Transport(_) | SyncError::Io(_) => "syncUnreachable",
             SyncError::ConnectionClosed => "syncPeerClosed",
             SyncError::Timeout(_) => "syncTimeout",
+            SyncError::Refused => "syncRefused",
+            SyncError::NoAnswer => "syncNoAnswer",
             SyncError::Peer { code, .. } if code == "sas_rejected" => "syncCodeRejected",
             SyncError::Peer { .. } => "syncPeerError",
             SyncError::UnsupportedVersion(_) => "syncUnsupportedVersion",
@@ -90,6 +100,8 @@ impl SyncError {
             | SyncError::Peer { .. }
             | SyncError::Transport(_)
             | SyncError::Io(_)
+            | SyncError::Refused
+            | SyncError::NoAnswer
             | SyncError::Crypto(_)
             | SyncError::SeqMismatch { .. }
             | SyncError::Qr(_)

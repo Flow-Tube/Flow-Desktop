@@ -280,6 +280,10 @@ LINUX
 - Arch Linux: the flow-desktop (built from source) and flow-desktop-bin (the release package) AUR packages now update with every release, betas included.
 - A new flow-desktop-git AUR package builds the latest development code. None of them installs the flow command, which belongs to another Arch package.
 
+MACOS
+- Flow on macOS now updates itself like on Windows and Linux. Earlier versions were never offered an update on macOS, so install this one by hand once.
+- When Flow runs straight from its disk image or from Downloads, About says to move it to Applications, the only place it can update itself.
+
 NIGHTLY BUILDS
 - Nightly builds of Flow Nightly are now on a Nightly release on GitHub, so anyone can download them without a GitHub account. Each new build replaces the files there, and a checksum file lists them.
 - Flow Nightly now updates itself to the newest nightly build, on Windows, macOS and Linux. A nightly build installed before this change needs one new install by hand first.

@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useCallback, useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronDown, ChevronUp, ListChecks, Loader2, Pencil, Plus, RefreshCw, Trash2, Upload, User } from "lucide-react";
 import { parseSubscriptionExport } from "../lib/api/youtube";
@@ -43,6 +43,7 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
   const navigate = useNavigate();
   const subscriptions = useSubscriptionStore((s) => s.subscriptions);
   const subscriptionGroups = useSubscriptionStore((s) => s.subscriptionGroups);
+  const subscriptionGroupsLoaded = useSubscriptionStore((s) => s.subscriptionGroupsLoaded);
   const loadSubscriptions = useSubscriptionStore((s) => s.loadSubscriptions);
   const loadSubscriptionGroups = useSubscriptionStore((s) => s.loadSubscriptionGroups);
   const loading = useSubscriptionStore((s) => s.loading);
@@ -92,7 +93,9 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
   const unplayableIds = useUnplayableVideoIds(hideUnplayable);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
-  const [selectedGroupName, setSelectedGroupName] = useState<string | null>(null);
+  const [savedGroupName, setSavedGroupName] = usePreference(SETTINGS.SUBS_SELECTED_GROUP);
+  const selectedGroupName = savedGroupName || null;
+  const setSelectedGroupName = useCallback((name: string | null) => setSavedGroupName(name ?? ""), [setSavedGroupName]);
   const [viewMode, setViewMode] = useState<"feed" | "manage">("feed");
   
   const [importText, setImportText] = useState("");
@@ -195,10 +198,11 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
   }, [selectedGroupName, subscriptionGroups]);
 
   useEffect(() => {
-    if (selectedGroupName && !selectedGroup) {
+    // Before the groups load, every saved name looks unknown.
+    if (subscriptionGroupsLoaded && selectedGroupName && !selectedGroup) {
       setSelectedGroupName(null);
     }
-  }, [selectedGroup, selectedGroupName]);
+  }, [selectedGroup, selectedGroupName, setSelectedGroupName, subscriptionGroupsLoaded]);
 
   const visibleChannels = useMemo(() => {
     if (!query) return enrichedChannels;
@@ -436,7 +440,10 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
             setEditingGroup(null);
           }}
           onCreate={createSubscriptionGroup}
-          onUpdate={updateSubscriptionGroup}
+          onUpdate={async (oldName, name, channelIds) => {
+            await updateSubscriptionGroup(oldName, name, channelIds);
+            if (selectedGroupName === oldName && name.trim()) setSelectedGroupName(name.trim());
+          }}
           onDelete={(name) => {
             deleteSubscriptionGroup(name);
             if (selectedGroupName === name) {

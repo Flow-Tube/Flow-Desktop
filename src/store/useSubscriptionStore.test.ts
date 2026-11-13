@@ -164,3 +164,17 @@ describe("useSubscriptionStore.subscribe", () => {
     expect(useSubscriptionStore.getState().subscriptions[0]).not.toHaveProperty("isMusic");
   });
 });
+
+describe("useSubscriptionStore.loadSubscriptionGroups", () => {
+  beforeEach(() => {
+    settings.clear();
+    useSubscriptionStore.setState({ subscriptionGroups: [], subscriptionGroupsLoaded: false });
+  });
+
+  // Subscriptions keeps the last picked group and drops it only once the groups are known.
+  it("says when the saved groups were read, even when there are none", async () => {
+    expect(useSubscriptionStore.getState().subscriptionGroupsLoaded).toBe(false);
+    await useSubscriptionStore.getState().loadSubscriptionGroups();
+    expect(useSubscriptionStore.getState().subscriptionGroupsLoaded).toBe(true);
+  });
+});

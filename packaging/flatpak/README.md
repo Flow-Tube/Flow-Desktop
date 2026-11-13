@@ -78,8 +78,17 @@ Startup logging can be raised with
 | `--talk-name=org.freedesktop.Notifications` | New-upload notifications |
 | `--filesystem=xdg-videos/Flow:create`, `--filesystem=xdg-music/Flow:create` | Default download folders |
 | `--filesystem=xdg-download` | Fallback download folder when Videos or Music is not set |
+| `--talk-name=org.freedesktop.secrets` | Sync device keys and scrobbling sign-ins in the Secret Service keyring |
+| `--talk-name=org.freedesktop.FileManager1` | Show in folder for downloads |
+| `--talk-name=org.kde.StatusNotifierWatcher`, `--filesystem=xdg-run/tray-icon:create` | Playback controls in the system tray; the tray host reads the icon image from `$XDG_RUNTIME_DIR/tray-icon` |
+| `--filesystem=xdg-run/discord-ipc-0`, `--filesystem=xdg-run/app/com.discordapp.Discord:create` | Discord Rich Presence with a native or a Flatpak Discord |
 
-There is no tray permission, because Flow does not use a tray icon.
+The tray also needs `libayatana-appindicator`, which the GNOME runtime does
+not ship. `modules/` holds a copy of
+[flathub/shared-modules](https://github.com/flathub/shared-modules)'
+`libayatana-appindicator-gtk3.json` and `intltool-0.51.json` with their
+patches, taken at commit `785a5394`, so the manifest builds without a git
+submodule. Without the library Flow starts normally and leaves the tray off.
 
 ## Check in the bundle
 
@@ -90,6 +99,8 @@ These only show up in a real install:
 - Playback, including H.264, and the poToken and n-signature log lines.
 - `flow://` links from the browser extension opening the app.
 - Sync pairing with Flow for Android, and notifications.
+- The tray controls, Discord Rich Presence, Show in folder, and a scrobbling
+  sign-in that survives a restart (the keyring).
 
 ## Runtime support
 

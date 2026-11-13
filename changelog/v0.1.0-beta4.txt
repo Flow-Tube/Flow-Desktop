@@ -265,6 +265,12 @@ LOCAL MEDIA
 - Import from another app, chosen by the app you are leaving: a Google Takeout export, even split across several zips, with likes, playlists and Watch Later; YouTube Music playlist CSVs; NewPipe history and playlists from its backup; LibreTube subscriptions and playlists; Metrolist music playlists. Imports only teach recommendations the way Android does.
 - The Cache group under Network now shows the real size of artwork, lyrics and network caches, each with a limit and a Clear button. Artwork clears the next time Flow starts. The Media Cache Limit row is gone: Flow never stored streams on disk.
 
+LINUX
+- Links from the browser extension open the video in Flow from every Linux package, the AUR ones included, instead of only bringing the window forward.
+- Stable, Beta and Nightly .deb and .rpm packages now install side by side. Their commands are flow-desktop, flow-desktop-beta and flow-desktop-nightly, so pin Flow to your dock again after updating.
+- Flow is listed under Sound and Video in app menus with sharper icons, and the .rpm installs on openSUSE as well as Fedora.
+- The Flatpak can use the keyring, the tray, Discord and Show in folder. A new Linux help page covers packages, graphics, codecs, sync and moving from Beta to Stable.
+
 FIXES
 - The rows on the About page that open something, such as Changelog, can be reached and opened with the keyboard.
 - Playlist cards show all four covers when two of the songs share a cover.

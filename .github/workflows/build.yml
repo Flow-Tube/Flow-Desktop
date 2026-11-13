@@ -293,6 +293,10 @@ jobs:
         # [profile.release].
         run: pnpm tauri build ${{ matrix.args }} --config src-tauri/tauri.nightly.generated.json -- --profile nightly
 
+      - name: Check the Linux packages
+        if: runner.os == 'Linux' && !matrix.appimage
+        run: bash scripts/check-linux-packages.sh src-tauri/target/${{ matrix.target }}/nightly/bundle flow-desktop-nightly
+
       - name: Log the bundled media stack versions
         if: matrix.appimage
         run: dpkg-query -W -f='${Package} ${Version}\n' libwebkit2gtk-4.1-0 libgstreamer1.0-0 libva2

@@ -1,9 +1,11 @@
 [Desktop Entry]
-Categories={{categories}}
+Categories=AudioVideo;Video;Player;
 {{#if comment}}
 Comment={{comment}}
 {{/if}}
-Exec={{exec}}
+GenericName=Video and music player
+Keywords=YouTube;Music;Video;Player;
+Exec={{exec}} %u
 StartupWMClass={{exec}}
 Icon={{icon}}
 Name={{name}}

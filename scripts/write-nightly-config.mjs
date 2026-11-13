@@ -15,6 +15,11 @@ const nightlyConfig = {
   productName: "Flow Nightly",
   version,
   identifier: "io.github.aedev.flow.desktop.nightly",
+  // Linux packages share /usr/bin, so each channel needs its own binary there.
+  // Windows and macOS keep the name their installers and shortcuts expect.
+  ...(process.platform === "linux" && {
+    mainBinaryName: "flow-desktop-nightly",
+  }),
   bundle: {
     createUpdaterArtifacts: false,
     shortDescription: "Nightly testing build of Flow Desktop.",

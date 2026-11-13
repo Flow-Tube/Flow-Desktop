@@ -28,14 +28,16 @@ pub struct UpdateSupport {
 }
 
 impl UpdateSupport {
-    /// Flatpak and distro packages register `flow://` through their own
-    /// .desktop file; registering at runtime would write a stray user-level
-    /// handler (or fail inside the sandbox).
-    pub fn package_owns_desktop_entry(self) -> bool {
-        matches!(
-            self.reason,
-            Some(UpdateBlock::Flatpak | UpdateBlock::PackageManager)
-        )
+    /// Whether Flow writes its own user-level `flow://` handler at startup. Only an `AppImage`
+    /// and an unbundled binary need one: Flatpak, `.deb`, `.rpm` and the AUR packages install a
+    /// desktop entry that already takes the link (`%u`), and a runtime handler would shadow it
+    /// with an absolute path that breaks when an upgrade renames the binary.
+    pub fn registers_link_handler(self, bundle: Option<&BundleType>) -> bool {
+        match self.reason {
+            Some(UpdateBlock::Flatpak | UpdateBlock::PackageManager) => false,
+            Some(UpdateBlock::Unbundled) => true,
+            None => matches!(bundle, Some(BundleType::AppImage)),
+        }
     }
 }
 
@@ -103,7 +105,27 @@ mod tests {
     fn a_raw_binary_is_unbundled() {
         let support = decide(false, false, None);
         assert_eq!(support.reason, Some(UpdateBlock::Unbundled));
-        assert!(!support.package_owns_desktop_entry());
+    }
+
+    #[test]
+    fn only_appimages_and_raw_binaries_register_links_at_runtime() {
+        let appimage = Some(&BundleType::AppImage);
+        assert!(decide(false, false, appimage).registers_link_handler(appimage));
+        assert!(decide(false, false, None).registers_link_handler(None));
+        for bundle in [BundleType::Deb, BundleType::Rpm] {
+            let bundle = Some(&bundle);
+            assert!(!decide(false, false, bundle).registers_link_handler(bundle));
+        }
+    }
+
+    #[test]
+    fn packaged_installs_keep_their_own_desktop_entry() {
+        // The AUR repackages the .deb and the Flatpak runs a raw cargo build.
+        let deb = Some(&BundleType::Deb);
+        assert!(!decide(false, true, deb).registers_link_handler(deb));
+        assert!(!decide(true, false, None).registers_link_handler(None));
+        let appimage = Some(&BundleType::AppImage);
+        assert!(!decide(false, true, appimage).registers_link_handler(appimage));
     }
 
     #[test]

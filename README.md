@@ -12,6 +12,7 @@
   <a href="https://github.com/Flow-Tube/Flow-Desktop/releases/latest"><picture><source media="(prefers-color-scheme: dark)" srcset="https://assets.flow-tube.org/v1/badges/pill/get-windows-dark.svg"><img alt="Download for Windows" src="https://assets.flow-tube.org/v1/badges/pill/get-windows-light.svg" height="60"></picture></a>
   <a href="https://github.com/Flow-Tube/Flow-Desktop/releases/latest"><picture><source media="(prefers-color-scheme: dark)" srcset="https://assets.flow-tube.org/v1/badges/pill/get-macos-dark.svg"><img alt="Download for macOS" src="https://assets.flow-tube.org/v1/badges/pill/get-macos-light.svg" height="60"></picture></a>
   <a href="https://github.com/Flow-Tube/Flow-Desktop/releases/latest"><picture><source media="(prefers-color-scheme: dark)" srcset="https://assets.flow-tube.org/v1/badges/pill/get-linux-dark.svg"><img alt="Download for Linux" src="https://assets.flow-tube.org/v1/badges/pill/get-linux-light.svg" height="60"></picture></a>
+  <a href="https://flatpark.org/apps/io.github.aedev.flow.desktop/"><img alt="Get it on FlatPark" src="https://flatpark.org/badges/get-it-on-flatpark.svg" height="60"></a>
   </p>
   <p>
   <a href="#downloads-and-supported-systems"><picture><source media="(prefers-color-scheme: dark)" srcset="https://assets.flow-tube.org/v1/badges/split/desktop-dark.svg"><img alt="Desktop: Windows · macOS · Linux" src="https://assets.flow-tube.org/v1/badges/split/desktop-light.svg" height="32"></picture></a>
@@ -70,9 +71,20 @@ Release builds are published through [GitHub Releases](https://github.com/Flow-T
 | --- | --- | --- | --- |
 | Windows | Windows 10 22H2, Windows 11 | x64, ARM64 | NSIS installer |
 | macOS | macOS 13 Ventura or later | Intel x64, Apple Silicon | DMG |
-| Linux | Ubuntu 22.04+, Debian 12+, and comparable modern distributions | x64, ARM64 | AppImage, `.deb`, `.rpm` |
+| Linux | Ubuntu 22.04+, Debian 12+, and comparable modern distributions | x64, ARM64 | AppImage, `.deb`, `.rpm`, Flatpak ([FlatPark](https://flatpark.org/apps/io.github.aedev.flow.desktop/)) |
 
-Linux builds require a compatible glibc, GTK 3, and WebKitGTK 4.1 environment. Legacy 32-bit systems are not supported.
+Linux builds require a compatible glibc, GTK 3, and WebKitGTK 4.1 environment. Legacy 32-bit systems are not supported. See [docs/LINUX.md](docs/LINUX.md) for which package to pick, graphics problems, codecs, sync and moving from Beta to Stable.
+
+### Flatpak (FlatPark)
+
+[FlatPark](https://flatpark.org/apps/io.github.aedev.flow.desktop/) offers Flow as a Flatpak. It downloads the official `.deb` from this repository's releases, unmodified, at install time, and runs it on the GNOME runtime with its codecs, so H.264, VP9 and AV1 all play. Updates come through Flatpak; Flow's own updater stays off there.
+
+```sh
+flatpak remote-add --if-not-exists flatpark https://dl.flatpark.org/flatpark.flatpakrepo
+flatpak install flatpark io.github.aedev.flow.desktop
+```
+
+FlatPark follows the latest GitHub release, betas included, and not the nightly builds. The packaging lives in the [FlatPark registry](https://github.com/flatpark/flatpark/tree/main/registry/io.github.aedev.flow.desktop), where packaging issues go.
 
 ### Linux media codecs
 
@@ -94,7 +106,7 @@ rm squashfs-root/usr/lib/*wayland*so*
 ./squashfs-root/AppRun
 ```
 
-On Arch-family distributions the AUR package and the planned Flatpak build avoid this class of issue; prefer those when available.
+The `.deb`, `.rpm` and the FlatPark Flatpak use the system's or the runtime's own libraries and avoid this class of issue; prefer those when the AppImage fails.
 
 ---
 

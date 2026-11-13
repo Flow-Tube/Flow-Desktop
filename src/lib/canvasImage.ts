@@ -5,13 +5,16 @@ import { useImageProxyStore } from "../store/useImageProxyStore";
 /** Shared by the images Flow draws and exports: the Recap poster and the lyric card. */
 
 const LOAD_TIMEOUT_MS = 5_000;
+const LOOPBACK = /^https?:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?\//i;
 
 /** An image the canvas may read back, through the local proxy that allows it; null if it won't load. */
 export async function loadCanvasImage(url: string | null | undefined): Promise<HTMLImageElement | null> {
   if (!url) return null;
   try {
-    const routed = proxiedImage(url, useImageProxyStore.getState().base);
-    const src = routed !== url ? routed : await proxyImageUrl(url);
+    // Artwork the app already serves locally loads as it is; the backend refuses to proxy it again.
+    const local = LOOPBACK.test(url);
+    const routed = local ? url : proxiedImage(url, useImageProxyStore.getState().base);
+    const src = local || routed !== url ? routed : await proxyImageUrl(url);
     return await new Promise((resolve) => {
       const image = new Image();
       const timeout = setTimeout(() => resolve(null), LOAD_TIMEOUT_MS);

@@ -1,667 +1,193 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  AlignCenter,
-  AlignLeft,
-  AlignRight,
-  ArrowLeft,
-  Check,
-  Copy,
-  Download,
-  Loader2,
-  X,
-} from "lucide-react";
+import { AlignCenter, AlignLeft, AlignRight, ArrowLeft, Check, Copy, Download, Loader2 } from "lucide-react";
 
 import type { SongItem } from "../../../types/music";
-import type { LyricsEntry } from "../../../lib/lyrics/types";
 import { musicAudioEngine } from "../../../lib/audio/musicAudioEngine";
-import { useMusicPlayerStore } from "../../../store/useMusicPlayerStore";
-import { usePlayerStore } from "../../../store/usePlayerStore";
-import { useLyricsStore } from "../../../store/useLyricsStore";
-import { useUiStore } from "../../../store/useUiStore";
+import { css } from "../../../lib/color/tone";
 import { getString } from "../../../lib/i18n/index";
-import { copyPng } from "../../../lib/clipboard";
-import { blobToBase64 } from "../../../lib/recap/recapPoster";
-import { savePngImage } from "../../../lib/api/files";
+import type { CardAlign } from "../../../lib/lyrics/lyricCardRenderer";
+import { CARD_STYLE_LABELS, type CardStyleId } from "../../../lib/lyrics/palette";
+import {
+  MAX_SHARE_LINES,
+  preselectedLines,
+  shareLineIndexAt,
+  shareLines,
+  toggleShareLine,
+} from "../../../lib/lyrics/shareSelection";
+import { useLyricCardArtwork, useLyricCardImage } from "../../../lib/lyrics/useLyricCard";
 import { upgradeMusicImageUrl } from "../../../lib/thumbnails";
-import { useProxiedImageUrl } from "../../../lib/useProxiedImageUrl";
-import {
-  BASE_CARD_HEIGHT,
-  BASE_CARD_WIDTH,
-  renderLyricCardBlob,
-  type CardAlign,
-} from "../../../lib/lyrics/lyricCardRenderer";
-import {
-  extractArtworkPalette,
-  type CardStyleOption,
-} from "../../../lib/lyrics/palette";
-import { FlowLogo } from "../../ui/FlowLogo";
+import { useLyricsStore } from "../../../store/useLyricsStore";
+import { useMusicPlayerStore } from "../../../store/useMusicPlayerStore";
+import { Button } from "../../ui/Button";
+import { SegmentedControl } from "../../ui/SegmentedControl";
 import { LyricsDialog } from "./LyricsDialog";
 
-const MAX_SHARE_LINES = 5;
+const FOCUS = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
+const TITLE_ID = "lyrics-share-title";
 
-/** Checks if a line is shareable (non-blank and not a metadata bracket line) */
-export function isShareableLine(text: string): boolean {
-  const trimmed = text.trim();
-  return trimmed.length > 0 && !trimmed.startsWith("[");
-}
+const alignOptions = () => [
+  { value: "left" as const, label: getString("lyrics_share_align_left"), icon: <AlignLeft className="h-4 w-4" /> },
+  { value: "center" as const, label: getString("lyrics_share_align_center"), icon: <AlignCenter className="h-4 w-4" /> },
+  { value: "right" as const, label: getString("lyrics_share_align_right"), icon: <AlignRight className="h-4 w-4" /> },
+];
 
-/** Returns the index in the shareable lines corresponding to playback positionMs */
-export function shareLineIndexAt(lines: LyricsEntry[], positionMs: number): number {
-  const count = lines.filter((l) => isShareableLine(l.text) && l.time <= positionMs).length;
-  return Math.max(0, count - 1);
-}
-
-/** Gets the current playback position in milliseconds from music engine or video player */
-export function getPlaybackPositionMs(syncOffsetMs = 0): number {
-  let seconds = 0;
-  try {
-    const musicTime = musicAudioEngine.getCurrentTime();
-    if (typeof musicTime === "number" && !isNaN(musicTime) && musicTime > 0) {
-      seconds = musicTime;
-    }
-  } catch {
-    // Ignore
-  }
-
-  if (seconds === 0) {
-    try {
-      const playerTime = usePlayerStore.getState().currentTime;
-      if (typeof playerTime === "number" && !isNaN(playerTime) && playerTime > 0) {
-        seconds = playerTime;
-      }
-    } catch {
-      // Ignore
-    }
-  }
-
-  return Math.max(0, Math.round(seconds * 1000) + syncOffsetMs);
-}
-
-/**
- * Automatically selects a cohesive group of lyric lines (up to maxCount)
- * starting at the line where playback is currently playing or paused.
- */
-export function autoSelectLyricIndices(
-  totalLines: number,
-  targetIndex: number,
-  maxCount = 4,
-): number[] {
-  if (totalLines <= 0) return [];
-  if (totalLines <= maxCount) {
-    return Array.from({ length: totalLines }, (_, i) => i);
-  }
-
-  const clampedTarget = Math.max(0, Math.min(totalLines - 1, targetIndex));
-  let start = clampedTarget;
-  if (start + maxCount > totalLines) {
-    start = Math.max(0, totalLines - maxCount);
-  }
-  const count = Math.min(maxCount, totalLines - start);
-  return Array.from({ length: count }, (_, i) => start + i);
-}
-
-export function LyricsShareDialog({
-  track: propTrack,
-  onClose,
-}: {
-  track: SongItem | null;
-  onClose: () => void;
-}) {
-  const showToast = useUiStore((s) => s.showToast);
-  const rawEntries = useLyricsStore((s) => s.entries);
+/** Picks up to five lyric lines, then styles the card they make and copies or saves it, as on Android. */
+export function LyricsShareDialog({ track, onClose }: { track: SongItem | null; onClose: () => void }) {
+  const entries = useLyricsStore((s) => s.entries);
   const plain = useLyricsStore((s) => s.plain);
   const syncOffsetMs = useLyricsStore((s) => s.syncOffsetMs);
-  const activeMusicTrack = useMusicPlayerStore((s) => s.currentTrack);
+  const currentTrack = useMusicPlayerStore((s) => s.currentTrack);
+  const song = track ?? currentTrack;
 
-  // Fallback to active playing music track if prop track is missing or lacks thumbnail
-  const effectiveTrack = propTrack ?? activeMusicTrack;
-
-  // Normalise and proxy thumbnail URL to bypass webview CORS and CSP restrictions
-  const rawThumbnail = effectiveTrack?.thumbnail;
-  const upgradedThumbnail = useMemo(
-    () => upgradeMusicImageUrl(rawThumbnail, 480) ?? rawThumbnail ?? undefined,
-    [rawThumbnail],
+  const lines = useMemo(() => shareLines(entries, plain ?? ""), [entries, plain]);
+  const [selected, setSelected] = useState<number[]>(() =>
+    preselectedLines(lines.length, shareLineIndexAt(lines, musicAudioEngine.getCurrentTime() * 1000 + syncOffsetMs)),
   );
-  const proxiedThumbnail = useProxiedImageUrl(upgradedThumbnail) ?? upgradedThumbnail;
-
   const [step, setStep] = useState<"select" | "style">("select");
-  const [swatchImgFailed, setSwatchImgFailed] = useState(false);
-
-  const allLines = useMemo(() => {
-    if (rawEntries.length > 0) {
-      return rawEntries
-        .map((e) => e.text.trim())
-        .filter(isShareableLine);
-    }
-    if (plain) {
-      return plain
-        .split("\n")
-        .map((l) => l.trim())
-        .filter(isShareableLine);
-    }
-    return [];
-  }, [rawEntries, plain]);
-
-  // Initial playback position index computed once on mount
-  const initialIndex = useMemo(() => {
-    const posMs = getPlaybackPositionMs(syncOffsetMs);
-    return shareLineIndexAt(rawEntries, posMs);
-  }, [rawEntries, syncOffsetMs]);
-
-  // Automatically select the lyrics part where the player is currently playing or paused
-  const [selectedIndices, setSelectedIndices] = useState<number[]>(() => {
-    return autoSelectLyricIndices(allLines.length, initialIndex, 4);
-  });
-
-  const selectedLines = useMemo(() => {
-    return selectedIndices.map((i) => allLines[i]).filter(Boolean) as string[];
-  }, [selectedIndices, allLines]);
-
-  const [styles, setStyles] = useState<CardStyleOption[]>([]);
-  const [selectedStyleId, setSelectedStyleId] = useState<string>("cover");
+  const [styleId, setStyleId] = useState<CardStyleId | null>(null);
   const [align, setAlign] = useState<CardAlign>("left");
-  const [blob, setBlob] = useState<Blob | null>(null);
-  const [isRendering, setIsRendering] = useState(false);
-  const [cardDimensions, setCardDimensions] = useState<{ width: number; height: number }>({
-    width: BASE_CARD_WIDTH,
-    height: BASE_CARD_HEIGHT,
-  });
+  const firstSelectedRef = useRef<HTMLButtonElement | null>(null);
 
-  const activeLineRef = useRef<HTMLButtonElement | null>(null);
-  const cardPreviewRef = useRef<HTMLDivElement | null>(null);
-
-  const activeStyle: CardStyleOption = useMemo(() => {
-    return (
-      styles.find((s) => s.id === selectedStyleId) ??
-      styles[0] ?? {
-        id: "surface",
-        label: "Surface",
-        ground: "#242424",
-        hex: "#242424",
-        ink: "#f4f4f4",
-        isLight: false,
-      }
-    );
-  }, [styles, selectedStyleId]);
-
-  // Auto-scroll to currently playing or paused line on mount
   useEffect(() => {
-    if (activeLineRef.current && typeof activeLineRef.current.scrollIntoView === "function") {
-      activeLineRef.current.scrollIntoView({ block: "center", behavior: "smooth" });
-    }
+    firstSelectedRef.current?.scrollIntoView?.({ block: "center" });
   }, []);
 
-  // Track the exact rendered DOM dimensions of the live card preview
-  useEffect(() => {
-    if (step !== "style") return undefined;
-    const el = cardPreviewRef.current;
-    if (!el) return undefined;
+  const artwork = useLyricCardArtwork(useMemo(() => upgradeMusicImageUrl(song?.thumbnail, 512), [song?.thumbnail]));
+  const style = artwork?.styles.find((candidate) => candidate.id === styleId) ?? artwork?.styles[0] ?? null;
+  const artist = song?.artists.map((a) => a.name).filter(Boolean).join(", ") ?? "";
+  const data = useMemo(
+    () =>
+      step === "style" && selected.length > 0
+        ? { lines: selected.map((index) => lines[index]!.text), title: song?.title ?? "", artist }
+        : null,
+    [step, selected, lines, song?.title, artist],
+  );
+  const card = useLyricCardImage(data, style, align, artwork?.art ?? null);
 
-    const measure = () => {
-      const rect = el.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0) {
-        const w = Math.round(rect.width);
-        const h = Math.round(rect.height);
-        setCardDimensions((prev) => {
-          if (prev.width === w && prev.height === h) return prev;
-          return { width: w, height: h };
-        });
-      }
-    };
-
-    measure();
-
-    if (typeof ResizeObserver !== "undefined") {
-      const observer = new ResizeObserver(() => measure());
-      observer.observe(el);
-      return () => {
-        observer.disconnect();
-      };
-    }
-
-    return undefined;
-  }, [step, selectedLines, align, activeStyle]);
-
-  // Extract dynamic artwork color styles from the proxied thumbnail URL
-  useEffect(() => {
-    let cancelled = false;
-    extractArtworkPalette(proxiedThumbnail).then((options) => {
-      if (cancelled) return;
-      setStyles(options);
-      if (options.length > 0) {
-        // Default to cover if available, otherwise first style
-        const hasCover = options.some((o) => o.isCover);
-        setSelectedStyleId(hasCover ? "cover" : options[0]?.id ?? "surface");
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [proxiedThumbnail]);
-
-  const toggleLine = (index: number) => {
-    setSelectedIndices((prev) => {
-      if (prev.includes(index)) {
-        return prev.filter((i) => i !== index);
-      }
-      if (prev.length >= MAX_SHARE_LINES) {
-        showToast({ variant: "error", message: getString("lyrics_share_max_lines") });
-        return prev;
-      }
-      return [...prev, index].sort((a, b) => a - b);
-    });
-  };
-
-  const artistName = useMemo(() => {
-    return effectiveTrack?.artists?.map((a) => a.name).filter(Boolean).join(", ") || "Unknown Artist";
-  }, [effectiveTrack?.artists]);
-
-  // Pre-render high-res card blob when user is on the style step matching exact aspect ratio
-  useEffect(() => {
-    if (step !== "style" || selectedLines.length === 0) {
-      setBlob(null);
-      return;
-    }
-
-    let cancelled = false;
-    setIsRendering(true);
-
-    const theme = activeStyle.isCover ? "cover" : activeStyle.ground;
-
-    void renderLyricCardBlob(
-      {
-        lines: selectedLines,
-        title: effectiveTrack?.title || "Unknown Title",
-        artist: artistName,
-        coverUrl: proxiedThumbnail || null,
-      },
-      {
-        theme,
-        align,
-        targetWidth: cardDimensions.width,
-        targetHeight: cardDimensions.height,
-      },
-    ).then((rendered) => {
-      if (cancelled) return;
-      setIsRendering(false);
-      setBlob(rendered);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [step, selectedLines, effectiveTrack, artistName, activeStyle, align, proxiedThumbnail, cardDimensions]);
-
-  const getRenderedBlob = async (): Promise<Blob | null> => {
-    if (blob) return blob;
-    const theme = activeStyle.isCover ? "cover" : activeStyle.ground;
-    return renderLyricCardBlob(
-      {
-        lines: selectedLines,
-        title: effectiveTrack?.title || "Unknown Title",
-        artist: artistName,
-        coverUrl: proxiedThumbnail || null,
-      },
-      {
-        theme,
-        align,
-        targetWidth: cardDimensions.width,
-        targetHeight: cardDimensions.height,
-      },
-    );
-  };
-
-  const handleCopy = async () => {
-    const targetBlob = await getRenderedBlob();
-    if (!targetBlob) return;
-    const copied = await copyPng(targetBlob);
-    showToast({
-      variant: copied ? "success" : "error",
-      message: getString(copied ? "lyrics_share_copied" : "lyrics_share_copy_failed"),
-    });
-  };
-
-  const handleSave = async () => {
-    const targetBlob = await getRenderedBlob();
-    if (!targetBlob) return;
-    try {
-      const base64 = await blobToBase64(targetBlob);
-      const safeTitle = (effectiveTrack?.title || "lyrics").replace(/[^a-zA-Z0-9_-]/g, "_").toLowerCase();
-      const safeArtist = (effectiveTrack?.artists?.[0]?.name || "flow")
-        .replace(/[^a-zA-Z0-9_-]/g, "_")
-        .toLowerCase();
-      const filename = `${safeArtist} - ${safeTitle}.png`;
-      const saved = await savePngImage(base64, filename, getString("lyrics_share_save_image"));
-      if (saved) {
-        showToast({ variant: "success", message: getString("lyrics_share_saved") });
-      }
-    } catch (e) {
-      console.warn("Failed to save lyric card", e);
-      showToast({ variant: "error", message: getString("lyrics_share_save_failed") });
-    }
-  };
-
-  // Step 1: Lyrics Selection View (Matches Android LyricsSharePicker)
   if (step === "select") {
     return (
       <LyricsDialog
+        title={getString("lyrics_share_title")}
+        titleId={TITLE_ID}
         onClose={onClose}
-        maxWidth="max-w-md"
-        customHeader={
-          <div className="border-b border-chrome-neutral-800 px-6 pb-4 pt-3">
-            <div className="mx-auto mb-3 h-1 w-8 rounded-full bg-chrome-neutral-700" />
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-chrome-neutral-100">
-                  {getString("lyrics_share_title")}
-                </h2>
-                <p className="mt-0.5 text-xs text-chrome-neutral-400">
-                  {getString("lyrics_share_lines_selected", selectedIndices.length)}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={onClose}
-                aria-label={getString("close")}
-                className="grid h-8 w-8 place-items-center rounded-full text-chrome-neutral-400 transition-colors hover:bg-surface-container-high hover:text-chrome-neutral-100"
-              >
-                <X size={18} />
-              </button>
-            </div>
-          </div>
-        }
         footer={
-          <button
-            type="button"
-            disabled={selectedIndices.length === 0}
-            onClick={() => setStep("style")}
-            className="w-full rounded-full bg-[var(--color-primary)] py-3.5 text-center text-sm font-bold text-[var(--color-on-primary)] transition-all hover:brightness-105 active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {getString("next")}
-          </button>
+          <>
+            <span className="me-auto self-center text-sm tabular-nums text-chrome-neutral-400">
+              {getString("lyrics_share_lines_selected", selected.length, MAX_SHARE_LINES)}
+            </span>
+            <Button disabled={selected.length === 0} onClick={() => setStep("style")} className={FOCUS}>
+              {getString("next")}
+            </Button>
+          </>
         }
       >
-        <div className="flex max-h-[50vh] flex-col gap-1 overflow-y-auto px-4 py-3">
-          {allLines.length === 0 ? (
-            <p className="py-8 text-center text-sm text-chrome-neutral-400">
-              {getString("music_lyrics_unavailable")}
-            </p>
-          ) : (
-            allLines.map((line, idx) => {
-              const isSelected = selectedIndices.includes(idx);
-              const enabled = isSelected || selectedIndices.length < MAX_SHARE_LINES;
-              const isFirstSelected = selectedIndices[0] === idx;
-
+        {lines.length === 0 ? (
+          <p className="py-8 text-center text-sm text-chrome-neutral-400">{getString("music_lyrics_unavailable")}</p>
+        ) : (
+          <div className="flex flex-col gap-1">
+            {lines.map((line, index) => {
+              const isSelected = selected.includes(index);
               return (
                 <button
-                  key={idx}
-                  ref={isFirstSelected ? activeLineRef : null}
+                  key={index}
+                  ref={index === selected[0] ? firstSelectedRef : undefined}
                   type="button"
-                  disabled={!enabled}
-                  onClick={() => toggleLine(idx)}
-                  className={`w-full rounded-2xl px-4 py-3 text-start transition-all duration-150 active:scale-[0.99] ${
+                  aria-pressed={isSelected}
+                  disabled={!isSelected && selected.length >= MAX_SHARE_LINES}
+                  onClick={() => setSelected((current) => toggleShareLine(current, index))}
+                  className={`w-full rounded-xl px-4 py-3 text-start transition-colors duration-200 ease-out disabled:cursor-not-allowed disabled:opacity-40 ${FOCUS} ${
                     isSelected
-                      ? "bg-surface-container-highest text-chrome-neutral-50 shadow-sm"
-                      : enabled
-                      ? "bg-transparent text-chrome-neutral-200 hover:bg-surface-container-high/60"
-                      : "bg-transparent text-chrome-neutral-600 opacity-40 cursor-not-allowed"
+                      ? "bg-surface-container-highest text-chrome-neutral-100"
+                      : "text-chrome-neutral-300 hover:bg-surface-container-high"
                   }`}
                 >
-                  <span className="line-clamp-2 text-base font-bold tracking-tight leading-snug">
-                    {line}
+                  <span dir="auto" className="block text-base font-semibold leading-snug">
+                    {line.text}
                   </span>
                 </button>
               );
-            })
-          )}
-        </div>
+            })}
+          </div>
+        )}
       </LyricsDialog>
     );
   }
 
-  // Step 2: Card Customization & Preview View (Matches Android LyricsShareStyler)
+  const ready = card.previewUrl !== null;
   return (
     <LyricsDialog
+      title={getString("lyrics_share_title")}
+      titleId={TITLE_ID}
       onClose={onClose}
-      maxWidth="max-w-md"
-      customHeader={
-        <div className="flex items-center justify-between border-b border-chrome-neutral-800 px-5 py-3.5">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setStep("select")}
-              className="grid h-8 w-8 place-items-center rounded-full text-chrome-neutral-300 transition-colors hover:bg-surface-container-high hover:text-white"
-              title="Back"
-            >
-              <ArrowLeft size={18} />
-            </button>
-            <div>
-              <h2 className="text-base font-bold text-chrome-neutral-100">
-                {getString("lyrics_share_title")}
-              </h2>
-              <p className="text-xs text-chrome-neutral-400">
-                {getString("lyrics_share_lines_selected", selectedIndices.length)}
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={getString("close")}
-            className="grid h-8 w-8 place-items-center rounded-full text-chrome-neutral-400 transition-colors hover:bg-surface-container-high hover:text-chrome-neutral-100"
-          >
-            <X size={18} />
-          </button>
-        </div>
-      }
+      widthClass="max-w-3xl"
       footer={
-        <div className="flex w-full gap-3">
-          <button
-            type="button"
-            disabled={!blob || isRendering}
-            onClick={handleCopy}
-            className="flex flex-1 items-center justify-center gap-2 rounded-full bg-[var(--color-primary)] py-3 text-sm font-bold text-[var(--color-on-primary)] transition-all hover:brightness-105 active:scale-[0.99] disabled:opacity-40"
-          >
-            {isRendering ? <Loader2 size={16} className="animate-spin" /> : <Copy size={16} />}
-            {getString("lyrics_share_copy_image")}
-          </button>
-          <button
-            type="button"
-            disabled={!blob || isRendering}
-            onClick={handleSave}
-            className="flex flex-1 items-center justify-center gap-2 rounded-full bg-surface-container-high py-3 text-sm font-bold text-chrome-neutral-100 transition-colors hover:bg-surface-container-highest active:scale-[0.99] disabled:opacity-40"
-          >
-            <Download size={16} />
+        <>
+          <Button variant="ghost" onClick={() => setStep("select")} className={`me-auto ${FOCUS}`}>
+            <ArrowLeft className="h-4 w-4 rtl:-scale-x-100" />
+            {getString("lyrics_share_back")}
+          </Button>
+          <Button variant="tonal" disabled={!ready} onClick={() => void card.save()} className={FOCUS}>
+            <Download className="h-4 w-4" />
             {getString("lyrics_share_save_image")}
-          </button>
-        </div>
+          </Button>
+          <Button disabled={!ready} onClick={card.copy} className={FOCUS}>
+            <Copy className="h-4 w-4" />
+            {getString("lyrics_share_copy_image")}
+          </Button>
+        </>
       }
     >
-      <div className="flex flex-col items-center gap-4">
-        {/* Live Card Preview (Matches Android LyricsShareCard layout - hugs content with dynamic length) */}
-        <div className="w-full max-w-[340px]">
-          <div
-            ref={cardPreviewRef}
-            className="relative flex w-full flex-col overflow-hidden rounded-[28px] px-6 pt-6 pb-7 shadow-2xl transition-colors duration-200"
-            style={{
-              backgroundColor: activeStyle.ground,
-              color: activeStyle.ink,
-            }}
-          >
-            {/* Blurred cover overlay when COLORFUL style is selected */}
-            {activeStyle.isCover && proxiedThumbnail && (
-              <div
-                className="absolute inset-0 bg-cover bg-center brightness-[0.55] filter blur-xl scale-125 pointer-events-none"
-                style={{ backgroundImage: `url(${proxiedThumbnail})` }}
-              />
-            )}
-            {activeStyle.isCover && (
-              <div className="absolute inset-0 bg-black/40 pointer-events-none" />
-            )}
+      <div className="grid items-center gap-6 sm:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="grid min-h-60 place-items-center">
+          {card.previewUrl ? (
+            <img
+              src={card.previewUrl}
+              alt={getString("lyrics_share_preview")}
+              className={`max-h-[min(52vh,500px)] w-auto max-w-full transition-opacity duration-200 ease-out ${card.rendering ? "opacity-70" : "opacity-100"}`}
+            />
+          ) : (
+            <Loader2 className="h-6 w-6 animate-spin text-chrome-neutral-400" />
+          )}
+        </div>
 
-            {/* Content layer above background */}
-            <div className="relative z-10 flex flex-col gap-4">
-              {/* Card Header: 56x56 artwork + Title & Artist */}
-              <div>
-                <div className="flex items-center gap-3">
-                  {proxiedThumbnail ? (
-                    <img
-                      src={proxiedThumbnail}
-                      alt=""
-                      className="h-14 w-14 shrink-0 rounded-lg object-cover shadow-sm"
-                    />
-                  ) : (
-                    <div className="grid h-14 w-14 shrink-0 place-items-center rounded-lg bg-white/10 text-lg font-bold">
-                      ♪
-                    </div>
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-base font-semibold leading-tight">
-                      {effectiveTrack?.title || "Unknown Title"}
-                    </p>
-                    <p
-                      className="truncate text-sm opacity-70"
-                      style={{ color: activeStyle.ink }}
+        <div className="flex flex-col gap-5">
+          {artwork && artwork.styles.length > 1 && (
+            <div className="flex flex-col gap-2.5">
+              <span className="text-xs font-semibold text-chrome-neutral-500">{getString("lyrics_share_style")}</span>
+              <div role="radiogroup" aria-label={getString("lyrics_share_style")} className="flex max-w-64 flex-wrap gap-3 p-1">
+                {artwork.styles.map((option) => {
+                  const isSelected = option.id === style?.id;
+                  const label = getString(CARD_STYLE_LABELS[option.id]);
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={isSelected}
+                      aria-label={label}
+                      title={label}
+                      onClick={() => setStyleId(option.id)}
+                      className={`grid h-9 w-9 place-items-center rounded-full border border-chrome-neutral-800 bg-cover bg-center transition-transform duration-200 ease-out hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface-container ${
+                        isSelected ? "ring-2 ring-primary ring-offset-2 ring-offset-surface-container" : ""
+                      }`}
+                      style={{
+                        backgroundColor: css(option.ground),
+                        backgroundImage: option.mesh && artwork.art ? `url("${artwork.art.src}")` : undefined,
+                        color: css(option.ink),
+                      }}
                     >
-                      {artistName}
-                    </p>
-                  </div>
-                </div>
-                {/* Horizontal divider with 20% opacity */}
-                <div
-                  className="mt-3.5 h-px w-full"
-                  style={{
-                    backgroundColor: activeStyle.ink,
-                    opacity: 0.2,
-                  }}
-                />
-              </div>
-
-              {/* Card Lyrics Body - starts right below divider with dynamic line spacing */}
-              <div
-                className={`flex flex-col ${selectedLines.length <= 3 ? "gap-3" : "gap-2.5"} py-1 ${
-                  align === "center"
-                    ? "text-center"
-                    : align === "right"
-                    ? "text-end"
-                    : "text-start"
-                }`}
-              >
-                {selectedLines.map((line, i) => (
-                  <p
-                    key={i}
-                    className={`font-bold leading-tight tracking-tight ${
-                      selectedLines.length <= 2
-                        ? "text-2xl"
-                        : selectedLines.length <= 3
-                        ? "text-xl"
-                        : "text-lg"
-                    }`}
-                  >
-                    {line}
-                  </p>
-                ))}
-              </div>
-
-              {/* Card Footer: Official Flow Logo Badge + Wordmark - generous breathing room above and below */}
-              <div className="flex items-center gap-2 pt-6">
-                <FlowLogo
-                  width={28}
-                  shapeColor={activeStyle.ink}
-                  glyphColor={activeStyle.ground}
-                />
-                <span className="text-sm font-bold tracking-tight">Flow</span>
+                      {isSelected && <Check className="h-4 w-4" strokeWidth={3} />}
+                    </button>
+                  );
+                })}
               </div>
             </div>
+          )}
+
+          <div className="flex flex-col gap-2.5">
+            <span className="text-xs font-semibold text-chrome-neutral-500">{getString("lyrics_share_align")}</span>
+            <SegmentedControl<CardAlign> label={getString("lyrics_share_align")} value={align} onChange={setAlign} options={alignOptions()} />
           </div>
-        </div>
-
-        {/* Dynamic Color Swatches Row */}
-        <div className="flex w-full items-center justify-start gap-3 overflow-x-auto px-4 py-2">
-          {styles.map((s) => {
-            const isSelected = selectedStyleId === s.id;
-
-            if (s.isCover) {
-              return (
-                <button
-                  key={s.id}
-                  type="button"
-                  title={s.label}
-                  onClick={() => setSelectedStyleId(s.id)}
-                  className={`relative grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full transition-all ${
-                    isSelected
-                      ? "scale-105 ring-2 ring-white ring-offset-2 ring-offset-surface-container"
-                      : "hover:scale-105 opacity-80 hover:opacity-100"
-                  }`}
-                >
-                  {proxiedThumbnail && !swatchImgFailed ? (
-                    <img
-                      src={proxiedThumbnail}
-                      alt=""
-                      onError={() => setSwatchImgFailed(true)}
-                      className="h-full w-full object-cover brightness-75"
-                    />
-                  ) : (
-                    <div className="h-full w-full bg-gradient-to-b from-indigo-900 to-purple-950" />
-                  )}
-                  {isSelected && (
-                    <Check size={18} strokeWidth={3} className="relative z-10 text-white drop-shadow" />
-                  )}
-                </button>
-              );
-            }
-
-            return (
-              <button
-                key={s.id}
-                type="button"
-                title={s.label}
-                onClick={() => setSelectedStyleId(s.id)}
-                className={`grid h-10 w-10 shrink-0 place-items-center rounded-full transition-all shadow-sm ${
-                  isSelected
-                    ? "scale-105 ring-2 ring-white ring-offset-2 ring-offset-surface-container"
-                    : "hover:scale-105 opacity-80 hover:opacity-100"
-                }`}
-                style={{ backgroundColor: s.ground }}
-              >
-                {isSelected && (
-                  <Check
-                    size={18}
-                    strokeWidth={3}
-                    style={{ color: s.ink }}
-                  />
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Alignment Segmented Control */}
-        <div className="flex w-full rounded-2xl bg-surface-container-high p-1">
-          {(
-            [
-              { value: "left", label: getString("lyrics_share_align_left"), icon: <AlignLeft size={16} /> },
-              { value: "center", label: getString("lyrics_share_align_center"), icon: <AlignCenter size={16} /> },
-              { value: "right", label: getString("lyrics_share_align_right"), icon: <AlignRight size={16} /> },
-            ] as const
-          ).map(({ value, label, icon }) => {
-            const isSelected = align === value;
-            return (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setAlign(value)}
-                className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-semibold transition-all ${
-                  isSelected
-                    ? "bg-[var(--color-primary)] text-[var(--color-on-primary)] shadow-sm"
-                    : "text-chrome-neutral-400 hover:text-white"
-                }`}
-              >
-                {icon}
-                <span>{label}</span>
-              </button>
-            );
-          })}
         </div>
       </div>
     </LyricsDialog>

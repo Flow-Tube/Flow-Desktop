@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState, useEffect } from "react";
+import React, { useCallback, useMemo, useRef, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronDown, ChevronUp, ListChecks, Loader2, Pencil, Plus, RefreshCw, Trash2, Upload, User } from "lucide-react";
 import { parseSubscriptionExport } from "../lib/api/youtube";
@@ -30,6 +30,8 @@ import { sortSubscriptions, type SubscriptionSortMode } from "../lib/subscriptio
 import { useUnplayableVideoIds } from "../lib/useUnplayableVideoIds";
 import { useFinishedShortIds, useSubscriptionsHiddenFilter } from "../lib/useWatchedFilter";
 import { splitSubscriptionFeed } from "../lib/subscriptionFeedSplit";
+import { uniqueVideoKeys } from "../lib/videoKeys";
+import { useScrollAnchor } from "../lib/useScrollAnchor";
 import type { SubscribedChannel, SubscriptionGroup } from "../store/useSubscriptionStore";
 import type { VideoSummary } from "../types/video";
 import { Checkbox } from "../components/ui/Checkbox";
@@ -261,6 +263,20 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
     [filteredVideos, finishedShorts, shortsExcludedChannels, showSubscriptionLive, showSubscriptionShorts, showSubscriptionVideos],
   );
 
+  const videoKeys = useMemo(() => uniqueVideoKeys(regularVideos), [regularVideos]);
+  const getVideoKey = useCallback((video: VideoSummary, index: number) => videoKeys[index] ?? `${video.id}-${index}`, [videoKeys]);
+  const pageRef = useRef<HTMLDivElement>(null);
+  // Everything that can grow or shrink above the card being read.
+  useScrollAnchor(pageRef, [
+    regularVideos,
+    shortsForShelf.length > 0,
+    scanProgress != null,
+    failedChannelNames.length,
+    lastRefreshedAt != null,
+    feedLoading,
+    feedError,
+  ]);
+
   const handleSelectChannel = (channel: SubscribedChannel) => {
     setSelectedChannelId((current) => current === channel.id ? null : channel.id);
     setViewMode("feed");
@@ -272,7 +288,7 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
   };
 
   return (
-    <div className="flex-grow overflow-y-auto px-6 py-6 md:px-8">
+    <div ref={pageRef} className="flex-grow overflow-y-auto px-6 py-6 md:px-8">
       <div className="space-y-6 pb-20">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <h1 className="text-3xl font-bold tracking-tight text-chrome-neutral-100">
@@ -398,6 +414,8 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
                         videos={regularVideos}
                         onPlay={onPlay}
                         onAddToQueue={onAddToQueue}
+                        getVideoKey={getVideoKey}
+                        scrollAnchors
                       />
                     </>
                   ) : (

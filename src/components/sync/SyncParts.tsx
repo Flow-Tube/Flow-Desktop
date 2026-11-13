@@ -15,18 +15,6 @@ export function IconChip({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function SectionHeader({ icon, title, subtitle }: { icon: React.ReactNode; title: string; subtitle: string }) {
-  return (
-    <div className="mb-6 flex items-center gap-3">
-      <IconChip>{icon}</IconChip>
-      <div>
-        <h2 className="text-xl font-bold tracking-tight text-chrome-neutral-100">{title}</h2>
-        <p className="max-w-2xl text-sm text-chrome-neutral-400">{subtitle}</p>
-      </div>
-    </div>
-  );
-}
-
 /** The 6-digit verification code, rendered as massive spaced monospace digits. */
 export function VerificationCode({ sas, size = "lg" }: { sas: string; size?: "lg" | "md" }) {
   return (

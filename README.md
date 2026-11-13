@@ -75,6 +75,22 @@ Release builds are published through [GitHub Releases](https://github.com/Flow-T
 
 Linux builds require a compatible glibc, GTK 3, and WebKitGTK 4.1 environment. Legacy 32-bit systems are not supported. See [docs/LINUX.md](docs/LINUX.md) for which package to pick, graphics problems, codecs, sync and moving from Beta to Stable.
 
+### Opening Flow on macOS
+
+Flow isn't signed with an Apple Developer ID or notarized yet, so the first launch is blocked with a message such as "Apple could not verify Flow is free of malware" or "Flow is damaged and can't be opened". To open it:
+
+1. Open the DMG and drag Flow into your Applications folder. Flow can only update itself from there.
+2. In Terminal, remove the download mark macOS puts on the app:
+
+   ```sh
+   xattr -dr com.apple.quarantine /Applications/Flow.app
+   ```
+
+   For a Beta or Nightly build, use `"/Applications/Flow Beta.app"` or `"/Applications/Flow Nightly.app"`, with the quotes.
+3. Open Flow as usual.
+
+Without Terminal: try to open Flow once, then go to **System Settings > Privacy & Security**, scroll down to the message about Flow and click **Open Anyway**. Updates Flow installs itself don't need this again.
+
 ### Flatpak (FlatPark)
 
 [FlatPark](https://flatpark.org/apps/io.github.aedev.flow.desktop/) offers Flow as a Flatpak. It downloads the official `.deb` from this repository's releases, unmodified, at install time, and runs it on the GNOME runtime with its codecs, so H.264, VP9 and AV1 all play. Updates come through Flatpak; Flow's own updater stays off there.

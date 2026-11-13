@@ -10,6 +10,13 @@ describe("parseUpdateSupport", () => {
     });
   });
 
+  it("keeps a Mac app that runs from its disk image", () => {
+    expect(parseUpdateSupport({ supported: false, reason: "read-only-location" })).toEqual({
+      supported: false,
+      reason: "read-only-location",
+    });
+  });
+
   it("treats a supported install as supported", () => {
     expect(parseUpdateSupport({ supported: true, reason: null })).toEqual({
       supported: true,
@@ -29,5 +36,6 @@ describe("updateBlockedStringKey", () => {
     expect(updateBlockedStringKey("flatpak")).toBe("settings_updates_managed_flatpak");
     expect(updateBlockedStringKey("package-manager")).toBe("settings_updates_managed_package_manager");
     expect(updateBlockedStringKey("unbundled")).toBe("settings_updates_unbundled");
+    expect(updateBlockedStringKey("read-only-location")).toBe("settings_updates_move_to_applications");
   });
 });

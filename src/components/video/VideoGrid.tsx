@@ -6,6 +6,7 @@ import { useGridStyle, useResolvedGridColumns } from '../../lib/useGridColumns';
 import { IMPRESSION_ATTRIBUTE, useFeedImpressions } from '../../lib/useFeedImpressions';
 import { GRID_INDEX_ATTRIBUTE, useLastVisibleCard } from '../../lib/useLastVisibleCard';
 import { thumbnailNeedsHighRes } from '../../lib/thumbnails';
+import { SCROLL_ANCHOR_ATTRIBUTE } from '../../lib/useScrollAnchor';
 
 interface VideoGridProps {
   videos?: VideoSummary[];
@@ -27,6 +28,8 @@ interface VideoGridProps {
   getReasonLine?: (video: VideoSummary) => string | undefined;
   /** The position of the last card on screen, for a feed that pages as it nears the end. */
   onLastVisibleIndex?: (index: number) => void;
+  /** Marks each card with its key, for a page that keeps the card being read in place. */
+  scrollAnchors?: boolean;
 }
 
 /**
@@ -69,6 +72,7 @@ function VideoGridComponent({
   getReason,
   getReasonLine,
   onLastVisibleIndex,
+  scrollAnchors = false,
 }: VideoGridProps) {
   const gridRef = useRef<HTMLDivElement>(null);
   useFeedImpressions(gridRef, videos, trackImpressions && !loading);
@@ -97,8 +101,10 @@ function VideoGridComponent({
       className={gridClass}
       style={gridStyle}
     >
-      {videos.map((video, index) => (
-        <Fragment key={getVideoKey ? getVideoKey(video, index) : `${video.id}-${index}`}>
+      {videos.map((video, index) => {
+        const key = getVideoKey ? getVideoKey(video, index) : `${video.id}-${index}`;
+        return (
+        <Fragment key={key}>
           {/*
             content-visibility lets the browser skip layout/paint for offscreen
             cards — feeds can hold hundreds, and Linux composites on the CPU.
@@ -110,6 +116,7 @@ function VideoGridComponent({
             className="flow-grid-card p-2 -m-2"
             {...(trackImpressions ? { [IMPRESSION_ATTRIBUTE]: video.id } : {})}
             {...(onLastVisibleIndex ? { [GRID_INDEX_ATTRIBUTE]: index } : {})}
+            {...(scrollAnchors ? { [SCROLL_ANCHOR_ATTRIBUTE]: key } : {})}
           >
             <VideoCard
               video={video}
@@ -129,7 +136,8 @@ function VideoGridComponent({
             </div>
           ) : null}
         </Fragment>
-      ))}
+        );
+      })}
     </div>
   );
 }

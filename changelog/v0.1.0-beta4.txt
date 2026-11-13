@@ -149,6 +149,7 @@ PLAYER
 - The glow around the player stays on when you switch Resize to Fill or Zoom.
 - A new switch, Glow around the player, spreads those colors past the player in every view. It is off by default, and it has its own brighter look in light themes.
 - Double-clicking the sides of a video seeks without pausing it first or flashing the pause icon. A single click now pauses about a fifth of a second later, so Flow can tell the two apart.
+- Double-clicking the side of a video now shows the same seek feedback as Flow for Android: that side of the video lights up and two arrows slide toward the seek. Keep clicking the same side to add more: +10, +20, +30. The arrow keys add up the same way.
 - Ambient mode can be turned on or off from the player gear menu, has an intensity slider in Settings, and can now be turned on under Linux, where it starts off.
 - Live streams start and play again.
 - You can seek back through a live stream and stay there. The time shows how far behind live you are, and the Live button brings you back.

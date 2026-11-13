@@ -22,6 +22,7 @@ const LEFT_TO_RIGHT_FILES: Record<string, string> = {
   "components/player/MiniPlayerControls.tsx": "inside the video frame",
   "components/player/HeatmapStrip.tsx": "drawn over the timeline",
   "components/player/gesture/overlay.tsx": "double-tap sides are physical, as on Android",
+  "components/player/gesture/SeekFeedback.tsx": "double-tap sides are physical, as on Android",
   "components/player/SponsorBlockSkipButton.tsx": "inside the video frame",
   "components/player/UpNextCard.tsx": "inside the video frame",
   "components/player/AutoplaySwitch.tsx": "inside the video frame",

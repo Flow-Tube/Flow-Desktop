@@ -391,22 +391,76 @@
   animation: player-feedback-pop 1.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-@keyframes player-seek-pop {
+/* Double-click seek, after Android's SeekAnimationOverlay: the side's tint flashes brighter on
+   every step and settles, and two chevrons slide toward the seek on an 800 ms loop. */
+@keyframes seek-ripple-pulse {
+  from {
+    opacity: 0.28;
+  }
+  to {
+    opacity: 0.15;
+  }
+}
+
+@keyframes seek-label-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes seek-chevron-fade {
   0% {
     opacity: 0;
-    transform: scale(0.78);
   }
-  16% {
+  20%,
+  50% {
     opacity: 1;
-    transform: scale(1);
-  }
-  72% {
-    opacity: 1;
-    transform: scale(1);
   }
   100% {
     opacity: 0;
-    transform: scale(0.9);
+  }
+}
+
+@keyframes seek-chevron-forward {
+  to {
+    transform: translateX(24px);
+  }
+}
+
+@keyframes seek-chevron-backward {
+  to {
+    transform: translateX(-24px);
+  }
+}
+
+.animate-seek-ripple {
+  animation: seek-ripple-pulse 260ms var(--motion-ease);
+}
+
+.animate-seek-label-in {
+  animation: seek-label-in 150ms var(--motion-ease);
+}
+
+.animate-seek-chevron {
+  display: block;
+  animation: seek-chevron-fade 800ms linear infinite;
+}
+
+.animate-seek-chevron-forward {
+  animation: seek-chevron-forward 800ms cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.animate-seek-chevron-backward {
+  animation: seek-chevron-backward 800ms cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-seek-ripple,
+  .animate-seek-label-in,
+  .animate-seek-chevron,
+  .animate-seek-chevron-forward,
+  .animate-seek-chevron-backward {
+    animation: none;
   }
 }
 
@@ -475,9 +529,6 @@
   }
 }
 
-.animate-player-seek {
-  animation: player-seek-pop 1.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
 
 /*
   The side rail pushes the page as it opens and closes. One duration and curve serve both

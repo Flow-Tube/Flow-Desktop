@@ -58,6 +58,9 @@ SYNC
 - Linked devices sign in to your Flow server about once every 15 minutes instead of before every sync.
 - Notes sync with Flow for Android, over the QR code and Linked devices, and are part of backups. Notes your phone sent before this version come back on the next sync, and a device that joins later gets them from this computer.
 - Saved Shorts sync with your phone in both directions, as the same list on each device, once the phone has saved a Short of its own. Saved Shorts that an earlier sync brought in as a playlist move to the Saved Shorts page.
+- Sync now listens on fixed ports when they are free: 47900 for Linked devices and 47901 for a one-time transfer, so a firewall rule made once keeps working. The Linux packages include a firewalld service and a ufw profile named flow-desktop.
+- When the phone can't reach this computer, the pairing screen now says what to do on this system. On Linux it shows the command for your firewall, ready to copy, and Linked devices shows the same help.
+- A connection that fails now says whether the other device turned it down or never answered, instead of one message for both.
 
 LIBRARY
 - Notes on videos and channels: a Note button on the Watch and Channel pages, a small card that shows the note. Times like 12:34 in a video's note jump there. Settings > Content has the switches.
@@ -206,6 +209,9 @@ SETTINGS
 - Pause watch history stops saving what you watch, in Settings > History & Privacy. Save search history, Search suggestions, Max history size and Auto-delete history live there too, with a button to clear your searches.
 - A new setting, App language, shows Flow in any of the 33 languages Flow for Android ships, using Android's translations. Text that has no translation yet stays in English, and English stays the default. Right-to-left languages mirror the layout outside the player.
 - A Show Music switch in Settings > Content & UI hides YouTube Music everywhere: the Music tab, music search, albums, music downloads and songs in your history and likes. Music links open as videos. Your albums, likes and history are kept, and local files still play.
+- Start page, under Navigation tabs, picks the page Flow opens on, such as Subscriptions. Open tabs from the last run still come back first, and reloading the window keeps the page you are on.
+- Double-click sides to seek, under Player, can be turned off. A double-click anywhere on the video then switches fullscreen.
+- Subscriptions remembers the group you picked last, across restarts, as Flow for Android does.
 
 DOWNLOADS
 - Sort downloads by Newest, Oldest, Largest, Title or Channel. Each video shows its size and date.
@@ -262,6 +268,26 @@ LOCAL MEDIA
 - Import from another app, chosen by the app you are leaving: a Google Takeout export, even split across several zips, with likes, playlists and Watch Later; YouTube Music playlist CSVs; NewPipe history and playlists from its backup; LibreTube subscriptions and playlists; Metrolist music playlists. Imports only teach recommendations the way Android does.
 - The Cache group under Network now shows the real size of artwork, lyrics and network caches, each with a limit and a Clear button. Artwork clears the next time Flow starts. The Media Cache Limit row is gone: Flow never stored streams on disk.
 
+LINUX
+- Links from the browser extension open the video in Flow from every Linux package, the AUR ones included, instead of only bringing the window forward.
+- Stable, Beta and Nightly .deb and .rpm packages now install side by side. Their commands are flow-desktop, flow-desktop-beta and flow-desktop-nightly, so pin Flow to your dock again after updating.
+- Flow is listed under Sound and Video in app menus with sharper icons, and the .rpm installs on openSUSE as well as Fedora.
+- The Flatpak can use the keyring, the tray, Discord and Show in folder. A new Linux help page covers packages, graphics, codecs, sync and moving from Beta to Stable.
+- Graphics compatibility keeps the GPU on current WebKitGTK. Compatible used to switch Flow to software drawing, which made scrolling and video stutter, and NVIDIA on Wayland started there by default.
+- Opening a link or the launcher while Flow is already running no longer counts as a failed start, so Flow stops slipping into slower graphics modes on its own.
+- When the page keeps crashing after it opened, the next launch uses a safer graphics mode.
+- On Wayland, the pop-out player no longer offers Pin and Settings no longer offers Always on top, since Wayland doesn't let apps keep a window above others. The Shorts menu hides Mini player where it can't open.
+- Arch Linux: the flow-desktop (built from source) and flow-desktop-bin (the release package) AUR packages now update with every release, betas included.
+- A new flow-desktop-git AUR package builds the latest development code. None of them installs the flow command, which belongs to another Arch package.
+
+MACOS
+- Flow on macOS now updates itself like on Windows and Linux. Earlier versions were never offered an update on macOS, so install this one by hand once.
+- When Flow runs straight from its disk image or from Downloads, About says to move it to Applications, the only place it can update itself.
+
+NIGHTLY BUILDS
+- Nightly builds of Flow Nightly are now on a Nightly release on GitHub, so anyone can download them without a GitHub account. Each new build replaces the files there, and a checksum file lists them.
+- Flow Nightly now updates itself to the newest nightly build, on Windows, macOS and Linux. A nightly build installed before this change needs one new install by hand first.
+
 FIXES
 - The rows on the About page that open something, such as Changelog, can be reached and opened with the keyboard.
 - Playlist cards show all four covers when two of the songs share a cover.
@@ -289,3 +315,4 @@ FIXES
 - Arabic, Persian and Urdu lay out properly now. The side rail, the settings drawer, menus, switches, sliders, toasts and the back, forward and see-all arrows all mirror, and menus open toward the page. The video player, every progress bar and the play controls stay left to right, as on Flow for Android.
 - Titles, channel names, descriptions and comments in another script keep their own word order, punctuation and ellipsis, so an Arabic title no longer loses its first word in English, and the reverse. Lines such as views and upload date, or a handle and subscriber count, keep each part in place.
 - Text you type in search and other fields follows the direction of what you type. On Linux, Flow uses Noto's Arabic fonts when they are installed, so Arabic letters keep their dots and joins.
+- The Subscriptions page no longer jumps while you scroll during a refresh. The feed you are reading stays on screen until the check of every channel finishes, cards keep their thumbnails when new videos arrive, and the video you are looking at stays in place when things above it change.

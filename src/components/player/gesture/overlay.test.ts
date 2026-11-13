@@ -50,6 +50,7 @@ describe("PlayerGestureOverlay double-click vs single-click", () => {
       seekFeedback: null,
       volumeFeedback: null,
       seekIntervalSeconds: 10,
+      doubleClickSeek: true,
       longPressPlaybackRate: null,
       loopEnabled: false,
       setPlaybackRate: vi.fn(),
@@ -229,6 +230,28 @@ describe("PlayerGestureOverlay double-click vs single-click", () => {
     // Seek backward
     expect(seekTo).toHaveBeenCalledWith(40);
     expect(onSeekFeedback).toHaveBeenCalledWith("backward", 10);
+  });
+
+  it("toggles fullscreen on the sides when double-click seek is off", () => {
+    const seekTo = vi.fn();
+    const toggleFullscreen = vi.fn();
+    const { overlay } = renderOverlay({ seekTo, toggleFullscreen, doubleClickSeek: false });
+    vi.spyOn(overlay, "getBoundingClientRect").mockReturnValue({
+      left: 0, top: 0, right: 1000, bottom: 600, width: 1000, height: 600, x: 0, y: 0, toJSON: () => {},
+    });
+
+    for (const clientX of [200, 800]) {
+      act(() => {
+        overlay.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, clientX, clientY: 300, detail: 1 }));
+        vi.advanceTimersByTime(100);
+        overlay.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true, button: 0, clientX, clientY: 300 }));
+        overlay.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, clientX, clientY: 300, detail: 2 }));
+        overlay.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true, clientX, clientY: 300, detail: 2 }));
+      });
+    }
+
+    expect(toggleFullscreen).toHaveBeenCalledTimes(2);
+    expect(seekTo).not.toHaveBeenCalled();
   });
 
   describe("dragging the mini player", () => {

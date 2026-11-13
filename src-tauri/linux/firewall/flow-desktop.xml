@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<service>
+  <short>Flow Desktop</short>
+  <description>Sync between Flow Desktop and Flow for Android on the local network: Linked devices (TCP 47900), one-time transfer (TCP 47901) and device discovery (mDNS, UDP 5353).</description>
+  <port protocol="tcp" port="47900-47901"/>
+  <port protocol="udp" port="5353"/>
+</service>

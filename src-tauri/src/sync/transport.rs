@@ -117,9 +117,21 @@ where
     }
 }
 
-/// Bind an ephemeral port on all interfaces. Returns the listener and the chosen port.
+/// The port one-time transfers try first, so a firewall can allow it ahead of time. Shared with
+/// the packaged firewalld service and ufw profile.
+pub const TRANSFER_PORT: u16 = 47901;
+
+/// Bind on all interfaces, on [`TRANSFER_PORT`] when it is free so a firewall rule for it works,
+/// otherwise on any free port. Returns the listener and the chosen port.
 pub async fn bind() -> Result<(TcpListener, u16), SyncError> {
-    let listener = TcpListener::bind("0.0.0.0:0").await?;
+    bind_preferring(TRANSFER_PORT).await
+}
+
+async fn bind_preferring(port: u16) -> Result<(TcpListener, u16), SyncError> {
+    let listener = match TcpListener::bind(("0.0.0.0", port)).await {
+        Ok(listener) => listener,
+        Err(_) => TcpListener::bind("0.0.0.0:0").await?,
+    };
     let port = listener.local_addr()?.port();
     Ok((listener, port))
 }
@@ -158,9 +170,19 @@ pub async fn connect(ip: &str, port: u16) -> Result<WsChannel<ClientStream>, Syn
     tracing::info!(target: "flow::sync::transport", %url, "dialing host");
     let (ws, _resp) = connect_async(&url).await.map_err(|e| {
         tracing::warn!(target: "flow::sync::transport", %url, "WebSocket connect failed: {e}");
-        SyncError::from(e)
+        dial_error(e)
     })?;
     Ok(WsChannel::new(ws))
+}
+
+/// A refused dial says something different from one that never got through, so it keeps its own
+/// error.
+fn dial_error(error: WsError) -> SyncError {
+    match &error {
+        WsError::Io(io) if io.kind() == std::io::ErrorKind::ConnectionRefused => SyncError::Refused,
+        WsError::Io(io) if io.kind() == std::io::ErrorKind::TimedOut => SyncError::NoAnswer,
+        _ => SyncError::from(error),
+    }
 }
 
 /// Interface-name prefixes that mean "virtual, container, or VPN adapter". Matched on the start of
@@ -276,4 +298,42 @@ pub fn lan_ip_candidates() -> Vec<LanCandidate> {
 /// Best-effort LAN IPv4 for the QR code. See [`lan_ip_candidates`] for how the winner is chosen.
 pub fn lan_ip() -> Option<String> {
     lan_ip_candidates().into_iter().next().map(|c| c.ip)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::bind_preferring;
+    use tokio::net::TcpListener;
+
+    #[tokio::test]
+    async fn takes_the_preferred_port_when_it_is_free() {
+        let free = TcpListener::bind("0.0.0.0:0")
+            .await
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        let (_listener, port) = bind_preferring(free).await.unwrap();
+        assert_eq!(port, free);
+    }
+
+    #[tokio::test]
+    async fn a_closed_port_is_reported_as_refused() {
+        let closed = TcpListener::bind("127.0.0.1:0")
+            .await
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        let error = super::connect("127.0.0.1", closed).await.err().unwrap();
+        assert_eq!(error.kind(), "syncRefused");
+    }
+
+    #[tokio::test]
+    async fn falls_back_to_any_port_when_the_preferred_one_is_taken() {
+        let taken = TcpListener::bind("0.0.0.0:0").await.unwrap();
+        let busy = taken.local_addr().unwrap().port();
+        let (_listener, port) = bind_preferring(busy).await.unwrap();
+        assert_ne!(port, busy);
+    }
 }

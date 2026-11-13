@@ -10,6 +10,7 @@ import { GRID_COLUMN_OPTIONS, GRID_COLUMNS_DEFAULT } from '../../../lib/useGridC
 import { useHideWatched } from '../../../lib/useWatchedFilter';
 import { BlockedKeywordsPanel } from '../BlockedKeywordsPanel';
 import { LibrarySectionsGroup } from '../LibrarySectionsGroup';
+import { startPageChoices, startPagePath, START_PAGES } from '../../../lib/startPage';
 import { HOVER_PREVIEW_MODES, HOVER_PREVIEW_MODE_LABELS, useHoverPreviewMode } from '../../../lib/hoverPreviewMode';
 
 export function ContentTab() {
@@ -50,6 +51,10 @@ export function ContentTab() {
   const [musicNav, setMusicNav] = useBoolPref(SETTINGS.MUSIC_NAVIGATION_ENABLED, true);
   const [musicContent, setMusicContent] = useBoolPref(SETTINGS.MUSIC_CONTENT_ENABLED, true);
   const [categoriesTab, setCategoriesTab] = useBoolPref(SETTINGS.CATEGORIES_NAV_TAB_ENABLED, false);
+  const [startPage, setStartPage] = usePreference(SETTINGS.DEFAULT_NAV_TAB_INDEX);
+  const startPageVisibility = { shorts: shortsContent && shortsNav, music: musicContent && musicNav, explore: categoriesTab };
+  // A page turned off since it was picked opens Home, so the select shows Home too.
+  const startPageValue = START_PAGES.find((page) => page.path === startPagePath(startPage, startPageVisibility))?.value ?? '0';
   const [homeMaxVideoAge, setHomeMaxVideoAge] = usePreference(SETTINGS.HOME_MAX_VIDEO_AGE, '0');
 
   return (
@@ -174,6 +179,13 @@ export function ContentTab() {
       <LibrarySectionsGroup />
 
       <SettingsGroup title={getString('settings_group_nav_tabs')}>
+        <SettingItem title={getString('settings_start_page')} description={getString('settings_start_page_desc')}>
+          <Select
+            value={startPageValue}
+            onChange={setStartPage}
+            options={startPageChoices(startPageVisibility).map((page) => ({ value: page.value, label: getString(page.label) }))}
+          />
+        </SettingItem>
         <SettingItem title={getString('settings_tabs_enabled')} description={getString('settings_tabs_enabled_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.TABS_ENABLED)}><ToggleSwitch checked={tabsOn} onChange={setTabsOn} disabled={isSettingDisabledUntilWired(SETTINGS.TABS_ENABLED)} /></SettingItem>
         <SettingItem title={getString('settings_shorts_tab')} disabled={!shortsContent || isSettingDisabledUntilWired(SETTINGS.SHORTS_NAVIGATION_ENABLED)}><ToggleSwitch checked={shortsNav} onChange={setShortsNav} disabled={!shortsContent || isSettingDisabledUntilWired(SETTINGS.SHORTS_NAVIGATION_ENABLED)} /></SettingItem>
         <SettingItem title={getString('settings_music_tab')} disabled={!musicContent || isSettingDisabledUntilWired(SETTINGS.MUSIC_NAVIGATION_ENABLED)}><ToggleSwitch checked={musicNav} onChange={setMusicNav} disabled={!musicContent || isSettingDisabledUntilWired(SETTINGS.MUSIC_NAVIGATION_ENABLED)} /></SettingItem>

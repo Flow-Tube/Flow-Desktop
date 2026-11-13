@@ -17,6 +17,9 @@ use crate::db::settings::{get_setting, set_setting};
 
 const ADDRESSES: &str = "sync2_lan_addresses";
 const PORT: &str = "sync2_lan_port";
+/// The port a first launch tries, so a firewall rule for it works. Shared with the packaged
+/// firewalld service and ufw profile.
+pub const LINKED_PORT: u16 = 47900;
 /// A member met this recently counts as on the same network.
 const NEARBY_MS: i64 = 10 * 60 * 1000;
 
@@ -138,25 +141,57 @@ pub async fn save_addresses(app: &AppHandle, pool: &SqlitePool, saved: &mut Addr
     }
 }
 
-/// Listens on the port used last when it is free, so members that kept it still reach this device.
+/// The first of `ports` that binds, or any free port.
+async fn bind_first_free(ports: impl IntoIterator<Item = u16>) -> std::io::Result<TcpListener> {
+    for port in ports {
+        if let Ok(listener) = TcpListener::bind(("0.0.0.0", port)).await {
+            return Ok(listener);
+        }
+    }
+    TcpListener::bind("0.0.0.0:0").await
+}
+
+/// Listens on the port used last when it is free, so members that kept it still reach this device,
+/// then on [`LINKED_PORT`], then on any free port.
 pub async fn listen(pool: &SqlitePool) -> std::io::Result<TcpListener> {
     let last = get_setting(pool, PORT)
         .await
         .ok()
         .flatten()
         .and_then(|port| port.parse::<u16>().ok());
-    let reused = match last {
-        Some(port) => TcpListener::bind(("0.0.0.0", port)).await.ok(),
-        None => None,
-    };
-    let listener = match reused {
-        Some(listener) => listener,
-        None => TcpListener::bind("0.0.0.0:0").await?,
-    };
+    let listener = bind_first_free(last.into_iter().chain([LINKED_PORT])).await?;
     let port = listener.local_addr()?.port();
     SERVICE_PORT.store(port, Ordering::Relaxed);
     if last != Some(port) {
         let _ = set_setting(pool, PORT, &port.to_string()).await;
     }
     Ok(listener)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::bind_first_free;
+    use tokio::net::TcpListener;
+
+    #[tokio::test]
+    async fn skips_ports_that_are_taken() {
+        let taken = TcpListener::bind("0.0.0.0:0").await.unwrap();
+        let busy = taken.local_addr().unwrap().port();
+        let free = TcpListener::bind("0.0.0.0:0")
+            .await
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        let listener = bind_first_free([busy, free]).await.unwrap();
+        assert_eq!(listener.local_addr().unwrap().port(), free);
+    }
+
+    #[tokio::test]
+    async fn binds_some_port_when_every_choice_is_taken() {
+        let taken = TcpListener::bind("0.0.0.0:0").await.unwrap();
+        let busy = taken.local_addr().unwrap().port();
+        let listener = bind_first_free([busy]).await.unwrap();
+        assert_ne!(listener.local_addr().unwrap().port(), busy);
+    }
 }

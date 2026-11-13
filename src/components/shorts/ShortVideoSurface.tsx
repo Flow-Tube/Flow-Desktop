@@ -973,14 +973,17 @@ export function ShortVideoSurface({
               setContextMenu(null);
             }}
           />
-          <ContextMenuButton
-            icon={<PictureInPicture2 size={20} />}
-            label={getString('player_menu_miniplayer')}
-            onClick={() => {
-              togglePictureInPicture();
-              setContextMenu(null);
-            }}
-          />
+          {/* WebKitGTK has no picture-in-picture, so the item would do nothing on Linux. */}
+          {document.pictureInPictureEnabled && (
+            <ContextMenuButton
+              icon={<PictureInPicture2 size={20} />}
+              label={getString('player_menu_miniplayer')}
+              onClick={() => {
+                togglePictureInPicture();
+                setContextMenu(null);
+              }}
+            />
+          )}
           <ContextMenuButton
             icon={<Link size={20} />}
             label={getString('player_menu_copy_url')}

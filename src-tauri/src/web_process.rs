@@ -5,8 +5,8 @@
 //! last frame and stops responding, and the single-instance plugin hands every
 //! new launch to that frozen window, so restarting Flow doesn't help either.
 //! Reloading brings the page back. A page that keeps crashing quits the app
-//! instead, which releases the single-instance lock so the next launch, with
-//! the startup tiers in `linux_startup`, starts clean.
+//! instead, which releases the single-instance lock, and records the crash
+//! loop so the next launch starts one startup tier (see `linux_startup`) higher.
 
 use std::time::{Duration, Instant};
 
@@ -63,7 +63,10 @@ pub fn watch<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
                 );
                 match recovery {
                     Recovery::Reload => view.reload(),
-                    Recovery::Quit => app.exit(1),
+                    Recovery::Quit => {
+                        crate::linux_startup::record_crash_loop(&app.config().identifier);
+                        app.exit(1);
+                    }
                 }
             });
     });

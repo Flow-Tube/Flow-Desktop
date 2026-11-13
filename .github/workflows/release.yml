@@ -128,16 +128,19 @@ jobs:
             appimage: aarch64
             asset_arch: (aarch64|arm64)
             args: --target aarch64-unknown-linux-gnu --bundles appimage
+          # The DMG is for first installs. The app bundle is what the updater
+          # installs: Tauri signs it as .app.tar.gz and lists it under darwin-*
+          # in latest.json, which a DMG-only build never did.
           - name: macOS Intel
             slug: macos-x64
             runner: macos-15-intel
             target: x86_64-apple-darwin
-            args: --target x86_64-apple-darwin --bundles dmg
+            args: --target x86_64-apple-darwin --bundles app,dmg
           - name: macOS Apple Silicon
             slug: macos-arm64
             runner: macos-15
             target: aarch64-apple-darwin
-            args: --target aarch64-apple-darwin --bundles dmg
+            args: --target aarch64-apple-darwin --bundles app,dmg
 
     runs-on: ${{ matrix.runner }}
 
@@ -223,6 +226,7 @@ jobs:
           args: >-
             ${{ matrix.args }}
             ${{ needs.prepare.outputs.is_prerelease == 'true' && '--config src-tauri/tauri.prerelease.conf.json' || '' }}
+            ${{ needs.prepare.outputs.is_prerelease == 'true' && runner.os == 'Linux' && '--config src-tauri/tauri.prerelease.linux.conf.json' || '' }}
 
       # The RPM bundler rejects "-" in a version, so a prerelease RPM is packaged
       # as e.g. 0.1.0+beta3 from the binary tauri-action already built. Only the
@@ -236,10 +240,17 @@ jobs:
           version="${{ needs.prepare.outputs.version }}"
           configs=()
           if [[ "${{ needs.prepare.outputs.is_prerelease }}" == "true" ]]; then
-            configs+=(--config src-tauri/tauri.prerelease.conf.json)
+            configs+=(--config src-tauri/tauri.prerelease.conf.json --config src-tauri/tauri.prerelease.linux.conf.json)
           fi
           configs+=(--config "{\"version\":\"${version/-/+}\",\"bundle\":{\"createUpdaterArtifacts\":false}}")
           pnpm tauri bundle --target ${{ matrix.target }} --bundles rpm "${configs[@]}"
+
+      - name: Check the Linux packages
+        if: matrix.rpm
+        run: >-
+          bash scripts/check-linux-packages.sh
+          src-tauri/target/${{ matrix.target }}/release/bundle
+          ${{ needs.prepare.outputs.is_prerelease == 'true' && 'flow-desktop-beta' || 'flow-desktop' }}
 
       - name: Upload the RPM to the release and sign it
         if: matrix.rpm && startsWith(github.ref, 'refs/tags/')
@@ -445,4 +456,73 @@ jobs:
           jq --arg notes "$APP_NOTES" '.notes = $notes' latest.json > latest.json.tmp
           mv latest.json.tmp latest.json
 
+          # Every platform that can update itself must be in the manifest, or its
+          # installs silently stay on this version.
+          for key in darwin-x86_64 darwin-aarch64 windows-x86_64 windows-aarch64 linux-x86_64 linux-aarch64; do
+            jq -e --arg key "$key" '.platforms[$key].url and .platforms[$key].signature' latest.json > /dev/null \
+              || { echo "::error::latest.json has no $key update"; exit 1; }
+          done
+
           gh release upload "$tag" latest.json --clobber --repo "$GITHUB_REPOSITORY"
+
+  # Publishes flow-desktop and flow-desktop-bin for every tag, betas included,
+  # since the AUR packages follow the betas until 0.1.0. The pkgver is the tag
+  # without its dash: v0.1.0-beta3 is 0.1.0beta3, which sorts before 0.1.0.
+  # Nightly tags are skipped, and flow-desktop-git is never published from CI:
+  # the AUR rules don't want commits that only bump a VCS package's pkgver.
+  aur:
+    name: Publish ${{ matrix.package }} to the AUR
+    needs: [prepare, publish]
+    if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref_name, 'nightly')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [flow-desktop, flow-desktop-bin]
+    env:
+      AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+
+    steps:
+      - name: Skip without an AUR key
+        if: env.AUR_SSH_PRIVATE_KEY == ''
+        run: echo "::notice::AUR_SSH_PRIVATE_KEY is not set, so ${{ matrix.package }} was not published to the AUR."
+
+      - name: Check out repository
+        if: env.AUR_SSH_PRIVATE_KEY != ''
+        uses: actions/checkout@v7
+
+      - name: Set pkgver from the tag
+        id: version
+        if: env.AUR_SSH_PRIVATE_KEY != ''
+        env:
+          TAG: ${{ needs.prepare.outputs.tag }}
+          PKGBUILD: packaging/aur/${{ matrix.package }}/PKGBUILD
+        shell: bash
+        run: |
+          set -euo pipefail
+          pkgver="${TAG#v}"
+          pkgver="${pkgver//-/}"
+          if [[ ! $pkgver =~ ^[0-9]+(\.[0-9]+)*((alpha|beta|rc)[0-9]*)?$ ]]; then
+            echo "::error::Tag $TAG does not map to an AUR pkgver."
+            exit 1
+          fi
+          sed -i "s/^pkgver=.*/pkgver=$pkgver/; s/^pkgrel=.*/pkgrel=1/" "$PKGBUILD"
+          grep -E '^pkg(ver|rel)=' "$PKGBUILD"
+          echo "pkgver=$pkgver" >> "$GITHUB_OUTPUT"
+
+      # updpkgsums downloads the tag's source tarball or both release .debs,
+      # which the publish job has uploaded by now.
+      - name: Publish to the AUR
+        if: env.AUR_SSH_PRIVATE_KEY != ''
+        uses: KSXGitHub/github-actions-deploy-aur@084b0d9b15415bf9cdb65d44dad1efe37a354050 # v4.2.0
+        with:
+          pkgname: ${{ matrix.package }}
+          pkgbuild: packaging/aur/${{ matrix.package }}/PKGBUILD
+          updpkgsums: true
+          commit_username: ${{ secrets.AUR_USERNAME }}
+          commit_email: ${{ secrets.AUR_EMAIL }}
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: Update to ${{ steps.version.outputs.pkgver }}

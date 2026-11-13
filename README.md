@@ -12,6 +12,7 @@
   <a href="https://github.com/Flow-Tube/Flow-Desktop/releases/latest"><picture><source media="(prefers-color-scheme: dark)" srcset="https://assets.flow-tube.org/v1/badges/pill/get-windows-dark.svg"><img alt="Download for Windows" src="https://assets.flow-tube.org/v1/badges/pill/get-windows-light.svg" height="60"></picture></a>
   <a href="https://github.com/Flow-Tube/Flow-Desktop/releases/latest"><picture><source media="(prefers-color-scheme: dark)" srcset="https://assets.flow-tube.org/v1/badges/pill/get-macos-dark.svg"><img alt="Download for macOS" src="https://assets.flow-tube.org/v1/badges/pill/get-macos-light.svg" height="60"></picture></a>
   <a href="https://github.com/Flow-Tube/Flow-Desktop/releases/latest"><picture><source media="(prefers-color-scheme: dark)" srcset="https://assets.flow-tube.org/v1/badges/pill/get-linux-dark.svg"><img alt="Download for Linux" src="https://assets.flow-tube.org/v1/badges/pill/get-linux-light.svg" height="60"></picture></a>
+  <a href="https://flatpark.org/apps/io.github.aedev.flow.desktop/"><img alt="Get it on FlatPark" src="https://flatpark.org/badges/get-it-on-flatpark.svg" height="60"></a>
   </p>
   <p>
   <a href="#downloads-and-supported-systems"><picture><source media="(prefers-color-scheme: dark)" srcset="https://assets.flow-tube.org/v1/badges/split/desktop-dark.svg"><img alt="Desktop: Windows · macOS · Linux" src="https://assets.flow-tube.org/v1/badges/split/desktop-light.svg" height="32"></picture></a>
@@ -64,15 +65,42 @@ Release builds are published through [GitHub Releases](https://github.com/Flow-T
 
 - **Stable:** reviewed releases intended for normal use.
 - **Beta / RC:** public GitHub prereleases for wider testing. These install as **Flow Beta** with isolated application data.
-- **Nightly:** automatic snapshots from `main`. These install as **Flow Nightly**, use isolated data, and may be unstable. Download the latest packages from [GitHub Actions](https://github.com/Flow-Tube/Flow-Desktop/actions/workflows/build.yml) or [nightly.link](https://nightly.link/Flow-Tube/Flow-Desktop/workflows/build/main) without a GitHub account.
+- **Nightly:** automatic snapshots from `main`. These install as **Flow Nightly**, use isolated data, and may be unstable. Download the latest packages from the [Nightly release](https://github.com/Flow-Tube/Flow-Desktop/releases/tag/nightly), which every new build replaces.
 
 | Platform | Supported versions | Architectures | Packages |
 | --- | --- | --- | --- |
 | Windows | Windows 10 22H2, Windows 11 | x64, ARM64 | NSIS installer |
 | macOS | macOS 13 Ventura or later | Intel x64, Apple Silicon | DMG |
-| Linux | Ubuntu 22.04+, Debian 12+, and comparable modern distributions | x64, ARM64 | AppImage, `.deb`, `.rpm` |
+| Linux | Ubuntu 22.04+, Debian 12+, and comparable modern distributions | x64, ARM64 | AppImage, `.deb`, `.rpm`, Flatpak ([FlatPark](https://flatpark.org/apps/io.github.aedev.flow.desktop/)) |
 
-Linux builds require a compatible glibc, GTK 3, and WebKitGTK 4.1 environment. Legacy 32-bit systems are not supported.
+Linux builds require a compatible glibc, GTK 3, and WebKitGTK 4.1 environment. Legacy 32-bit systems are not supported. See [docs/LINUX.md](docs/LINUX.md) for which package to pick, graphics problems, codecs, sync and moving from Beta to Stable.
+
+### Opening Flow on macOS
+
+Flow isn't signed with an Apple Developer ID or notarized yet, so the first launch is blocked with a message such as "Apple could not verify Flow is free of malware" or "Flow is damaged and can't be opened". To open it:
+
+1. Open the DMG and drag Flow into your Applications folder. Flow can only update itself from there.
+2. In Terminal, remove the download mark macOS puts on the app:
+
+   ```sh
+   xattr -dr com.apple.quarantine /Applications/Flow.app
+   ```
+
+   For a Beta or Nightly build, use `"/Applications/Flow Beta.app"` or `"/Applications/Flow Nightly.app"`, with the quotes.
+3. Open Flow as usual.
+
+Without Terminal: try to open Flow once, then go to **System Settings > Privacy & Security**, scroll down to the message about Flow and click **Open Anyway**. Updates Flow installs itself don't need this again.
+
+### Flatpak (FlatPark)
+
+[FlatPark](https://flatpark.org/apps/io.github.aedev.flow.desktop/) offers Flow as a Flatpak. It downloads the official `.deb` from this repository's releases, unmodified, at install time, and runs it on the GNOME runtime with its codecs, so H.264, VP9 and AV1 all play. Updates come through Flatpak; Flow's own updater stays off there.
+
+```sh
+flatpak remote-add --if-not-exists flatpark https://dl.flatpark.org/flatpark.flatpakrepo
+flatpak install flatpark io.github.aedev.flow.desktop
+```
+
+FlatPark follows the latest GitHub release, betas included, and not the nightly builds. The packaging lives in the [FlatPark registry](https://github.com/flatpark/flatpark/tree/main/registry/io.github.aedev.flow.desktop), where packaging issues go.
 
 ### Linux media codecs
 
@@ -94,7 +122,7 @@ rm squashfs-root/usr/lib/*wayland*so*
 ./squashfs-root/AppRun
 ```
 
-On Arch-family distributions the AUR package and the planned Flatpak build avoid this class of issue; prefer those when available.
+The `.deb`, `.rpm` and the FlatPark Flatpak use the system's or the runtime's own libraries and avoid this class of issue; prefer those when the AppImage fails.
 
 ---
 

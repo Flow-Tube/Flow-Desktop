@@ -17,6 +17,7 @@ import { PLAYER_BUTTON_ROWS, type PlayerButtonRow } from '../../../lib/playerBut
 import { audioLanguageOptions } from '../../../lib/audioLanguages';
 import { NO_PREFERRED_LANGUAGE } from '../../../lib/settings/playerRuntime';
 import { APP_LOCALE } from '../../../lib/i18n/index';
+import { useCanPinWindows } from '../../../lib/graphicsReport';
 
 const AUTOPLAY_DELAY_OPTIONS = [0, 3, 5, 10, 15, 20, 30];
 
@@ -53,6 +54,7 @@ export function PlayerTab() {
   const [speedSlider, setSpeedSlider] = useBoolPref(SETTINGS.SPEED_SLIDER_ENABLED, false);
 
   const [doubleTapSeek, setDoubleTapSeek] = useNumberPref(SETTINGS.DOUBLE_TAP_SEEK_SECONDS, 10);
+  const [doubleClickSeek, setDoubleClickSeek] = useBoolPref(SETTINGS.DOUBLE_CLICK_SEEK_ENABLED, true);
 
   const [subtitles, setSubtitles] = useBoolPref(SETTINGS.SUBTITLES_ENABLED, false);
   const [subtitleLang, setSubtitleLang] = usePreference(SETTINGS.PREFERRED_SUBTITLE_LANGUAGE, 'en');
@@ -86,6 +88,7 @@ export function PlayerTab() {
   const [pipButton, setPipButton] = useBoolPref(SETTINGS.MANUAL_PIP_BUTTON_ENABLED, true);
   const [pipSeparateWindow, setPipSeparateWindow] = useBoolPref(SETTINGS.PIP_SEPARATE_WINDOW, true);
   const [pipAlwaysOnTop, setPipAlwaysOnTop] = useBoolPref(SETTINGS.PIP_ALWAYS_ON_TOP, true);
+  const canPinWindows = useCanPinWindows();
   const [pipOnMinimize, setPipOnMinimize] = useBoolPref(SETTINGS.PIP_ON_MINIMIZE, true);
 
   return (
@@ -166,6 +169,9 @@ export function PlayerTab() {
             { value: '20', label: '20s' }, { value: '30', label: '30s' },
           ]} />
         </SettingItem>
+        <SettingItem title={getString('settings_double_click_seek')} description={getString('settings_double_click_seek_desc')}>
+          <ToggleSwitch checked={doubleClickSeek} onChange={setDoubleClickSeek} />
+        </SettingItem>
       </SettingsGroup>
 
       <SettingsGroup title={getString('settings_group_subtitles')}>
@@ -214,9 +220,11 @@ export function PlayerTab() {
         <SettingItem title={getString('settings_pip_separate_window')} description={getString('settings_pip_separate_window_desc')}>
           <ToggleSwitch checked={pipSeparateWindow} onChange={setPipSeparateWindow} />
         </SettingItem>
-        <SettingItem title={getString('settings_pip_always_on_top')} description={getString('settings_pip_always_on_top_desc')} disabled={!pipSeparateWindow}>
-          <ToggleSwitch checked={pipAlwaysOnTop} onChange={setPipAlwaysOnTop} disabled={!pipSeparateWindow} />
-        </SettingItem>
+        {canPinWindows && (
+          <SettingItem title={getString('settings_pip_always_on_top')} description={getString('settings_pip_always_on_top_desc')} disabled={!pipSeparateWindow}>
+            <ToggleSwitch checked={pipAlwaysOnTop} onChange={setPipAlwaysOnTop} disabled={!pipSeparateWindow} />
+          </SettingItem>
+        )}
         <SettingItem title={getString('settings_pip_on_minimize')} description={getString('settings_pip_on_minimize_desc')} disabled={!pipSeparateWindow}>
           <ToggleSwitch checked={pipOnMinimize} onChange={setPipOnMinimize} disabled={!pipSeparateWindow} />
         </SettingItem>

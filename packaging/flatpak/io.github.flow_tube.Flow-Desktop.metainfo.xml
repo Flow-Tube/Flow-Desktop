@@ -51,6 +51,15 @@
   </requires>
 
   <releases>
+    <release version="0.1.0-beta3" date="2026-10-28" type="development">
+      <url type="details">https://github.com/Flow-Tube/Flow-Desktop/releases/tag/v0.1.0-beta3</url>
+      <description>
+        <p>A rebuilt music experience with radio, an equalizer, word-by-word
+        lyrics and music controls in the system tray, scrobbling to Last.fm,
+        Libre.fm and ListenBrainz, tabs and extra windows, and many fixes for
+        playback, Linux startup and packaging.</p>
+      </description>
+    </release>
     <release version="0.1.0-beta2" date="2026-08-26" type="development">
       <url type="details">https://github.com/Flow-Tube/Flow-Desktop/releases/tag/v0.1.0-beta2</url>
       <description>

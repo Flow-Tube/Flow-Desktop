@@ -1,7 +1,7 @@
 # Maintainer: A-EDev
 
 pkgname=flow-desktop
-pkgver=0.1.0beta2
+pkgver=0.1.0beta3
 pkgrel=1
 # Release tags are v0.1.0-beta3 or v0.1.0; pkgver can't hold a "-".
 _tag=${pkgver/beta/-beta}
@@ -34,9 +34,9 @@ conflicts=("$pkgname-bin")
 # The release profile already strips symbols, so a debug package would be empty.
 options=('!debug')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$_tag.tar.gz")
-sha256sums=('c812728e887ffe35480f432313169be682e198d1f961bfaf56911d0d95a00e16')
+sha256sums=('96bf1ee079042b181102f8f32a866aef6546d99d03cbb49850abb50f376f431a')
 
-# --- Shared flow-desktop install steps: keep identical in both PKGBUILDs. ---
+# --- Shared flow-desktop install steps: keep identical in every PKGBUILD. ---
 
 # The release workflow builds every tag with a "-" (betas, release
 # candidates) with src-tauri/tauri.prerelease.conf.json, which renames the app.
@@ -50,7 +50,7 @@ _flow_product() {
 
 # Installs the data tree of a Flow .deb into $pkgdir.
 _flow_install() {
-  local data=$1 product resdir desktop
+  local data=$1 product resdir desktop bin
   product=$(_flow_product)
   resdir="$pkgdir/usr/lib/$product"
   desktop="$pkgdir/usr/share/applications/$product.desktop"
@@ -61,10 +61,18 @@ _flow_install() {
     return 1
   fi
 
-  # /usr/bin/flow belongs to the AUR's flow and flow-bin packages.
-  mv "$pkgdir/usr/bin/flow" "$pkgdir/usr/bin/flow-desktop"
-  sed -Ei 's/^(Exec|StartupWMClass)=flow( |$)/\1=flow-desktop\2/' "$desktop"
-  if grep -Eq '^Exec=flow( |$)' "$desktop"; then
+  # The AUR ships one name for every channel. Releases up to 0.1.0-beta3
+  # install /usr/bin/flow, which belongs to the AUR's flow and flow-bin
+  # packages; later ones install flow-desktop, or flow-desktop-beta for betas.
+  local bin
+  for bin in flow flow-desktop-beta; do
+    if [[ -e $pkgdir/usr/bin/$bin ]]; then
+      mv "$pkgdir/usr/bin/$bin" "$pkgdir/usr/bin/flow-desktop"
+    fi
+  done
+  sed -Ei 's/^(Exec|StartupWMClass)=flow(-desktop-beta)?( |$)/\1=flow-desktop\3/' "$desktop"
+  if [[ ! -x $pkgdir/usr/bin/flow-desktop ]] ||
+    grep -E '^Exec=' "$desktop" | grep -Evq '^Exec=flow-desktop( |$)'; then
     error "Could not point $product.desktop at flow-desktop."
     return 1
   fi

@@ -1,0 +1,4 @@
+[flow-desktop]
+title=Flow Desktop
+description=Sync between Flow Desktop and Flow for Android on the local network
+ports=47900:47901/tcp|5353/udp

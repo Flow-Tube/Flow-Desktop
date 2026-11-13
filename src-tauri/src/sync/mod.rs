@@ -10,6 +10,7 @@ pub mod compat;
 pub mod crypto;
 pub mod error;
 pub mod export;
+pub mod firewall;
 pub mod frames;
 pub mod identity;
 pub mod ledger;

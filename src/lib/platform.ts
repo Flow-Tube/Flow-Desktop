@@ -10,6 +10,7 @@ export const IS_LINUX_RUNTIME =
   typeof navigator !== "undefined" &&
   /Linux/i.test(navigator.userAgent) &&
   !/Android/i.test(navigator.userAgent);
+export const IS_WINDOWS_RUNTIME = typeof navigator !== "undefined" && /Windows/i.test(navigator.userAgent);
 export const IS_MACOS_RUNTIME = (() => {
   try {
     return platform() === "macos";

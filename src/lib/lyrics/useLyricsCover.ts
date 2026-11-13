@@ -27,7 +27,8 @@ export function lyricsBackgroundOptions(): Array<{ value: LyricsBackground; labe
   return all.map((value) => ({ value, label: getString(`lyrics_background_${value}`) }));
 }
 
-function read(image: HTMLImageElement): LyricsCover | null {
+/** The cover's colour field, or null when the canvas may not read it back. */
+export function readLyricsCover(image: HTMLImageElement): LyricsCover | null {
   const canvas = document.createElement("canvas");
   canvas.width = COVER_CELLS;
   canvas.height = COVER_CELLS;
@@ -64,7 +65,7 @@ export function useLyricsCover(src: string | null | undefined, enabled: boolean)
       while (cache.size > CACHE_SIZE) cache.delete(cache.keys().next().value!);
       if (!cancelled) setCover(result);
     };
-    image.onload = () => done(read(image));
+    image.onload = () => done(readLyricsCover(image));
     image.onerror = () => done(null);
     image.src = src;
     return () => {

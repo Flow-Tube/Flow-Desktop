@@ -2,11 +2,12 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from "re
 
 import { useUiStore } from "../../store/useUiStore";
 import type { RecapSummary } from "../api/recap";
-import { saveRecapPoster } from "../api/files";
+import { savePngImage } from "../api/files";
 import { copyPng } from "../clipboard";
 import { getString } from "../i18n/index";
 import { useChannelAvatar } from "../useChannelAvatar";
-import { blobToBase64, loadPosterImage, posterData, posterPalette, renderPosterBlob } from "./recapPoster";
+import { blobToBase64, loadCanvasImage } from "../canvasImage";
+import { posterData, posterPalette, renderPosterBlob } from "./recapPoster";
 
 /** Builds the poster once per summary, for showing, saving as a PNG and copying. */
 export function useRecapPoster(summary: RecapSummary, period: string, periodLabel: string, tint: CSSProperties) {
@@ -23,7 +24,7 @@ export function useRecapPoster(summary: RecapSummary, period: string, periodLabe
     let cancelled = false;
     let url: string | null = null;
     setFailed(false);
-    const rendering = Promise.all([loadPosterImage(channelImage), loadPosterImage(artistImage)]).then(([channelPicture, artistPicture]) =>
+    const rendering = Promise.all([loadCanvasImage(channelImage), loadCanvasImage(artistImage)]).then(([channelPicture, artistPicture]) =>
       renderPosterBlob(posterData(summary, periodLabel), { channel: channelPicture, artist: artistPicture }, posterPalette(tint)),
     );
     blob.current = rendering;
@@ -46,7 +47,7 @@ export function useRecapPoster(summary: RecapSummary, period: string, periodLabe
     const image = await blob.current;
     if (!image) return;
     try {
-      const saved = await saveRecapPoster(await blobToBase64(image), `flow-recap-${period}.png`, getString("recap_story_save"));
+      const saved = await savePngImage(await blobToBase64(image), `flow-recap-${period}.png`, getString("recap_story_save"));
       if (saved) showToast({ variant: "success", message: getString("recap_story_saved") });
     } catch (error) {
       console.warn("Failed to save the recap poster", error);

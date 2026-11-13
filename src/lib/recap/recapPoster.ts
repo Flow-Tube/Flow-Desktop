@@ -1,10 +1,9 @@
 import type { CSSProperties } from "react";
 
 import type { RecapSummary } from "../api/recap";
-import { proxyImageUrl } from "../api/images";
 import { getPlural, getString } from "../i18n/index";
-import { proxiedImage } from "../imageProxy";
-import { useImageProxyStore } from "../../store/useImageProxyStore";
+import { fitText } from "../canvasImage";
+import { resolveCssColors } from "../color/resolveCssColor";
 import { INSIGHT_LABELS, spentTimeLabel } from "./recapFormat";
 
 export const POSTER_WIDTH = 1080;
@@ -16,7 +15,6 @@ const MAX_PORTRAIT = 520;
 /** How much of a portrait the second one covers. */
 const PORTRAIT_OVERLAP = 0.24;
 const HEADER_BOTTOM = PADDING + 136;
-const LOAD_TIMEOUT_MS = 5_000;
 
 export interface PosterData {
   periodLabel: string;
@@ -58,30 +56,12 @@ export interface PosterPalette {
  * so they are resolved through an element first.
  */
 export function posterPalette(tint: CSSProperties): PosterPalette {
-  const probe = document.createElement("div");
-  for (const [name, value] of Object.entries(tint)) probe.style.setProperty(name, String(value));
-  document.body.append(probe);
-  const resolve = (color: string) => {
-    probe.style.color = color;
-    return getComputedStyle(probe).color;
-  };
-  const palette = {
-    ground: resolve("var(--story-accent)"),
-    ink: resolve("var(--story-ground)"),
-    tile: resolve("var(--story-raised)"),
-    tileInk: resolve("var(--color-on-surface)"),
-    font: getComputedStyle(document.body).fontFamily,
-  };
-  probe.remove();
-  return palette;
-}
-
-/** Shortens `text` with an ellipsis until it fits. */
-export function fitText(ctx: Pick<CanvasRenderingContext2D, "measureText">, text: string, maxWidth: number): string {
-  if (ctx.measureText(text).width <= maxWidth) return text;
-  let end = text.length;
-  while (end > 0 && ctx.measureText(`${text.slice(0, end)}…`).width > maxWidth) end--;
-  return `${text.slice(0, end).trimEnd()}…`;
+  const variables = Object.fromEntries(Object.entries(tint).map(([name, value]) => [name, String(value)]));
+  const [ground, ink, tile, tileInk] = resolveCssColors(
+    ["var(--story-accent)", "var(--story-ground)", "var(--story-raised)", "var(--color-on-surface)"],
+    variables,
+  );
+  return { ground: ground!, ink: ink!, tile: tile!, tileInk: tileInk!, font: getComputedStyle(document.body).fontFamily };
 }
 
 function drawPortrait(
@@ -213,31 +193,6 @@ export function drawPoster(
   if (data.artistName) drawPortrait(ctx, images.artist, data.artistName, portraitX, portraitsY, size, ink, ground, font);
 }
 
-/** An image the canvas may read back, through the local proxy that allows it; null if it won't load. */
-export async function loadPosterImage(url: string | null | undefined): Promise<HTMLImageElement | null> {
-  if (!url) return null;
-  try {
-    const routed = proxiedImage(url, useImageProxyStore.getState().base);
-    const src = routed !== url ? routed : await proxyImageUrl(url);
-    return await new Promise((resolve) => {
-      const image = new Image();
-      const timeout = setTimeout(() => resolve(null), LOAD_TIMEOUT_MS);
-      image.crossOrigin = "anonymous";
-      image.onload = () => {
-        clearTimeout(timeout);
-        resolve(image);
-      };
-      image.onerror = () => {
-        clearTimeout(timeout);
-        resolve(null);
-      };
-      image.src = src;
-    });
-  } catch {
-    return null;
-  }
-}
-
 /** Draws the poster and encodes it. A portrait that can't be read back never loses the poster. */
 export async function renderPosterBlob(
   data: PosterData,
@@ -262,16 +217,4 @@ export async function renderPosterBlob(
       }
     });
   return (await encode(images)) ?? (await encode({ channel: null, artist: null }));
-}
-
-export function blobToBase64(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(reader.error ?? new Error("Couldn't read the image"));
-    reader.onload = () => {
-      const url = String(reader.result);
-      resolve(url.slice(url.indexOf(",") + 1));
-    };
-    reader.readAsDataURL(blob);
-  });
 }

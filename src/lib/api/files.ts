@@ -12,3 +12,8 @@ export async function writeLyricsFile(path: string, contents: string): Promise<v
 export async function saveRecapPoster(base64: string, suggestedName: string, title: string): Promise<boolean> {
   return invokeBackend<boolean>("save_recap_poster", { base64, suggestedName, title });
 }
+
+/** Asks where to save an exported PNG image (given as base64) and saves it. False when cancelled. */
+export async function savePngImage(base64: string, suggestedName: string, title: string): Promise<boolean> {
+  return saveRecapPoster(base64, suggestedName, title);
+}

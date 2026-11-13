@@ -242,6 +242,13 @@ jobs:
           configs+=(--config "{\"version\":\"${version/-/+}\",\"bundle\":{\"createUpdaterArtifacts\":false}}")
           pnpm tauri bundle --target ${{ matrix.target }} --bundles rpm "${configs[@]}"
 
+      - name: Check the Linux packages
+        if: matrix.rpm
+        run: >-
+          bash scripts/check-linux-packages.sh
+          src-tauri/target/${{ matrix.target }}/release/bundle
+          ${{ needs.prepare.outputs.is_prerelease == 'true' && 'flow-desktop-beta' || 'flow-desktop' }}
+
       - name: Upload the RPM to the release and sign it
         if: matrix.rpm && startsWith(github.ref, 'refs/tags/')
         env:

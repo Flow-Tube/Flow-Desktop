@@ -207,6 +207,7 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     { title: "settings_shorts_auto_scroll_seconds" },
     { title: "settings_show_music_content", summary: "settings_show_music_content_desc", keywords: ["hide music", "no music", "youtube music"] },
     { title: "settings_group_library_sections", keywords: ["library", "hide", "history", "playlists", "albums", "likes", "downloads"] },
+    { title: "settings_start_page", summary: "settings_start_page_desc" },
     { title: "settings_tabs_enabled", summary: "settings_tabs_enabled_desc" },
     { title: "settings_shorts_tab" },
     { title: "settings_music_tab" },

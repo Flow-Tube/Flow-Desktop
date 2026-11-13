@@ -1189,6 +1189,8 @@
   "settings_speed_slider": "Speed Slider",
   "settings_speed_slider_desc": "Show a continuous speed slider instead of presets",
   "settings_group_seek": "Seek",
+  "settings_start_page": "Start page",
+  "settings_start_page_desc": "The page Flow opens on. Open tabs from the last run still come back first.",
   "settings_seek_interval": "Seek Interval",
   "settings_seek_interval_desc": "Seconds to skip forward or backward",
   "settings_double_click_seek": "Double-click sides to seek",

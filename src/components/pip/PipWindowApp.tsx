@@ -13,6 +13,7 @@ import { useMusicTray } from "../../lib/useMusicTray";
 import { usePlayerStore } from "../../store/usePlayerStore";
 import { WindowResizeEdges } from "../ui/WindowResizeEdges";
 import { FlowPlayerCore } from "../watch/FlowPlayerCore";
+import { useCanPinWindows } from "../../lib/graphicsReport";
 
 const chromeButton =
   "grid h-7 w-7 shrink-0 place-items-center rounded-full text-chrome-white/90 transition-colors hover:bg-chrome-white/15 hover:text-chrome-white";
@@ -26,6 +27,7 @@ const chromeButton =
 export function PipWindowApp() {
   const { status, alwaysOnTop, toggleAlwaysOnTop, returnToMainWindow, closeWindow } =
     usePipSession();
+  const canPin = useCanPinWindows();
   usePipWindowAspectLock();
   useProfileSwitchListener();
   useOtherWindowSettings();
@@ -84,19 +86,21 @@ export function PipWindowApp() {
             </span>
           )}
         </div>
-        <button
-          type="button"
-          aria-label={
-            alwaysOnTop ? getString("pip_window_unpin") : getString("pip_window_pin")
-          }
-          title={alwaysOnTop ? getString("pip_window_unpin") : getString("pip_window_pin")}
-          onClick={toggleAlwaysOnTop}
-          className={
-            alwaysOnTop ? `${chromeButton} bg-chrome-white/15 text-chrome-white` : chromeButton
-          }
-        >
-          {alwaysOnTop ? <Pin size={15} /> : <PinOff size={15} />}
-        </button>
+        {canPin && (
+          <button
+            type="button"
+            aria-label={
+              alwaysOnTop ? getString("pip_window_unpin") : getString("pip_window_pin")
+            }
+            title={alwaysOnTop ? getString("pip_window_unpin") : getString("pip_window_pin")}
+            onClick={toggleAlwaysOnTop}
+            className={
+              alwaysOnTop ? `${chromeButton} bg-chrome-white/15 text-chrome-white` : chromeButton
+            }
+          >
+            {alwaysOnTop ? <Pin size={15} /> : <PinOff size={15} />}
+          </button>
+        )}
         <button
           type="button"
           aria-label={getString("pip_window_return")}

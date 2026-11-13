@@ -89,6 +89,7 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     { title: "settings_long_press_speed", summary: "settings_long_press_speed_desc" },
     { title: "settings_speed_slider", summary: "settings_speed_slider_desc" },
     { title: "settings_seek_interval", summary: "settings_seek_interval_desc" },
+    { title: "settings_double_click_seek", summary: "settings_double_click_seek_desc" },
     { title: "settings_closed_captions", summary: "settings_closed_captions_desc" },
     { title: "settings_preferred_language" },
     { title: "settings_font_size" },

@@ -1,13 +1,13 @@
 import type { StringKey } from "./i18n/index";
 
-export type UpdateBlockReason = "flatpak" | "package-manager" | "unbundled";
+export type UpdateBlockReason = "flatpak" | "package-manager" | "unbundled" | "read-only-location";
 
 export interface UpdateSupport {
   supported: boolean;
   reason: UpdateBlockReason | null;
 }
 
-const BLOCK_REASONS: readonly UpdateBlockReason[] = ["flatpak", "package-manager", "unbundled"];
+const BLOCK_REASONS: readonly UpdateBlockReason[] = ["flatpak", "package-manager", "unbundled", "read-only-location"];
 
 /**
  * Reads the backend's `updates_supported` payload. Anything unexpected counts as
@@ -30,5 +30,7 @@ export function updateBlockedStringKey(reason: UpdateBlockReason): StringKey {
       return "settings_updates_managed_package_manager";
     case "unbundled":
       return "settings_updates_unbundled";
+    case "read-only-location":
+      return "settings_updates_move_to_applications";
   }
 }

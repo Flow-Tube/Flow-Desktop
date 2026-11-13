@@ -2013,6 +2013,7 @@
   "settings_auto_update_desc": "Automatically look for new releases when Flow starts",
   "settings_updates_managed_flatpak": "Updates are managed by Flatpak",
   "settings_updates_managed_package_manager": "Updates are managed by your package manager",
+  "settings_updates_move_to_applications": "To get updates, move Flow to your Applications folder and open it from there",
   "settings_updates_unbundled": "This build can't update itself",
   "music_play": "Play",
   "music_more_options": "More options",

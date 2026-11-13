@@ -209,6 +209,9 @@ SETTINGS
 - Pause watch history stops saving what you watch, in Settings > History & Privacy. Save search history, Search suggestions, Max history size and Auto-delete history live there too, with a button to clear your searches.
 - A new setting, App language, shows Flow in any of the 33 languages Flow for Android ships, using Android's translations. Text that has no translation yet stays in English, and English stays the default. Right-to-left languages mirror the layout outside the player.
 - A Show Music switch in Settings > Content & UI hides YouTube Music everywhere: the Music tab, music search, albums, music downloads and songs in your history and likes. Music links open as videos. Your albums, likes and history are kept, and local files still play.
+- Start page, under Navigation tabs, picks the page Flow opens on, such as Subscriptions. Open tabs from the last run still come back first, and reloading the window keeps the page you are on.
+- Double-click sides to seek, under Player, can be turned off. A double-click anywhere on the video then switches fullscreen.
+- Subscriptions remembers the group you picked last, across restarts, as Flow for Android does.
 
 DOWNLOADS
 - Sort downloads by Newest, Oldest, Largest, Title or Channel. Each video shows its size and date.
@@ -298,3 +301,4 @@ FIXES
 - Arabic, Persian and Urdu lay out properly now. The side rail, the settings drawer, menus, switches, sliders, toasts and the back, forward and see-all arrows all mirror, and menus open toward the page. The video player, every progress bar and the play controls stay left to right, as on Flow for Android.
 - Titles, channel names, descriptions and comments in another script keep their own word order, punctuation and ellipsis, so an Arabic title no longer loses its first word in English, and the reverse. Lines such as views and upload date, or a handle and subscriber count, keep each part in place.
 - Text you type in search and other fields follows the direction of what you type. On Linux, Flow uses Noto's Arabic fonts when they are installed, so Arabic letters keep their dots and joins.
+- The Subscriptions page no longer jumps while you scroll during a refresh. The feed you are reading stays on screen until the check of every channel finishes, cards keep their thumbnails when new videos arrive, and the video you are looking at stays in place when things above it change.

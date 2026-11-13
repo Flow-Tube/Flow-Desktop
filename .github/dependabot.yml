@@ -25,6 +25,12 @@ updates:
       time: "06:15"
       timezone: Asia/Beirut
     open-pull-requests-limit: 10
+    ignore:
+      # windows-core must match the version the `windows` crate is built on, and
+      # windows-rs 0.100 shipped windows-core without `windows`. Move both together
+      # once `windows` 0.100 is out, then drop this rule.
+      - dependency-name: windows-core
+        versions: [">=0.63"]
     groups:
       compatible-updates:
         patterns:

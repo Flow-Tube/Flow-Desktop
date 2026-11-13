@@ -1348,7 +1348,7 @@
   "watch_playing_in_popout_action": "Bring it back",
   "settings_group_player_appearance": "Player appearance",
   "settings_fullscreen_title": "Fullscreen Title",
-  "settings_fullscreen_title_desc": "Show video title during fullscreen playback",
+  "settings_fullscreen_title_desc": "Show the video title above the seek bar in fullscreen",
   "settings_adaptive_player": "Adaptive Player Size",
   "settings_adaptive_player_desc": "Make the player taller for vertical videos",
   "settings_paid_promotion": "Show paid promotion label",

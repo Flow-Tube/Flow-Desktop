@@ -97,6 +97,8 @@ export interface FlowPlayerControlsProps {
   togglePictureInPicture: () => void;
   showPipButton?: boolean;
   showFullscreenTitle?: boolean;
+  /** The pop-out window has no page under the video, so it keeps the title outside fullscreen. */
+  isPopOut?: boolean;
 
   seekTo: (time: number) => void;
   togglePlay: () => void;
@@ -168,6 +170,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
   togglePictureInPicture,
   showPipButton = true,
   showFullscreenTitle = false,
+  isPopOut = false,
   seekTo,
   togglePlay,
   stepFrame,
@@ -557,7 +560,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
           className="pointer-events-auto"
           onClick={(event) => event.stopPropagation()}
         >
-          {title && (!isFullscreen || showFullscreenTitle) && (
+          {title && (isFullscreen ? showFullscreenTitle : isPopOut) && (
             <div dir="auto" className="mb-2 hidden max-w-[70%] truncate text-sm font-bold text-chrome-white/95 sm:block">
               {title}
             </div>

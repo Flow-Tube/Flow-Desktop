@@ -3,17 +3,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useUiStore } from "../../store/useUiStore";
 import { savePngImage } from "../api/files";
 import { blobToBase64, loadCanvasImage } from "../canvasImage";
-import { copyPng } from "../clipboard";
 import { safeFileName } from "../fileName";
 import { getString } from "../i18n/index";
 import { sampleArtworkSwatches } from "../useArtworkSwatches";
-import { renderLyricCardBlob, type CardAlign, type LyricCardData } from "./lyricCardRenderer";
-import { cardStyles, readThemeCardColors, type CardStyle } from "./palette";
+import { copyPng, copyText } from "../clipboard";
+import { lyricsCopyText, renderLyricCardBlob, type LyricCardData, type LyricCardLook } from "./lyricCardRenderer";
+import { cardColors, readAppCardColors, type CardColors } from "./palette";
 import { readLyricsCover } from "./useLyricsCover";
 
 interface Artwork {
   art: HTMLImageElement | null;
-  styles: CardStyle[];
+  colors: CardColors;
 }
 
 /** The cover, loaded once so the canvas may read it, and the looks it and the app theme give the card. */
@@ -24,8 +24,7 @@ export function useLyricCardArtwork(coverUrl: string | null | undefined): Artwor
     setArtwork(null);
     void loadCanvasImage(coverUrl).then((art) => {
       if (cancelled) return;
-      const styles = cardStyles(art && readLyricsCover(art), art && sampleArtworkSwatches(art), readThemeCardColors());
-      setArtwork({ art, styles });
+      setArtwork({ art, colors: cardColors(art && readLyricsCover(art), art && sampleArtworkSwatches(art), readAppCardColors()) });
     });
     return () => {
       cancelled = true;
@@ -38,7 +37,7 @@ export function useLyricCardArtwork(coverUrl: string | null | undefined): Artwor
  * Draws the card whenever its lines or look change. The preview shows this same PNG, so what is
  * copied or saved is exactly what was on screen.
  */
-export function useLyricCardImage(data: LyricCardData | null, style: CardStyle | null, align: CardAlign, art: HTMLImageElement | null) {
+export function useLyricCardImage(data: LyricCardData | null, look: Omit<LyricCardLook, "fontFamily"> | null, art: HTMLImageElement | null) {
   const showToast = useUiStore((state) => state.showToast);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [rendering, setRendering] = useState(false);
@@ -53,11 +52,11 @@ export function useLyricCardImage(data: LyricCardData | null, style: CardStyle |
   );
 
   useEffect(() => {
-    if (!data || !style) return;
+    if (!data || !look) return;
     let cancelled = false;
     setRendering(true);
     const fontFamily = getComputedStyle(document.body).fontFamily;
-    const render = renderLyricCardBlob(data, { style, align, fontFamily }, art);
+    const render = renderLyricCardBlob(data, { ...look, fontFamily }, art);
     pending.current = render;
     void render.then((blob) => {
       if (cancelled) return;
@@ -72,7 +71,7 @@ export function useLyricCardImage(data: LyricCardData | null, style: CardStyle |
     return () => {
       cancelled = true;
     };
-  }, [data, style, align, art]);
+  }, [data, look, art]);
 
   // WebKit only lets the clipboard write start inside the click, so the promise goes in unresolved.
   const copy = useCallback(() => {
@@ -101,5 +100,12 @@ export function useLyricCardImage(data: LyricCardData | null, style: CardStyle |
     }
   }, [data, showToast]);
 
-  return { previewUrl, rendering, copy, save };
+  const copyLines = useCallback(() => {
+    if (!data) return;
+    void copyText(lyricsCopyText(data.lines, data.title, data.artist)).then((copied) =>
+      showToast({ variant: copied ? "success" : "error", message: getString(copied ? "lyrics_share_text_copied" : "lyrics_share_copy_failed") }),
+    );
+  }, [data, showToast]);
+
+  return { previewUrl, rendering, copy, copyLines, save };
 }

@@ -320,7 +320,7 @@ export function LyricsActionsMenu({ track, className }: { track: SongItem | null
         />
       )}
       {editText !== null && <LyricsEditDialog initialText={editText} onApply={applyEdited} onClose={() => setEditText(null)} />}
-      {shareOpen && <LyricsShareDialog track={track} onClose={() => setShareOpen(false)} />}
+      {shareOpen && <LyricsShareDialog track={track} initialAlign={isAlign(align) ? align : "center"} onClose={() => setShareOpen(false)} />}
     </div>
   );
 }

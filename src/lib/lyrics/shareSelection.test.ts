@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isShareableLine, MAX_SHARE_LINES, preselectedLines, shareLineIndexAt, shareLines, toggleShareLine } from "./shareSelection";
+import { isShareableLine, MAX_SHARE_LINES, shareLineIndexAt, shareLines, toggleShareLine } from "./shareSelection";
 
 describe("shareLines", () => {
   it("skips blank lines and section markers, from synced or plain lyrics", () => {
@@ -26,15 +26,6 @@ describe("shareLineIndexAt", () => {
     expect(shareLineIndexAt(lines, 3500)).toBe(1);
     expect(shareLineIndexAt(lines, 9000)).toBe(2);
     expect(shareLineIndexAt([{ text: "plain", time: null }], 9000)).toBe(0);
-  });
-});
-
-describe("preselectedLines", () => {
-  it("takes four lines from the one playing, moved back near the end", () => {
-    expect(preselectedLines(10, 2)).toEqual([2, 3, 4, 5]);
-    expect(preselectedLines(10, 9)).toEqual([6, 7, 8, 9]);
-    expect(preselectedLines(3, 1)).toEqual([0, 1, 2]);
-    expect(preselectedLines(0, 0)).toEqual([]);
   });
 });
 

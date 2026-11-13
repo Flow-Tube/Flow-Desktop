@@ -2,7 +2,6 @@ import type { LyricsEntry } from "./types";
 
 /** Android's cap: a card holds at most five lyric lines. */
 export const MAX_SHARE_LINES = 5;
-const PRESELECTED_LINES = 4;
 
 /** A line worth putting on a card: not blank and not a section marker such as "[Chorus]". */
 export function isShareableLine(text: string): boolean {
@@ -34,13 +33,6 @@ export function shareLineIndexAt(lines: ShareLine[], positionMs: number): number
     if (line.time !== null && line.time <= positionMs) index = i;
   });
   return index;
-}
-
-/** Four lines from the one playing, moved back when the song ends sooner. */
-export function preselectedLines(lineCount: number, playingIndex: number): number[] {
-  const count = Math.min(PRESELECTED_LINES, lineCount);
-  const start = Math.max(0, Math.min(playingIndex, lineCount - count));
-  return Array.from({ length: count }, (_, i) => start + i);
 }
 
 /** Selects or deselects `index`, keeping song order and refusing a line past the cap. */

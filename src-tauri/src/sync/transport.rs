@@ -117,9 +117,21 @@ where
     }
 }
 
-/// Bind an ephemeral port on all interfaces. Returns the listener and the chosen port.
+/// The port one-time transfers try first, so a firewall can allow it ahead of time. Shared with
+/// the packaged firewalld service and ufw profile.
+pub const TRANSFER_PORT: u16 = 47901;
+
+/// Bind on all interfaces, on [`TRANSFER_PORT`] when it is free so a firewall rule for it works,
+/// otherwise on any free port. Returns the listener and the chosen port.
 pub async fn bind() -> Result<(TcpListener, u16), SyncError> {
-    let listener = TcpListener::bind("0.0.0.0:0").await?;
+    bind_preferring(TRANSFER_PORT).await
+}
+
+async fn bind_preferring(port: u16) -> Result<(TcpListener, u16), SyncError> {
+    let listener = match TcpListener::bind(("0.0.0.0", port)).await {
+        Ok(listener) => listener,
+        Err(_) => TcpListener::bind("0.0.0.0:0").await?,
+    };
     let port = listener.local_addr()?.port();
     Ok((listener, port))
 }
@@ -276,4 +288,30 @@ pub fn lan_ip_candidates() -> Vec<LanCandidate> {
 /// Best-effort LAN IPv4 for the QR code. See [`lan_ip_candidates`] for how the winner is chosen.
 pub fn lan_ip() -> Option<String> {
     lan_ip_candidates().into_iter().next().map(|c| c.ip)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::bind_preferring;
+    use tokio::net::TcpListener;
+
+    #[tokio::test]
+    async fn takes_the_preferred_port_when_it_is_free() {
+        let free = TcpListener::bind("0.0.0.0:0")
+            .await
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        let (_listener, port) = bind_preferring(free).await.unwrap();
+        assert_eq!(port, free);
+    }
+
+    #[tokio::test]
+    async fn falls_back_to_any_port_when_the_preferred_one_is_taken() {
+        let taken = TcpListener::bind("0.0.0.0:0").await.unwrap();
+        let busy = taken.local_addr().unwrap().port();
+        let (_listener, port) = bind_preferring(busy).await.unwrap();
+        assert_ne!(port, busy);
+    }
 }

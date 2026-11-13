@@ -128,16 +128,19 @@ jobs:
             appimage: aarch64
             asset_arch: (aarch64|arm64)
             args: --target aarch64-unknown-linux-gnu --bundles appimage
+          # The DMG is for first installs. The app bundle is what the updater
+          # installs: Tauri signs it as .app.tar.gz and lists it under darwin-*
+          # in latest.json, which a DMG-only build never did.
           - name: macOS Intel
             slug: macos-x64
             runner: macos-15-intel
             target: x86_64-apple-darwin
-            args: --target x86_64-apple-darwin --bundles dmg
+            args: --target x86_64-apple-darwin --bundles app,dmg
           - name: macOS Apple Silicon
             slug: macos-arm64
             runner: macos-15
             target: aarch64-apple-darwin
-            args: --target aarch64-apple-darwin --bundles dmg
+            args: --target aarch64-apple-darwin --bundles app,dmg
 
     runs-on: ${{ matrix.runner }}
 
@@ -452,6 +455,13 @@ jobs:
           # tauri-action copied the markdown release body into notes.
           jq --arg notes "$APP_NOTES" '.notes = $notes' latest.json > latest.json.tmp
           mv latest.json.tmp latest.json
+
+          # Every platform that can update itself must be in the manifest, or its
+          # installs silently stay on this version.
+          for key in darwin-x86_64 darwin-aarch64 windows-x86_64 windows-aarch64 linux-x86_64 linux-aarch64; do
+            jq -e --arg key "$key" '.platforms[$key].url and .platforms[$key].signature' latest.json > /dev/null \
+              || { echo "::error::latest.json has no $key update"; exit 1; }
+          done
 
           gh release upload "$tag" latest.json --clobber --repo "$GITHUB_REPOSITORY"
 

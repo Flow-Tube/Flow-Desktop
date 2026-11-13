@@ -268,6 +268,9 @@ LINUX
 - Flow is listed under Sound and Video in app menus with sharper icons, and the .rpm installs on openSUSE as well as Fedora.
 - The Flatpak can use the keyring, the tray, Discord and Show in folder. A new Linux help page covers packages, graphics, codecs, sync and moving from Beta to Stable.
 
+NIGHTLY BUILDS
+- Nightly builds of Flow Nightly are now on a Nightly release on GitHub, so anyone can download them without a GitHub account. Each new build replaces the files there, and a checksum file lists them.
+
 FIXES
 - The rows on the About page that open something, such as Changelog, can be reached and opened with the keyboard.
 - Playlist cards show all four covers when two of the songs share a cover.

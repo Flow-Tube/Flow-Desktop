@@ -64,7 +64,7 @@ Release builds are published through [GitHub Releases](https://github.com/Flow-T
 
 - **Stable:** reviewed releases intended for normal use.
 - **Beta / RC:** public GitHub prereleases for wider testing. These install as **Flow Beta** with isolated application data.
-- **Nightly:** automatic snapshots from `main`. These install as **Flow Nightly**, use isolated data, and may be unstable. Download the latest packages from [GitHub Actions](https://github.com/Flow-Tube/Flow-Desktop/actions/workflows/build.yml) or [nightly.link](https://nightly.link/Flow-Tube/Flow-Desktop/workflows/build/main) without a GitHub account.
+- **Nightly:** automatic snapshots from `main`. These install as **Flow Nightly**, use isolated data, and may be unstable. Download the latest packages from the [Nightly release](https://github.com/Flow-Tube/Flow-Desktop/releases/tag/nightly), which every new build replaces.
 
 | Platform | Supported versions | Architectures | Packages |
 | --- | --- | --- | --- |

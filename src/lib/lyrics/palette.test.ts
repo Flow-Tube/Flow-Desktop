@@ -1,39 +1,45 @@
 import { describe, expect, it } from "vitest";
 
-import { cardStyles, colorDistance, distinctCardStyles, inkFor, type CardStyle } from "./palette";
+import { luminance } from "../color/tone";
+import { backdropColor, cardColors, cardScheme, colorDistance, inkFor } from "./palette";
 
 const rgb = (r: number, g: number, b: number) => ({ r, g, b });
-const theme = { surface: rgb(40, 40, 40), onSurface: rgb(240, 240, 240), primary: rgb(255, 78, 69), onPrimary: rgb(255, 255, 255) };
+const cover = { backdrop: rgb(60, 30, 90), mesh: new Uint8ClampedArray(4) };
+const swatches = { base: rgb(30, 60, 40), accent: rgb(240, 120, 30) };
 
-describe("lyric card looks", () => {
-  it("measures colour distance on a 0 to 1 scale", () => {
+describe("lyric card colours", () => {
+  it("measures colour distance on a 0 to 1 scale and picks the ink that reads best", () => {
     expect(colorDistance(rgb(0, 0, 0), rgb(0, 0, 0))).toBe(0);
     expect(colorDistance(rgb(32, 32, 32), rgb(36, 36, 36))).toBeLessThan(0.06);
-  });
-
-  it("picks the ink that reads best", () => {
     expect(inkFor(rgb(250, 240, 220))).toEqual(rgb(17, 17, 17));
     expect(inkFor(rgb(30, 20, 60))).toEqual(rgb(255, 255, 255));
   });
 
-  it("drops look-alike grounds but always keeps the cover", () => {
-    const styles: CardStyle[] = [
-      { id: "cover", ground: rgb(20, 20, 20), ink: rgb(255, 255, 255), mesh: new Uint8ClampedArray(4) },
-      { id: "artwork", ground: rgb(20, 20, 20), ink: rgb(255, 255, 255) },
-      { id: "surface", ground: rgb(22, 22, 22), ink: rgb(255, 255, 255) },
-      { id: "primary", ground: rgb(225, 29, 72), ink: rgb(255, 255, 255) },
-    ];
-    expect(distinctCardStyles(styles).map((style) => style.id)).toEqual(["cover", "artwork", "primary"]);
+  it("offers Android's nine looks, in its order, for a colourful cover", () => {
+    const ids = cardColors(cover, swatches, { primary: rgb(255, 255, 255), light: false }).styles.map((style) => style.id);
+    expect(ids).toEqual(["artwork", "colorful", "surface", "inverse", "primary", "primaryContainer", "secondaryContainer", "tertiary", "tertiaryContainer"]);
   });
 
-  it("offers the cover, its swatches and the app theme, in Android's order", () => {
-    const cover = { backdrop: rgb(60, 30, 90), mesh: new Uint8ClampedArray(4) };
-    const ids = cardStyles(cover, { base: rgb(30, 60, 40), accent: rgb(240, 180, 30) }, theme).map((style) => style.id);
-    expect(ids).toEqual(["cover", "artwork", "accent", "surface", "inverse", "primary"]);
-    expect(cardStyles(null, null, theme)[0]).toMatchObject({ id: "surface", ground: theme.surface, ink: theme.onSurface });
+  it("drops look-alikes and leaves out the cover looks without a cover", () => {
+    const ids = cardColors(null, null, { primary: rgb(128, 128, 128), light: false }).styles.map((style) => style.id);
+    expect(ids).not.toContain("colorful");
+    expect(ids).not.toContain("artwork");
+    expect(ids).toContain("surface");
+    expect(ids.length).toBeLessThan(9);
   });
 
-  it("still offers a look when neither the cover nor the theme can be read", () => {
-    expect(cardStyles(null, null, null)).toHaveLength(1);
+  it("builds dark roles on a dark app and light ones on a light app", () => {
+    const dark = cardScheme(swatches.accent, false);
+    const light = cardScheme(swatches.accent, true);
+    expect(luminance(dark.surfaceContainerHighest)).toBeLessThan(0.1);
+    expect(luminance(light.surfaceContainerHighest)).toBeGreaterThan(0.6);
+    expect(luminance(dark.primary)).toBeGreaterThan(luminance(dark.onPrimary));
+    expect(luminance(light.primary)).toBeLessThan(luminance(light.onPrimary));
+  });
+
+  it("frames the card in the cover's accent unless the card already is that colour", () => {
+    const colors = cardColors(cover, swatches, null);
+    expect(backdropColor(rgb(20, 20, 20), colors)).toEqual(swatches.accent);
+    expect(backdropColor(swatches.accent, colors)).toEqual(colors.scheme.inverseSurface);
   });
 });

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   CARD_WIDTH,
   calculateCardHeight,
+  drawFlowLogo,
   drawLyricCard,
   wrapText,
   type LyricCardData,
@@ -50,7 +51,13 @@ describe("lyricCardRenderer", () => {
         quadraticCurveTo: vi.fn(),
         roundRect: vi.fn(),
         createLinearGradient: vi.fn(() => gradient),
-        measureText: vi.fn((text: string) => ({ width: text.length * 10 })),
+        measureText: vi.fn((text: string) => ({
+          width: text.length * 10,
+          actualBoundingBoxAscent: 10,
+          actualBoundingBoxDescent: 2,
+        })),
+        translate: vi.fn(),
+        scale: vi.fn(),
         fillStyle: "",
         strokeStyle: "",
         lineWidth: 1,
@@ -113,6 +120,40 @@ describe("lyricCardRenderer", () => {
       const height = calculateCardHeight(ctx, fourLinesData, 340, 2.5);
       expect(height).toBeGreaterThan(600);
       expect(height).toBeLessThan(1400);
+    });
+
+    it("draws the Flow logo and vertically aligns the Flow wordmark", () => {
+      const ctx = mockCtx();
+      const options: LyricCardOptions = { theme: "#121212", align: "left" };
+
+      drawLyricCard(ctx, sampleData, options, null);
+
+      // Verify "Flow" wordmark is rendered
+      const flowTextCall = vi.mocked(ctx.fillText).mock.calls.find((call) => call[0] === "Flow");
+      expect(flowTextCall).toBeDefined();
+      expect(typeof flowTextCall?.[1]).toBe("number");
+      expect(typeof flowTextCall?.[2]).toBe("number");
+    });
+  });
+
+  describe("drawFlowLogo", () => {
+    it("draws the fallback shape when Path2D is unavailable", () => {
+      const ctx = {
+        save: vi.fn(),
+        restore: vi.fn(),
+        beginPath: vi.fn(),
+        fill: vi.fn(),
+        roundRect: vi.fn(),
+        fillText: vi.fn(),
+        fillStyle: "",
+        font: "",
+        textAlign: "left",
+        textBaseline: "top",
+      } as unknown as CanvasRenderingContext2D;
+
+      expect(() => drawFlowLogo(ctx, 10, 20, 28, "#fff", "#000")).not.toThrow();
+      expect(ctx.roundRect).toHaveBeenCalledWith(10, 20, 28, expect.any(Number), expect.any(Number));
+      expect(ctx.fillText).toHaveBeenCalledWith("F", expect.any(Number), expect.any(Number));
     });
   });
 });

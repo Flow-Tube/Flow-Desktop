@@ -135,22 +135,27 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 }
 
 /** Draws the authentic Flow Logo onto the canvas using inverted card colors. */
-function drawFlowLogo(
+export function drawFlowLogo(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
   width: number,
   shapeColor: string,
   glyphColor: string,
+  height?: number,
 ) {
+  const actualHeight = height ?? Math.round(width / LOGO_ASPECT);
+  const scale = Math.min(width / 24, actualHeight / 24);
+  const dx = (width - 24 * scale) / 2;
+  const dy = (actualHeight - 24 * scale) / 2;
+
   if (typeof Path2D !== "undefined") {
     try {
       const containerPath = new Path2D(LOGO_CONTAINER_PATH);
       const glyphPath = new Path2D(LOGO_GLYPH_PATH);
 
       ctx.save();
-      ctx.translate(x, y);
-      const scale = width / 24;
+      ctx.translate(x + dx, y + dy);
       ctx.scale(scale, scale);
 
       ctx.fillStyle = shapeColor;
@@ -167,18 +172,17 @@ function drawFlowLogo(
   }
 
   // Graceful fallback for non-Path2D environments (e.g., bare jsdom)
-  const height = Math.round(width / LOGO_ASPECT);
   ctx.save();
   ctx.fillStyle = shapeColor;
   ctx.beginPath();
-  roundRect(ctx, x, y, width, height, Math.round(height * 0.25));
+  roundRect(ctx, x, y, width, actualHeight, Math.round(actualHeight * 0.25));
   ctx.fill();
 
   ctx.fillStyle = glyphColor;
-  ctx.font = `italic 900 ${Math.round(height * 0.6)}px sans-serif`;
+  ctx.font = `italic 900 ${Math.round(actualHeight * 0.6)}px sans-serif`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText("F", x + width / 2, y + height / 2);
+  ctx.fillText("F", x + width / 2, y + actualHeight / 2);
   ctx.restore();
 }
 
@@ -418,15 +422,29 @@ export function drawLyricCard(
   );
   const logoX = padding;
 
-  drawFlowLogo(ctx, logoX, footerY, logoWidth, ink, groundColor);
+  drawFlowLogo(ctx, logoX, footerY, logoWidth, ink, groundColor, logoHeight);
 
-  // "Flow" wordmark next to logo
+  // "Flow" wordmark next to logo - vertically aligned with the badge
   const logoTextSize = Math.round(14 * scale);
   ctx.font = `700 ${logoTextSize}px ${FONT_FAMILY}`;
   ctx.fillStyle = ink;
   ctx.textAlign = "left";
-  ctx.textBaseline = "middle";
-  ctx.fillText("Flow", logoX + logoWidth + Math.round(8 * scale), footerY + logoHeight / 2);
+
+  const centerY = footerY + logoHeight / 2;
+  const metrics = ctx.measureText("Flow");
+  const ascent = metrics.actualBoundingBoxAscent;
+  const descent = metrics.actualBoundingBoxDescent;
+  if (typeof ascent === "number" && typeof descent === "number" && ascent > 0) {
+    ctx.textBaseline = "alphabetic";
+    ctx.fillText(
+      "Flow",
+      logoX + logoWidth + Math.round(8 * scale),
+      centerY + (ascent - descent) / 2,
+    );
+  } else {
+    ctx.textBaseline = "middle";
+    ctx.fillText("Flow", logoX + logoWidth + Math.round(8 * scale), centerY);
+  }
 
   ctx.restore();
 }

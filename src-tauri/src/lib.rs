@@ -154,8 +154,8 @@ use commands::shorts::{
 };
 use commands::subtitle_file::read_subtitle_file;
 use commands::sync::{
-    sync_cancel, sync_device_info, sync_host_receive, sync_respond_consent, sync_scan_join,
-    sync_start_host, sync_status,
+    sync_cancel, sync_device_info, sync_firewall_help, sync_host_receive, sync_respond_consent,
+    sync_scan_join, sync_start_host, sync_status,
 };
 use commands::tray::{
     music_tray_hide, music_tray_supported, music_tray_update, set_download_progress,
@@ -990,6 +990,7 @@ pub fn run() {
             sync_scan_join,
             sync_respond_consent,
             sync_cancel,
+            sync_firewall_help,
             list_notes,
             save_note,
             delete_notes,

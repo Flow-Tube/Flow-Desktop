@@ -83,6 +83,10 @@
       },
       "deb": {
         "desktopTemplate": "linux/flow.desktop",
+        "files": {
+          "/usr/lib/firewalld/services/flow-desktop.xml": "linux/firewall/flow-desktop.xml",
+          "/etc/ufw/applications.d/flow-desktop": "linux/firewall/flow-desktop.ufw"
+        },
         "depends": [
           "gstreamer1.0-plugins-base",
           "gstreamer1.0-plugins-good",
@@ -98,6 +102,10 @@
       },
       "rpm": {
         "desktopTemplate": "linux/flow.desktop",
+        "files": {
+          "/usr/lib/firewalld/services/flow-desktop.xml": "linux/firewall/flow-desktop.xml",
+          "/etc/ufw/applications.d/flow-desktop": "linux/firewall/flow-desktop.ufw"
+        },
         "depends": [
           "(gstreamer1-plugins-base or gstreamer-plugins-base)",
           "(gstreamer1-plugins-good or gstreamer-plugins-good)",

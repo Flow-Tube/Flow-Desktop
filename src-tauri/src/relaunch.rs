@@ -22,9 +22,12 @@ pub fn request() {
 
 /// From `RunEvent::Exit`, which runs after the plugins have released the single-instance lock.
 pub fn on_exit(env: &tauri::Env) {
-    if REQUESTED.load(Ordering::SeqCst)
-        && let Err(error) = spawn(env)
-    {
+    if !REQUESTED.load(Ordering::SeqCst) {
+        return;
+    }
+    #[cfg(target_os = "linux")]
+    crate::linux_startup::release_launch_lock();
+    if let Err(error) = spawn(env) {
         tracing::error!(%error, "could not relaunch Flow");
     }
 }

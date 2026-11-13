@@ -8,9 +8,19 @@
 //! actually failed to render, except where the failure is already known:
 //!
 //! * Tier 0 (default): nothing. Upstream defaults are the fast path.
-//! * Tier 1: disable explicit sync and the DMABUF renderer.
-//! * Tier 2: also force software compositing.
+//! * Tier 1: disable explicit sync, and move rendered frames through shared
+//!   memory instead of DMABUF (`WEBKIT_DMABUF_RENDERER_FORCE_SHM`).
+//! * Tier 2: also disable the DMABUF renderer and compositing, which is CPU
+//!   rendering.
 //! * Tier 3: also fall back to X11 (XWayland), when an X server is reachable.
+//!
+//! From WebKitGTK 2.44 the DMABUF renderer is the only accelerated path: with
+//! `WEBKIT_DISABLE_DMABUF_RENDERER` set, `canUseHardwareAcceleration()` is false
+//! and compositing goes with it. Tier 1 used to set exactly that, so the NVIDIA
+//! preset below put those machines on the CPU, which is what makes scrolling
+//! stutter. Shared memory keeps GPU rendering and only changes how finished
+//! frames reach the UI process. Older WebKitGTK still had separate Wayland and
+//! X11 backends, so it keeps the old tier 1 (DMABUF off only).
 //!
 //! The order follows Tauri's Linux graphics guide, which lists these remedies
 //! "in order. The earlier ones keep hardware acceleration" — and warns: "Only
@@ -53,8 +63,13 @@ const LEGACY_SENTINEL_FILE: &str = "startup_sentinel";
 /// Highest tier we escalate to; also caps the failure count so an unfixable
 /// machine (e.g. an AppImage packaging fault) stops climbing.
 const MAX_TIER: u8 = 3;
+/// First WebKitGTK release where the DMABUF renderer is the only accelerated
+/// path and `WEBKIT_DMABUF_RENDERER_FORCE_SHM` exists.
+const SHM_TRANSPORT_SINCE: (u32, u32) = (2, 44);
 #[cfg(target_os = "linux")]
 const SAFE_GRAPHICS_ARG: &str = "--safe-graphics";
+#[cfg(any(target_os = "linux", test))]
+const LOCK_FILE: &str = "startup.lock";
 
 /// The user's choice in Settings, applied as a minimum tier.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -147,6 +162,10 @@ impl StartupState {
         self.good_tier = Some(self.pending_tier);
         self.good_version = Some(version.to_owned());
         self.failed_boots = 0;
+    }
+
+    fn crash_looped(&mut self) {
+        self.failed_boots = self.failed_boots.saturating_add(1).min(MAX_TIER + 1);
     }
 }
 
@@ -241,20 +260,49 @@ fn save_state(dir: &Path, state: &StartupState) {
 
 /// The variables a tier applies. Split out from [`apply_tier`] so the escalation
 /// ladder can be asserted without mutating this process's environment.
-fn tier_vars(tier: u8, x11_available: bool) -> Vec<(&'static str, &'static str)> {
+fn tier_vars(
+    tier: u8,
+    x11_available: bool,
+    shm_transport: bool,
+) -> Vec<(&'static str, &'static str)> {
     // Tier 0 deliberately yields nothing — see the module docs.
     let mut vars = Vec::new();
     if tier >= 1 {
         vars.push(("__NV_DISABLE_EXPLICIT_SYNC", "1"));
-        vars.push(("WEBKIT_DISABLE_DMABUF_RENDERER", "1"));
+        if shm_transport {
+            vars.push(("WEBKIT_DMABUF_RENDERER_FORCE_SHM", "1"));
+        } else {
+            vars.push(("WEBKIT_DISABLE_DMABUF_RENDERER", "1"));
+        }
     }
     if tier >= 2 {
+        if shm_transport {
+            vars.push(("WEBKIT_DISABLE_DMABUF_RENDERER", "1"));
+        }
         vars.push(("WEBKIT_DISABLE_COMPOSITING_MODE", "1"));
     }
     if tier >= 3 && x11_available {
         vars.push(("GDK_BACKEND", "x11"));
     }
     vars
+}
+
+fn has_shm_transport(version: Option<(u32, u32)>) -> bool {
+    version.is_some_and(|version| version >= SHM_TRANSPORT_SINCE)
+}
+
+/// The WebKitGTK library this process loaded, not the one it was built against.
+/// These calls only read constants, so they are safe before GTK starts.
+#[cfg(target_os = "linux")]
+fn webkit_version() -> Option<(u32, u32)> {
+    // SAFETY: plain getters with no arguments and no preconditions.
+    let (major, minor) = unsafe {
+        (
+            webkit2gtk::ffi::webkit_get_major_version(),
+            webkit2gtk::ffi::webkit_get_minor_version(),
+        )
+    };
+    (major > 0).then_some((major, minor))
 }
 
 /// Forcing X11 without an X server leaves GTK unable to open any window. That
@@ -280,6 +328,7 @@ impl LaunchFacts {
         let user_set_dmabuf = [
             "WEBKIT_DISABLE_DMABUF_RENDERER",
             "WEBKIT_FORCE_DMABUF_RENDERER",
+            "WEBKIT_DMABUF_RENDERER_FORCE_SHM",
         ]
         .iter()
         .any(|key| std::env::var_os(key).is_some());
@@ -294,11 +343,11 @@ impl LaunchFacts {
 }
 
 #[cfg(target_os = "linux")]
-fn apply_tier(tier: u8) {
+fn apply_tier(tier: u8, shm_transport: bool) {
     // SAFETY (every env write below): called at the very start of `run()`,
     // before the Tauri builder spawns any threads or initializes GTK/WebKitGTK.
     let x11 = x11_available(std::env::var_os("DISPLAY").as_deref());
-    for (key, value) in tier_vars(tier, x11) {
+    for (key, value) in tier_vars(tier, x11, shm_transport) {
         if std::env::var_os(key).is_none() {
             unsafe { std::env::set_var(key, value) };
         }
@@ -307,6 +356,68 @@ fn apply_tier(tier: u8) {
     let im_module = std::env::var("GTK_IM_MODULE").ok();
     if drops_im_module(backend.as_deref(), im_module.as_deref()) {
         unsafe { std::env::remove_var("GTK_IM_MODULE") };
+    }
+}
+
+/// Held by the instance that recorded its launch, until it exits or relaunches.
+#[cfg(target_os = "linux")]
+static LAUNCH_LOCK: std::sync::Mutex<Option<std::fs::File>> = std::sync::Mutex::new(None);
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Debug)]
+enum LaunchLock {
+    Held(std::fs::File),
+    /// Another instance holds it.
+    Busy,
+    /// No lock file could be opened or locked.
+    Unavailable,
+}
+
+/// Whether this process may record a launch. A second launch while Flow runs (a
+/// `flow://` link, the launcher, a desktop action) is handed to the running
+/// window by the single-instance plugin and exits, so it never renders. That
+/// plugin only starts after this module, so without the lock every second
+/// launch counted as a failed startup and pushed the next cold start a tier up.
+#[cfg(any(target_os = "linux", test))]
+fn try_launch_lock(dir: &Path) -> LaunchLock {
+    let _ = std::fs::create_dir_all(dir);
+    let Ok(file) = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(dir.join(LOCK_FILE))
+    else {
+        return LaunchLock::Unavailable;
+    };
+    match file.try_lock() {
+        Ok(()) => LaunchLock::Held(file),
+        Err(std::fs::TryLockError::WouldBlock) => LaunchLock::Busy,
+        Err(std::fs::TryLockError::Error(_)) => LaunchLock::Unavailable,
+    }
+}
+
+/// Keeps the lock for this process's lifetime. Without a lock at all, records
+/// as before: a data dir that can't hold a lock can't hold the state file either.
+#[cfg(target_os = "linux")]
+fn take_launch_lock(dir: &Path) -> bool {
+    match try_launch_lock(dir) {
+        LaunchLock::Held(file) => {
+            if let Ok(mut held) = LAUNCH_LOCK.lock() {
+                *held = Some(file);
+            }
+            true
+        }
+        LaunchLock::Busy => false,
+        LaunchLock::Unavailable => true,
+    }
+}
+
+/// Lets the process [`crate::relaunch`] starts record its own launch. It starts
+/// while this one is still exiting.
+#[cfg(target_os = "linux")]
+pub fn release_launch_lock() {
+    if let Ok(mut held) = LAUNCH_LOCK.lock() {
+        held.take();
     }
 }
 
@@ -319,7 +430,8 @@ pub fn begin(identifier: &str, version: &str) -> BootReport {
     let mut state = dir.as_deref().map(load_state).unwrap_or_default();
     let facts = LaunchFacts::read();
     let tier = state.choose_tier(version, facts);
-    apply_tier(tier);
+    apply_tier(tier, has_shm_transport(webkit_version()));
+    let first_instance = dir.as_deref().is_none_or(take_launch_lock);
 
     let report = BootReport {
         tier,
@@ -329,11 +441,26 @@ pub fn begin(identifier: &str, version: &str) -> BootReport {
         mode: state.mode,
     };
     let _ = BOOT_REPORT.set(report);
-    state.launched(tier);
-    if let Some(dir) = dir {
-        save_state(&dir, &state);
+    if first_instance {
+        state.launched(tier);
+        if let Some(dir) = dir {
+            save_state(&dir, &state);
+        }
     }
     report
+}
+
+/// Called when the web process keeps crashing after the page already rendered,
+/// so the confirmed tier is not enough on this machine. The next launch starts
+/// one tier higher, as after a launch that never rendered.
+#[cfg(target_os = "linux")]
+pub fn record_crash_loop(identifier: &str) {
+    let Some(dir) = data_dir(identifier) else {
+        return;
+    };
+    let mut state = load_state(&dir);
+    state.crash_looped();
+    save_state(&dir, &state);
 }
 
 /// Records that this launch rendered, so the next one starts from its tier.
@@ -366,16 +493,26 @@ pub fn set_graphics_mode(identifier: &str, mode: GraphicsMode) -> std::io::Resul
 #[cfg(test)]
 mod tests {
     use super::{
-        BootReport, GraphicsMode, LaunchFacts, MAX_TIER, StartupState, drops_im_module, load_state,
-        save_state, tier_vars, x11_available,
+        BootReport, GraphicsMode, LaunchFacts, LaunchLock, MAX_TIER, StartupState, drops_im_module,
+        has_shm_transport, load_state, save_state, tier_vars, try_launch_lock, x11_available,
     };
     use std::ffi::OsStr;
 
     const V1: &str = "0.1.0-beta3";
     const V2: &str = "0.1.0-beta4";
 
+    /// The ladder for WebKitGTK older than 2.44.
     fn keys(tier: u8) -> Vec<&'static str> {
-        tier_vars(tier, true)
+        shm_keys_if(tier, false)
+    }
+
+    /// The ladder for WebKitGTK 2.44 and later.
+    fn shm_keys(tier: u8) -> Vec<&'static str> {
+        shm_keys_if(tier, true)
+    }
+
+    fn shm_keys_if(tier: u8, shm: bool) -> Vec<&'static str> {
+        tier_vars(tier, true, shm)
             .into_iter()
             .map(|(key, _)| key)
             .collect()
@@ -401,7 +538,38 @@ mod tests {
     /// The point of the ladder: a machine that renders fine is left alone.
     #[test]
     fn tier_0_applies_nothing() {
-        assert!(tier_vars(0, true).is_empty());
+        assert!(tier_vars(0, true, false).is_empty());
+        assert!(tier_vars(0, true, true).is_empty());
+    }
+
+    /// Disabling the DMABUF renderer on 2.44+ disables GPU rendering outright,
+    /// so the first rung keeps the GPU and only changes the frame transport.
+    #[test]
+    fn tier_1_keeps_the_gpu_on_current_webkit() {
+        assert_eq!(
+            shm_keys(1),
+            vec![
+                "__NV_DISABLE_EXPLICIT_SYNC",
+                "WEBKIT_DMABUF_RENDERER_FORCE_SHM"
+            ],
+        );
+    }
+
+    #[test]
+    fn tier_2_is_cpu_rendering_on_current_webkit() {
+        let tier_2 = shm_keys(2);
+        assert!(tier_2.contains(&"WEBKIT_DISABLE_DMABUF_RENDERER"));
+        assert!(tier_2.contains(&"WEBKIT_DISABLE_COMPOSITING_MODE"));
+        assert!(!shm_keys(1).contains(&"WEBKIT_DISABLE_DMABUF_RENDERER"));
+    }
+
+    #[test]
+    fn shared_memory_transport_starts_at_webkitgtk_2_44() {
+        assert!(!has_shm_transport(None));
+        assert!(!has_shm_transport(Some((2, 42))));
+        assert!(has_shm_transport(Some((2, 44))));
+        assert!(has_shm_transport(Some((2, 52))));
+        assert!(has_shm_transport(Some((3, 0))));
     }
 
     #[test]
@@ -429,9 +597,11 @@ mod tests {
 
     #[test]
     fn the_x11_fallback_needs_an_x_server() {
-        let without_x = tier_vars(MAX_TIER, false);
-        assert!(without_x.iter().all(|(key, _)| *key != "GDK_BACKEND"));
-        assert_eq!(without_x, tier_vars(2, false));
+        for shm in [false, true] {
+            let without_x = tier_vars(MAX_TIER, false, shm);
+            assert!(without_x.iter().all(|(key, _)| *key != "GDK_BACKEND"));
+            assert_eq!(without_x, tier_vars(2, false, shm));
+        }
     }
 
     #[test]
@@ -445,21 +615,35 @@ mod tests {
     /// could un-fix a machine the tier below had already rescued.
     #[test]
     fn each_tier_is_a_superset_of_the_one_below() {
-        for tier in 1..=MAX_TIER {
-            let lower = keys(tier - 1);
-            let higher = keys(tier);
-            assert!(
-                lower.iter().all(|key| higher.contains(key)),
-                "tier {tier} dropped a variable set by tier {}",
-                tier - 1,
-            );
-            assert!(higher.len() > lower.len(), "tier {tier} added nothing");
+        for shm in [false, true] {
+            for tier in 1..=MAX_TIER {
+                let lower = shm_keys_if(tier - 1, shm);
+                let higher = shm_keys_if(tier, shm);
+                assert!(
+                    lower.iter().all(|key| higher.contains(key)),
+                    "tier {tier} dropped a variable set by tier {}",
+                    tier - 1,
+                );
+                assert!(higher.len() > lower.len(), "tier {tier} added nothing");
+            }
         }
     }
 
     #[test]
     fn tiers_are_capped_at_the_last_resort() {
         assert_eq!(keys(MAX_TIER), keys(MAX_TIER + 5));
+        assert_eq!(shm_keys(MAX_TIER), shm_keys(MAX_TIER + 5));
+    }
+
+    /// A page that keeps crashing after it rendered means the confirmed tier
+    /// is not enough, so the next launch climbs one.
+    #[test]
+    fn a_crash_loop_after_rendering_climbs_one_tier() {
+        let mut state = StartupState::default();
+        assert_eq!(launch(&mut state, V1, LaunchFacts::default(), true), 0);
+        state.crash_looped();
+        assert_eq!(launch(&mut state, V1, LaunchFacts::default(), true), 1);
+        assert_eq!(launch(&mut state, V1, LaunchFacts::default(), true), 1);
     }
 
     /// The bug this state file fixes: deleting the record on success sent a
@@ -520,7 +704,7 @@ mod tests {
         let facts = LaunchFacts {
             nvidia_wayland: true,
             user_set_dmabuf: true,
-            safe_graphics: false,
+            ..LaunchFacts::default()
         };
         assert_eq!(StartupState::default().choose_tier(V1, facts), 0);
     }
@@ -588,6 +772,18 @@ mod tests {
 
         save_state(&dir, &state);
         assert_eq!(load_state(&dir), state);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn only_the_first_instance_holds_the_launch_lock() {
+        let dir = std::env::temp_dir().join(format!("flow-launch-lock-{}", std::process::id()));
+        let LaunchLock::Held(first) = try_launch_lock(&dir) else {
+            panic!("the first instance should take the lock");
+        };
+        assert!(matches!(try_launch_lock(&dir), LaunchLock::Busy));
+        drop(first);
+        assert!(matches!(try_launch_lock(&dir), LaunchLock::Held(_)));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

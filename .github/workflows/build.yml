@@ -213,12 +213,13 @@ jobs:
             # Cross-compiles x86_64 on Apple Silicon, as Tauri's own CI guide does.
             runner: macos-15
             target: x86_64-apple-darwin
-            args: --target x86_64-apple-darwin --bundles dmg
+            # The app bundle is what the updater installs.
+            args: --target x86_64-apple-darwin --bundles app,dmg
           - name: macOS Apple Silicon
             slug: macos-arm64
             runner: macos-15
             target: aarch64-apple-darwin
-            args: --target aarch64-apple-darwin --bundles dmg
+            args: --target aarch64-apple-darwin --bundles app,dmg
 
     runs-on: ${{ matrix.runner }}
 
@@ -340,7 +341,18 @@ jobs:
 
           case "$RUNNER_OS" in
             Windows) stage "$prefix-setup.exe" "$BUNDLE"/nsis/*-setup.exe ;;
-            macOS) stage "$prefix.dmg" "$BUNDLE"/dmg/*.dmg ;;
+            macOS)
+              stage "$prefix.dmg" "$BUNDLE"/dmg/*.dmg
+              apps=("$BUNDLE"/macos/*.app)
+              if [[ ${#apps[@]} -ne 1 ]]; then
+                echo "expected one app bundle, found ${#apps[@]}" >&2
+                exit 1
+              fi
+              # Laid out like Tauri's own updater archive, the .app folder at
+              # the top, without AppleDouble files.
+              COPYFILE_DISABLE=1 tar --no-mac-metadata -czf "$prefix.app.tar.gz" \
+                -C "$BUNDLE/macos" "$(basename "${apps[0]}")"
+              ;;
             Linux)
               if [[ -n "$APPIMAGE" ]]; then
                 stage "$prefix.AppImage" "$BUNDLE"/appimage/*.AppImage
@@ -376,6 +388,23 @@ jobs:
       cancel-in-progress: false
 
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # Only the Tauri CLI is used here, to sign. No install script runs in the
+      # job that holds the signing key.
+      - name: Install the Tauri CLI
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
       - name: Download nightly release assets
         uses: actions/download-artifact@v8
         with:
@@ -389,7 +418,8 @@ jobs:
           set -euo pipefail
           shopt -s nullglob
           cd upload
-          for kind in windows-x64-setup.exe windows-arm64-setup.exe macos-x64.dmg macos-arm64.dmg \
+          for kind in windows-x64-setup.exe windows-arm64-setup.exe \
+            macos-x64.dmg macos-arm64.dmg macos-x64.app.tar.gz macos-arm64.app.tar.gz \
             linux-x64.deb linux-x64.rpm linux-x64.AppImage linux-arm64.deb linux-arm64.rpm linux-arm64.AppImage; do
             matches=(Flow-Nightly_*_"$kind")
             if [[ ${#matches[@]} -ne 1 ]]; then
@@ -401,6 +431,31 @@ jobs:
             [[ "$file" == *.sig ]] || sha256sum -- "$file"
           done > SHA256SUMS
           cat SHA256SUMS
+
+      # The same key as stable releases, so nightly builds carry the same
+      # public key. Without it (a fork) the release ships without updater
+      # manifests, and its builds don't update themselves.
+      - name: Sign the updater packages
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$TAURI_SIGNING_PRIVATE_KEY" ]]; then
+            echo "::warning::No updater signing key, so this nightly can't update itself."
+            exit 0
+          fi
+          for file in upload/*-setup.exe upload/*.app.tar.gz upload/*.deb upload/*.rpm upload/*.AppImage; do
+            pnpm tauri signer sign "$file"
+          done
+
+      - name: Write the updater manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+          NIGHTLY_NOTES="Nightly build of main at ${GITHUB_SHA::7}, $(date -u +%Y-%m-%d). Nightly builds can break and are not for daily use." \
+            node scripts/nightly-updater-manifest.mjs upload
 
       - name: Publish to the nightly release
         shell: bash
@@ -445,13 +500,28 @@ jobs:
             gh api "repos/${GH_REPO}/git/refs" -f ref="refs/tags/${tag}" -f sha="$GITHUB_SHA" >/dev/null
           fi
 
+          if [[ -f upload/latest.json ]]; then
+            updates="Installed nightly builds look for the next one and update themselves."
+          else
+            updates="These builds can't update themselves: install a new one by hand."
+          fi
+          printf '\n%s\n' "$updates" >> notes.md
+
           if [[ "$exists" == true ]]; then
             gh release edit "$tag" --title "$title" --notes-file notes.md --prerelease --latest=false
           else
             gh release create "$tag" --verify-tag --title "$title" --notes-file notes.md --prerelease --latest=false
           fi
 
-          gh release upload "$tag" upload/* --clobber
+          # Packages first, manifests last, so the manifest never points at a
+          # file that isn't there yet.
+          shopt -s extglob
+          gh release upload "$tag" upload/!(latest*.json) --clobber
+          shopt -s nullglob
+          manifests=(upload/latest*.json)
+          if [[ ${#manifests[@]} -gt 0 ]]; then
+            gh release upload "$tag" "${manifests[@]}" --clobber
+          fi
 
           # Older builds' files have other names; drop them so the release
           # holds one build.

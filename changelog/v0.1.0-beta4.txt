@@ -262,6 +262,12 @@ LOCAL MEDIA
 - Import from another app, chosen by the app you are leaving: a Google Takeout export, even split across several zips, with likes, playlists and Watch Later; YouTube Music playlist CSVs; NewPipe history and playlists from its backup; LibreTube subscriptions and playlists; Metrolist music playlists. Imports only teach recommendations the way Android does.
 - The Cache group under Network now shows the real size of artwork, lyrics and network caches, each with a limit and a Clear button. Artwork clears the next time Flow starts. The Media Cache Limit row is gone: Flow never stored streams on disk.
 
+LINUX
+- Graphics compatibility keeps the GPU on current WebKitGTK. Compatible used to switch Flow to software drawing, which made scrolling and video stutter, and NVIDIA on Wayland started there by default.
+- Opening a link or the launcher while Flow is already running no longer counts as a failed start, so Flow stops slipping into slower graphics modes on its own.
+- When the page keeps crashing after it opened, the next launch uses a safer graphics mode.
+- On Wayland, the pop-out player no longer offers Pin and Settings no longer offers Always on top, since Wayland doesn't let apps keep a window above others. The Shorts menu hides Mini player where it can't open.
+
 FIXES
 - The rows on the About page that open something, such as Changelog, can be reached and opened with the keyboard.
 - Playlist cards show all four covers when two of the songs share a cover.

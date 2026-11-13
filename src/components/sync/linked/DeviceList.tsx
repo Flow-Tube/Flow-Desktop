@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Monitor, Pencil, Smartphone, Trash2 } from "lucide-react";
 
 import { devicesAddedBy, type LinkedDevice } from "../../../lib/api/linked";
@@ -6,6 +6,7 @@ import { getString } from "../../../lib/i18n/index";
 import { useConsents, type Consent } from "../../../lib/live/useConsents";
 import { formatYouTubeRelativeTime } from "../../../lib/publishedDate";
 import { useLinkedDevicesStore } from "../../../store/useLinkedDevicesStore";
+import { SettingsGroup } from "../../settings/SettingsGroup";
 import { Button } from "../../ui/Button";
 import { Checkbox } from "../../ui/Checkbox";
 import { Select } from "../../ui/Select";
@@ -48,7 +49,7 @@ function DeviceRow({ device, consent, onConsent, devices }: RowProps) {
       setMode("view");
     };
     return (
-      <div className="flex items-center gap-3 px-4 py-3">
+      <div className="flex items-center gap-3 px-5 py-4">
         <Icon className="h-5 w-5 shrink-0 text-chrome-neutral-400" />
         <TextInput value={name} onChange={setName} maxLength={64} className="min-w-0 flex-1" autoFocus />
         <Button size="sm" disabled={busy || !name.trim()} onClick={() => void save()}>
@@ -62,10 +63,10 @@ function DeviceRow({ device, consent, onConsent, devices }: RowProps) {
   }
 
   return (
-    <div className="flex items-center gap-3 px-4 py-3 transition-colors duration-200 ease-out hover:bg-surface-container">
+    <div className="flex items-center gap-3 px-5 py-4 transition-colors duration-200 ease-out hover:bg-surface-row-hover">
       <Icon className="h-5 w-5 shrink-0 text-chrome-neutral-400" />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-chrome-neutral-100">{displayName(device)}</p>
+        <p dir="auto" className="truncate text-sm font-medium text-chrome-neutral-200">{displayName(device)}</p>
         {device.lastSyncMs != null && mode !== "remove" && (
           <p className="text-xs text-chrome-neutral-400">
             {getString("linked_device_synced", formatYouTubeRelativeTime(device.lastSyncMs))}
@@ -117,7 +118,7 @@ function DeviceRow({ device, consent, onConsent, devices }: RowProps) {
               value={consent}
               onChange={(value) => onConsent(value as Consent)}
               options={CONSENTS.map((value) => ({ value, label: getString(CONSENT_LABELS[value]) }))}
-              className="w-44"
+              className="w-60"
             />
           )}
           {!device.thisDevice && (
@@ -131,10 +132,11 @@ function DeviceRow({ device, consent, onConsent, devices }: RowProps) {
   );
 }
 
-export function DeviceList({ devices }: { devices: LinkedDevice[] }) {
+/** The group's devices as rows of one settings group; `children` adds rows after them. */
+export function DeviceList({ devices, title, children }: { devices: LinkedDevice[]; title: string; children?: ReactNode }) {
   const [consents, setConsent] = useConsents();
   return (
-    <div className="flex flex-col divide-y divide-chrome-neutral-800/50 overflow-hidden rounded-xl border border-chrome-neutral-800/50">
+    <SettingsGroup title={title}>
       {devices.map((device) => (
         <DeviceRow
           key={device.id}
@@ -144,6 +146,7 @@ export function DeviceList({ devices }: { devices: LinkedDevice[] }) {
           devices={devices}
         />
       ))}
-    </div>
+      {children}
+    </SettingsGroup>
   );
 }

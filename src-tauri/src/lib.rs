@@ -15,6 +15,8 @@ mod db;
 mod errors;
 pub mod flow_neuro;
 #[cfg(any(target_os = "linux", test))]
+mod legacy_link_handler;
+#[cfg(any(target_os = "linux", test))]
 mod linux_startup;
 mod linux_system;
 mod local_media;
@@ -607,14 +609,21 @@ pub fn run() {
             backup::auto::spawn(app.handle().clone(), pool.clone());
             commands::cache::spawn_startup_trim(app.handle().clone(), pool.clone());
 
-            // Register the flow:// scheme at runtime. Production installers
-            // (NSIS/MSI, .desktop) do this, but dev builds and Linux need it.
+            // Register the flow:// scheme at runtime. Installers and Linux packages
+            // do this themselves; an AppImage and dev builds need it here.
             #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
-            if !update_support.package_owns_desktop_entry() {
+            let registers_links = update_support
+                .registers_link_handler(tauri::utils::platform::bundle_type().as_ref());
+            #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
+            if registers_links {
                 use tauri_plugin_deep_link::DeepLinkExt;
                 if let Err(error) = app.deep_link().register_all() {
                     tracing::warn!("failed to register flow:// scheme: {error}");
                 }
+            }
+            #[cfg(target_os = "linux")]
+            if !registers_links {
+                legacy_link_handler::remove_stale(app.handle());
             }
 
             // Raise the window when a flow:// URL arrives while running; the

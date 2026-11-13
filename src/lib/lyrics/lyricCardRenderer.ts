@@ -1,9 +1,33 @@
-import { isLightColor } from "./palette";
-import { LOGO_CONTAINER_PATH, LOGO_GLYPH_PATH, LOGO_ASPECT } from "../../components/ui/FlowLogo";
-import { useImageProxyStore } from "../../store/useImageProxyStore";
-import { proxiedImage } from "../imageProxy";
-import { proxyImageUrl } from "../api/images";
-import { upgradeMusicImageUrl } from "../thumbnails";
+import { LOGO_GLYPH_PATH, LOGO_SHAPE_BOUNDS, LOGO_SHAPE_PATH } from "../brand/logo";
+import { fitText } from "../canvasImage";
+import { css } from "../color/tone";
+import { isRtlText } from "../direction";
+import { breakLines, type TextMeasurer } from "./display/textLayout";
+import { MESH_SIZE } from "./display/coverMesh";
+import type { CardStyle } from "./palette";
+
+/** The card is laid out on a 340-unit-wide design, as on Android, and exported 1080 px wide on every screen. */
+export const CARD_DESIGN_WIDTH = 340;
+export const CARD_EXPORT_WIDTH = 1080;
+const SCALE = CARD_EXPORT_WIDTH / CARD_DESIGN_WIDTH;
+
+const PADDING = 24;
+const BOTTOM_PADDING = 28;
+const CORNER_RADIUS = 28;
+const ART_SIZE = 56;
+const ART_RADIUS = 8;
+const HEADER_GAP = 12;
+const TITLE_SIZE = 16;
+const ARTIST_SIZE = 14;
+const DIVIDER_GAP = 14;
+const LYRICS_GAP = 20;
+const FOOTER_GAP = 28;
+const LOGO_WIDTH = 28;
+const LOGO_HEIGHT = LOGO_WIDTH * (LOGO_SHAPE_BOUNDS.height / LOGO_SHAPE_BOUNDS.width);
+const WORDMARK_SIZE = 14;
+const WORDMARK_GAP = 8;
+
+const font = (weight: number, size: number, family: string) => `${weight} ${size}px ${family}`;
 
 export type CardAlign = "left" | "center" | "right";
 
@@ -11,476 +35,202 @@ export interface LyricCardData {
   lines: string[];
   title: string;
   artist: string;
-  coverUrl?: string | null;
 }
 
-export interface LyricCardOptions {
-  theme: string; // "cover" or hex color string e.g. "#121212", "#ffffff", "#e11d48"
+export interface LyricCardLook {
+  style: CardStyle;
   align: CardAlign;
-  targetWidth?: number;
-  targetHeight?: number;
+  /** The app's font stack, so the card reads like the lyrics on screen. */
+  fontFamily: string;
 }
 
-export const BASE_CARD_WIDTH = 340;
-export const BASE_CARD_HEIGHT = 460;
-export const EXPORT_SCALE = 2.5;
-export const CARD_WIDTH = Math.round(BASE_CARD_WIDTH * EXPORT_SCALE); // 850
-
-const FONT_FAMILY = '"Segoe UI", "Nirmala UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif';
-
-function isAlreadyProxied(url: string): boolean {
-  return /^https?:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?\//i.test(url);
+/** Fewer lines get bigger type, as on Android's card. */
+export function lyricFontSize(lineCount: number): number {
+  return lineCount <= 2 ? 24 : lineCount <= 3 ? 20 : 18;
 }
 
-/** Loads an image element reliably across local proxy and remote origins */
-export async function loadCardImage(url: string | null | undefined): Promise<HTMLImageElement | null> {
-  if (!url?.trim()) return null;
-  let target = url.trim();
-  if (target.startsWith("//")) {
-    target = `https:${target}`;
-  }
+const lineGap = (lineCount: number) => (lineCount <= 3 ? 12 : 10);
 
-  // Upgrade resolution
-  target = upgradeMusicImageUrl(target, 512) ?? target;
+export interface CardLayout {
+  height: number;
+  titleY: number;
+  artistY: number;
+  dividerY: number;
+  fontSize: number;
+  lineHeight: number;
+  lines: { text: string; y: number; rtl: boolean }[];
+  footerY: number;
+}
 
-  // If already routed through local proxy, don't double proxy
-  if (!isAlreadyProxied(target)) {
-    try {
-      const base = useImageProxyStore.getState().base;
-      if (base) {
-        target = proxiedImage(target, base);
-      } else {
-        target = await proxyImageUrl(target);
-      }
-    } catch {
-      // Proceed with direct target
+/**
+ * Where everything on the card goes, in design units; the canvas multiplies it by the export scale.
+ * Lines break with the lyrics screen's own layout, so Japanese, Chinese and Thai lines, which have
+ * no spaces, still break inside the card.
+ */
+export function layoutLyricCard(data: LyricCardData, measurer: TextMeasurer, fontFamily: string): CardLayout {
+  const fontSize = lyricFontSize(data.lines.length);
+  const lineHeight = Math.round(fontSize * 1.25);
+  const lyricFont = font(700, fontSize, fontFamily);
+  const maxWidth = CARD_DESIGN_WIDTH - PADDING * 2;
+  const dividerY = PADDING + ART_SIZE + DIVIDER_GAP;
+  let y = dividerY + LYRICS_GAP;
+  const lines: CardLayout["lines"] = [];
+  data.lines.forEach((lyric, index) => {
+    if (index > 0) y += lineGap(data.lines.length);
+    for (const row of breakLines(lyric, lyricFont, maxWidth, measurer)) {
+      lines.push({ text: row.text, y, rtl: row.rtl });
+      y += lineHeight;
     }
-  }
-
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.decoding = "async";
-    const timer = setTimeout(() => resolve(null), 8000);
-    img.onload = () => {
-      clearTimeout(timer);
-      resolve(img);
-    };
-    img.onerror = () => {
-      // Retry once without crossOrigin
-      const fallback = new Image();
-      fallback.decoding = "async";
-      fallback.onload = () => {
-        clearTimeout(timer);
-        resolve(fallback);
-      };
-      fallback.onerror = () => {
-        clearTimeout(timer);
-        resolve(null);
-      };
-      fallback.src = target;
-    };
-    img.src = target;
   });
+  const footerY = y + FOOTER_GAP;
+  return {
+    height: Math.ceil(footerY + LOGO_HEIGHT + BOTTOM_PADDING),
+    titleY: PADDING + 8,
+    artistY: PADDING + 30,
+    dividerY,
+    fontSize,
+    lineHeight,
+    lines,
+    footerY,
+  };
 }
 
-/** Splits text into wrapped lines that fit within maxWidth on a 2D canvas context. */
-export function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
-  const words = text.split(" ");
-  const lines: string[] = [];
-  let currentLine = "";
-
-  for (const word of words) {
-    const testLine = currentLine ? `${currentLine} ${word}` : word;
-    const width = ctx.measureText(testLine).width;
-    if (width > maxWidth && currentLine) {
-      lines.push(currentLine);
-      currentLine = word;
-    } else {
-      currentLine = testLine;
-    }
-  }
-  if (currentLine) {
-    lines.push(currentLine);
-  }
-  return lines.length > 0 ? lines : [text];
-}
-
-/** Truncates text with ellipsis if it exceeds maxWidth. */
-function truncateText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {
-  if (ctx.measureText(text).width <= maxWidth) return text;
-  let truncated = text;
-  while (truncated.length > 0 && ctx.measureText(`${truncated}…`).width > maxWidth) {
-    truncated = truncated.slice(0, -1);
-  }
-  return `${truncated}…`;
-}
-
-/** Draws a rounded rectangle path. */
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
-  if (typeof ctx.roundRect === "function") {
-    ctx.roundRect(x, y, w, h, r);
-  } else {
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + w - r, y);
-    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-    ctx.lineTo(x + w, y + h - r);
-    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-    ctx.lineTo(x + r, y + h);
-    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-    ctx.lineTo(x, y + r);
-    ctx.quadraticCurveTo(x, y, x + r, y);
-    ctx.closePath();
-  }
-}
-
-/** Draws the authentic Flow Logo onto the canvas using inverted card colors. */
-export function drawFlowLogo(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  width: number,
-  shapeColor: string,
-  glyphColor: string,
-  height?: number,
-) {
-  const actualHeight = height ?? Math.round(width / LOGO_ASPECT);
-  const scale = Math.min(width / 24, actualHeight / 24);
-  const dx = (width - 24 * scale) / 2;
-  const dy = (actualHeight - 24 * scale) / 2;
-
-  if (typeof Path2D !== "undefined") {
-    try {
-      const containerPath = new Path2D(LOGO_CONTAINER_PATH);
-      const glyphPath = new Path2D(LOGO_GLYPH_PATH);
-
-      ctx.save();
-      ctx.translate(x + dx, y + dy);
-      ctx.scale(scale, scale);
-
-      ctx.fillStyle = shapeColor;
-      ctx.fill(containerPath);
-
-      ctx.fillStyle = glyphColor;
-      ctx.fill(glyphPath);
-
-      ctx.restore();
-      return;
-    } catch {
-      // Fallback below
-    }
-  }
-
-  // Graceful fallback for non-Path2D environments (e.g., bare jsdom)
+function drawBadge(ctx: CanvasRenderingContext2D, x: number, y: number, shape: string, glyph: string) {
+  const unit = LOGO_WIDTH / LOGO_SHAPE_BOUNDS.width;
   ctx.save();
-  ctx.fillStyle = shapeColor;
-  ctx.beginPath();
-  roundRect(ctx, x, y, width, actualHeight, Math.round(actualHeight * 0.25));
-  ctx.fill();
-
-  ctx.fillStyle = glyphColor;
-  ctx.font = `italic 900 ${Math.round(actualHeight * 0.6)}px sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("F", x + width / 2, y + actualHeight / 2);
+  ctx.translate(x - LOGO_SHAPE_BOUNDS.x * unit, y - LOGO_SHAPE_BOUNDS.y * unit);
+  ctx.scale(unit, unit);
+  ctx.fillStyle = shape;
+  ctx.fill(new Path2D(LOGO_SHAPE_PATH));
+  ctx.fillStyle = glyph;
+  ctx.fill(new Path2D(LOGO_GLYPH_PATH));
   ctx.restore();
 }
 
-/**
- * Calculates the exact pixel height needed to render the card contents comfortably
- * based on the number of lines and text wrapping, ensuring generous breathing room
- * around the lyrics and bottom Flow logo.
- */
-export function calculateCardHeight(
-  ctx: CanvasRenderingContext2D | null,
-  data: LyricCardData,
-  targetWidth: number = BASE_CARD_WIDTH,
-  scale: number = EXPORT_SCALE,
-): number {
-  const topPadding = Math.round(24 * scale);
-  const bottomPadding = Math.round(28 * scale);
-  const artSize = Math.round(56 * scale);
-  const gapSections = Math.round(16 * scale);
-  const logoWidth = Math.round(28 * scale);
-  const logoHeight = Math.round(logoWidth / LOGO_ASPECT);
-  const maxLyricsWidth = Math.round(targetWidth * scale) - topPadding * 2;
-
-  const baseLyricSize =
-    data.lines.length <= 2 ? 24 : data.lines.length <= 3 ? 20 : 18;
-  const lyricFontSize = Math.round(baseLyricSize * scale);
-  const lyricLineHeight = Math.round(lyricFontSize * 1.3);
-  const blockGap = Math.round((data.lines.length <= 3 ? 12 : 10) * scale);
-
-  const dividerY = topPadding + artSize + Math.round(14 * scale);
-  let currentY = dividerY + gapSections + Math.round(4 * scale);
-
-  if (ctx) {
-    ctx.font = `700 ${lyricFontSize}px ${FONT_FAMILY}`;
-    let b = 0;
-    for (const line of data.lines) {
-      if (!line) continue;
-      const wrapped = wrapText(ctx, line, maxLyricsWidth);
-      currentY += wrapped.length * lyricLineHeight;
-      if (b < data.lines.length - 1) {
-        currentY += blockGap;
-      }
-      b++;
-    }
-  } else {
-    currentY += data.lines.length * lyricLineHeight + Math.max(0, data.lines.length - 1) * blockGap;
-  }
-
-  // Generous breathing space (28dp) above Flow logo so it never feels squished
-  const gapBeforeFooter = Math.round(28 * scale);
-  const footerY = currentY + gapBeforeFooter;
-  return footerY + logoHeight + bottomPadding;
+function drawMesh(ctx: CanvasRenderingContext2D, mesh: Uint8ClampedArray, width: number, height: number) {
+  const field = document.createElement("canvas");
+  field.width = MESH_SIZE;
+  field.height = MESH_SIZE;
+  field.getContext("2d")?.putImageData(new ImageData(new Uint8ClampedArray(mesh), MESH_SIZE, MESH_SIZE), 0, 0);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(field, 0, 0, width, height);
 }
 
-/**
- * Draws the entire lyric card onto the canvas with dynamic length based on line count,
- * generous breathing room, and the authentic Flow logo footer.
- */
+/** Draws the card in design units; the caller has scaled the context. Corners outside the card stay transparent. */
 export function drawLyricCard(
   ctx: CanvasRenderingContext2D,
   data: LyricCardData,
-  options: LyricCardOptions,
-  coverImage: HTMLImageElement | null,
-  canvasWidth?: number,
-  canvasHeight?: number,
+  look: LyricCardLook,
+  layout: CardLayout,
+  art: HTMLImageElement | null,
 ) {
-  const targetW = options.targetWidth && options.targetWidth > 0 ? options.targetWidth : BASE_CARD_WIDTH;
-  const scale = canvasWidth ? canvasWidth / targetW : EXPORT_SCALE;
-  const finalCanvasWidth = canvasWidth ?? Math.round(targetW * scale);
-
-  const calculatedMinHeight = calculateCardHeight(ctx, data, targetW, scale);
-  const finalCanvasHeight =
-    canvasHeight ??
-    (options.targetHeight && options.targetHeight > 0
-      ? Math.max(Math.round(options.targetHeight * scale), calculatedMinHeight)
-      : calculatedMinHeight);
-
-  // Clear canvas first to guarantee transparent pixels outside the card radius
-  ctx.clearRect(0, 0, finalCanvasWidth, finalCanvasHeight);
-
-  const isLight = isLightColor(options.theme);
-  const ink = isLight ? "#111111" : "#ffffff";
-  const mutedInk = isLight ? "rgba(17, 17, 17, 0.70)" : "rgba(255, 255, 255, 0.70)";
-  const dividerColor = isLight ? "rgba(17, 17, 17, 0.20)" : "rgba(255, 255, 255, 0.20)";
-  const groundColor = options.theme === "cover" ? "#141416" : options.theme;
-
-  const padding = Math.round(24 * scale);
-  const bottomPadding = Math.round(28 * scale);
-  const cornerRadius = Math.round(28 * scale);
-  const artSize = Math.round(56 * scale);
-  const artRadius = Math.round(8 * scale);
-  const gapHeader = Math.round(12 * scale);
-  const gapSections = Math.round(16 * scale);
-  const logoWidth = Math.round(28 * scale);
-  const logoHeight = Math.round(logoWidth / LOGO_ASPECT);
-
-  // 1. Clip card bounds with rounded corners - ensures 100% transparent corners outside
+  const { style, align, fontFamily } = look;
+  const width = CARD_DESIGN_WIDTH;
+  const ink = css(style.ink);
+  ctx.clearRect(0, 0, width, layout.height);
   ctx.save();
   ctx.beginPath();
-  roundRect(ctx, 0, 0, finalCanvasWidth, finalCanvasHeight, cornerRadius);
+  ctx.roundRect(0, 0, width, layout.height, CORNER_RADIUS);
   ctx.clip();
 
-  // 2. Card Background
-  if (options.theme === "cover" && coverImage) {
-    ctx.save();
-    try {
-      if ("filter" in ctx) {
-        ctx.filter = "blur(32px) brightness(0.65)";
-      }
-      ctx.drawImage(
-        coverImage,
-        -finalCanvasWidth * 0.15,
-        -finalCanvasHeight * 0.15,
-        finalCanvasWidth * 1.3,
-        finalCanvasHeight * 1.3,
-      );
-    } catch {
-      ctx.drawImage(coverImage, 0, 0, finalCanvasWidth, finalCanvasHeight);
-    }
-    ctx.restore();
+  ctx.fillStyle = css(style.ground);
+  ctx.fillRect(0, 0, width, layout.height);
+  if (style.mesh) drawMesh(ctx, style.mesh, width, layout.height);
 
-    // Dark gradient overlay for 7:1 text contrast
-    const grad = ctx.createLinearGradient(0, 0, 0, finalCanvasHeight);
-    grad.addColorStop(0, "rgba(8, 8, 14, 0.45)");
-    grad.addColorStop(0.5, "rgba(8, 8, 14, 0.65)");
-    grad.addColorStop(1, "rgba(4, 4, 8, 0.85)");
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, finalCanvasWidth, finalCanvasHeight);
-  } else if (options.theme === "cover") {
-    const grad = ctx.createLinearGradient(0, 0, finalCanvasWidth, finalCanvasHeight);
-    grad.addColorStop(0, "#2a1542");
-    grad.addColorStop(0.5, "#181028");
-    grad.addColorStop(1, "#0a0712");
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, finalCanvasWidth, finalCanvasHeight);
-  } else {
-    ctx.fillStyle = options.theme;
-    ctx.fillRect(0, 0, finalCanvasWidth, finalCanvasHeight);
-  }
-
-  // 3. Header: Album Artwork (56dp proportional) + Song Title & Artist
-  const headerX = padding;
-  const headerY = padding;
-
-  // Cover art thumbnail
   ctx.save();
   ctx.beginPath();
-  roundRect(ctx, headerX, headerY, artSize, artSize, artRadius);
+  ctx.roundRect(PADDING, PADDING, ART_SIZE, ART_SIZE, ART_RADIUS);
   ctx.clip();
-  if (coverImage) {
-    ctx.drawImage(coverImage, headerX, headerY, artSize, artSize);
+  if (art) {
+    ctx.drawImage(art, PADDING, PADDING, ART_SIZE, ART_SIZE);
   } else {
-    ctx.fillStyle = isLight ? "rgba(0, 0, 0, 0.08)" : "rgba(255, 255, 255, 0.1)";
-    ctx.fillRect(headerX, headerY, artSize, artSize);
-    ctx.fillStyle = mutedInk;
-    ctx.font = `bold ${Math.round(24 * scale)}px sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("♪", headerX + artSize / 2, headerY + artSize / 2);
+    ctx.fillStyle = css(style.ink, 0.12);
+    ctx.fillRect(PADDING, PADDING, ART_SIZE, ART_SIZE);
   }
   ctx.restore();
 
-  // Song Title & Artist Text
-  const textX = headerX + artSize + gapHeader;
-  const maxTitleWidth = finalCanvasWidth - textX - padding;
-
-  const titleFontSize = Math.round(16 * scale);
-  const artistFontSize = Math.round(14 * scale);
-
-  ctx.font = `600 ${titleFontSize}px ${FONT_FAMILY}`;
-  ctx.fillStyle = ink;
-  ctx.textAlign = "left";
+  const textX = PADDING + ART_SIZE + HEADER_GAP;
+  const textWidth = width - textX - PADDING;
   ctx.textBaseline = "top";
-  const titleText = truncateText(ctx, data.title || "Unknown Title", maxTitleWidth);
-  ctx.fillText(titleText, textX, headerY + Math.round(6 * scale));
-
-  ctx.font = `500 ${artistFontSize}px ${FONT_FAMILY}`;
-  ctx.fillStyle = mutedInk;
-  const artistText = truncateText(ctx, data.artist || "Unknown Artist", maxTitleWidth);
-  ctx.fillText(artistText, textX, headerY + Math.round(30 * scale));
-
-  // Horizontal divider with 20% alpha
-  const dividerY = headerY + artSize + Math.round(14 * scale);
-  ctx.strokeStyle = dividerColor;
-  ctx.lineWidth = Math.max(1, Math.round(1 * scale));
-  ctx.beginPath();
-  ctx.moveTo(padding, dividerY);
-  ctx.lineTo(finalCanvasWidth - padding, dividerY);
-  ctx.stroke();
-
-  // 4. Lyrics Lines - scaled precisely to match the rendered preview text wrapping
-  const baseLyricSize =
-    data.lines.length <= 2 ? 24 : data.lines.length <= 3 ? 20 : 18;
-  const lyricFontSize = Math.round(baseLyricSize * scale);
-  const lyricLineHeight = Math.round(lyricFontSize * 1.25);
-  const blockGap = Math.round(8 * scale);
-  const maxLyricsWidth = finalCanvasWidth - padding * 2;
-
-  ctx.font = `700 ${lyricFontSize}px ${FONT_FAMILY}`;
-  ctx.fillStyle = ink;
-  ctx.textBaseline = "top";
-
-  let alignX = padding;
-  if (options.align === "center") {
-    alignX = finalCanvasWidth / 2;
-    ctx.textAlign = "center";
-  } else if (options.align === "right") {
-    alignX = finalCanvasWidth - padding;
-    ctx.textAlign = "right";
-  } else {
-    alignX = padding;
-    ctx.textAlign = "left";
-  }
-
-  const wrappedBlocks: string[][] = [];
-  for (const line of data.lines) {
-    wrappedBlocks.push(wrapText(ctx, line, maxLyricsWidth));
-  }
-
-  let currentY = dividerY + gapSections + Math.round(4 * scale);
-  for (let b = 0; b < wrappedBlocks.length; b++) {
-    const block = wrappedBlocks[b];
-    if (!block) continue;
-    for (const line of block) {
-      ctx.fillText(line, alignX, currentY);
-      currentY += lyricLineHeight;
-    }
-    if (b < wrappedBlocks.length - 1) {
-      currentY += blockGap;
-    }
-  }
-
-  // 5. Footer: Flow Branding - sits with generous breathing room below lyrics
-  const gapBeforeFooter = Math.round(28 * scale);
-  const footerY = Math.max(
-    currentY + gapBeforeFooter,
-    finalCanvasHeight - bottomPadding - logoHeight,
-  );
-  const logoX = padding;
-
-  drawFlowLogo(ctx, logoX, footerY, logoWidth, ink, groundColor, logoHeight);
-
-  // "Flow" wordmark next to logo - vertically aligned with the badge
-  const logoTextSize = Math.round(14 * scale);
-  ctx.font = `700 ${logoTextSize}px ${FONT_FAMILY}`;
-  ctx.fillStyle = ink;
   ctx.textAlign = "left";
-
-  const centerY = footerY + logoHeight / 2;
-  const metrics = ctx.measureText("Flow");
-  const ascent = metrics.actualBoundingBoxAscent;
-  const descent = metrics.actualBoundingBoxDescent;
-  if (typeof ascent === "number" && typeof descent === "number" && ascent > 0) {
-    ctx.textBaseline = "alphabetic";
-    ctx.fillText(
-      "Flow",
-      logoX + logoWidth + Math.round(8 * scale),
-      centerY + (ascent - descent) / 2,
-    );
-  } else {
-    ctx.textBaseline = "middle";
-    ctx.fillText("Flow", logoX + logoWidth + Math.round(8 * scale), centerY);
+  ctx.fillStyle = ink;
+  ctx.font = font(600, TITLE_SIZE, fontFamily);
+  const titleTop = data.artist ? layout.titleY : layout.titleY + ARTIST_SIZE / 2 + 2;
+  writeLine(ctx, fitText(ctx, data.title, textWidth), textX, titleTop, textWidth, "left");
+  if (data.artist) {
+    ctx.fillStyle = css(style.ink, 0.7);
+    ctx.font = font(500, ARTIST_SIZE, fontFamily);
+    writeLine(ctx, fitText(ctx, data.artist, textWidth), textX, layout.artistY, textWidth, "left");
   }
 
+  ctx.fillStyle = css(style.ink, 0.2);
+  ctx.fillRect(PADDING, layout.dividerY, width - PADDING * 2, 1);
+
+  ctx.fillStyle = ink;
+  ctx.font = font(700, layout.fontSize, fontFamily);
+  for (const line of layout.lines) writeLine(ctx, line.text, PADDING, line.y, width - PADDING * 2, align, line.rtl);
+
+  drawBadge(ctx, PADDING, layout.footerY, ink, css(style.ground));
+  ctx.font = font(700, WORDMARK_SIZE, fontFamily);
+  ctx.textBaseline = "middle";
+  ctx.direction = "ltr";
+  ctx.textAlign = "left";
+  ctx.fillText("Flow", PADDING + LOGO_WIDTH + WORDMARK_GAP, layout.footerY + LOGO_HEIGHT / 2);
   ctx.restore();
 }
 
-/** Renders the lyric card to a PNG Blob matching the exact aspect ratio of the rendered preview */
-export async function renderLyricCardBlob(
-  data: LyricCardData,
-  options: LyricCardOptions,
-): Promise<Blob | null> {
-  const coverImage = data.coverUrl ? await loadCardImage(data.coverUrl) : null;
-  return new Promise((resolve) => {
-    const targetW = options.targetWidth && options.targetWidth > 0 ? options.targetWidth : BASE_CARD_WIDTH;
-    const canvasWidth = Math.round(targetW * EXPORT_SCALE);
+/** One line at the card's left, middle or right, shaped right to left when its script is. */
+function writeLine(ctx: CanvasRenderingContext2D, text: string, left: number, top: number, width: number, align: CardAlign, rtl = isRtlText(text)) {
+  ctx.direction = rtl ? "rtl" : "ltr";
+  ctx.textAlign = align;
+  const x = align === "center" ? left + width / 2 : align === "right" ? left + width : left;
+  ctx.fillText(text, x, top);
+}
 
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
-    if (!ctx) {
-      resolve(null);
-      return;
-    }
+function canvasMeasurer(ctx: CanvasRenderingContext2D): TextMeasurer {
+  return {
+    width(text, textFont) {
+      ctx.font = textFont;
+      return ctx.measureText(text).width;
+    },
+    extent(textFont, size) {
+      ctx.font = textFont;
+      const metrics = ctx.measureText("Hg");
+      return { ascent: metrics.actualBoundingBoxAscent || size * 0.8, descent: metrics.actualBoundingBoxDescent || size * 0.2 };
+    },
+  };
+}
 
-    const calculatedHeight = calculateCardHeight(ctx, data, targetW, EXPORT_SCALE);
-    const canvasHeight =
-      options.targetHeight && options.targetHeight > 0
-        ? Math.max(Math.round(options.targetHeight * EXPORT_SCALE), calculatedHeight)
-        : calculatedHeight;
+async function fontsReady(fontFamily: string) {
+  try {
+    await Promise.all([500, 600, 700].map((weight) => document.fonts.load(font(weight, 16, fontFamily))));
+  } catch {
+    // Without the web font the card still draws, in the fallback face.
+  }
+}
 
-    canvas.width = canvasWidth;
-    canvas.height = canvasHeight;
-
-    try {
-      drawLyricCard(ctx, data, options, coverImage, canvasWidth, canvasHeight);
-      canvas.toBlob((blob) => resolve(blob), "image/png");
-    } catch (err) {
-      console.warn("Failed to render lyric card to blob", err);
-      resolve(null);
-    }
-  });
+/** The card as a 1080 px PNG. If the cover can't be read back it draws again without it, so a card always comes out. */
+export async function renderLyricCardBlob(data: LyricCardData, look: LyricCardLook, art: HTMLImageElement | null): Promise<Blob | null> {
+  await fontsReady(look.fontFamily);
+  const encode = (withArt: HTMLImageElement | null) =>
+    new Promise<Blob | null>((resolve) => {
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        resolve(null);
+        return;
+      }
+      const layout = layoutLyricCard(data, canvasMeasurer(ctx), look.fontFamily);
+      canvas.width = CARD_EXPORT_WIDTH;
+      canvas.height = Math.ceil(layout.height * SCALE);
+      ctx.scale(SCALE, SCALE);
+      try {
+        drawLyricCard(ctx, data, look, layout, withArt);
+        canvas.toBlob(resolve, "image/png");
+      } catch {
+        resolve(null);
+      }
+    });
+  return (await encode(art)) ?? (art ? encode(null) : null);
 }

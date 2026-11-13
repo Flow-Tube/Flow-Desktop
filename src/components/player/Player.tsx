@@ -2801,6 +2801,7 @@ export const Player: React.FC<PlayerProps> = ({
         togglePictureInPicture={togglePictureInPicture}
         showPipButton={manualPipButtonEnabled}
         showFullscreenTitle={showFullscreenTitle}
+        isPopOut={isPopOut}
         seekTo={seekTo}
         togglePlay={togglePlay}
         stepFrame={isLive ? undefined : stepFrame}

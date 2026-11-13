@@ -663,7 +663,7 @@ export const SETTING_DEFINITIONS = [
   bool(SETTINGS.MINI_PLAYER_CONTINUE_WATCHING_ENABLED, "player", true, "wired"),
   str(SETTINGS.MINI_PLAYER_SIZE, "player", "medium", "wired", MINI_PLAYER_SIZES),
   json(SETTINGS.MINI_PLAYER_POSITION, "player", "null", "wired", "internal", "internal"),
-  bool(SETTINGS.SHOW_FULLSCREEN_TITLE, "player", false, "wired"),
+  bool(SETTINGS.SHOW_FULLSCREEN_TITLE, "player", true, "wired"),
   bool(SETTINGS.PLAYER_BUTTON_NEXT_PREVIOUS, "player", true, "wired"),
   bool(SETTINGS.PLAYER_BUTTON_VOLUME, "player", true, "wired"),
   bool(SETTINGS.PLAYER_BUTTON_CHAPTERS, "player", true, "wired"),

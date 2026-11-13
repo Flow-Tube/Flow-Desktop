@@ -19,10 +19,11 @@ const { SETTINGS } = await import("../../lib/settings/schema");
 const host = document.createElement("div");
 let root: Root;
 
-const render = (fullscreen = false) =>
+const render = (fullscreen = false, extra: { title?: string; showFullscreenTitle?: boolean; isPopOut?: boolean } = {}) =>
   act(() =>
     root.render(
       createElement(FlowPlayerControls, {
+        ...extra,
         containerRef: createRef<HTMLDivElement>(),
         controlsVisible: true,
         setControlsVisible: () => {},
@@ -169,5 +170,31 @@ describe("autoplay switch", () => {
     setButton("autoplay", false);
     render();
     expect(autoplay()).toBeNull();
+  });
+});
+
+describe("video title above the seek bar", () => {
+  const titleShown = () => [...host.querySelectorAll("div")].some((el) => el.textContent === "A video title" && el.children.length === 0);
+
+  it("stays off the windowed player, where the page already shows it", () => {
+    render(false, { title: "A video title", showFullscreenTitle: true });
+    expect(titleShown()).toBe(false);
+  });
+
+  it("shows in fullscreen with the switch on, and not with it off", () => {
+    render(true, { title: "A video title", showFullscreenTitle: true });
+    expect(titleShown()).toBe(true);
+    render(true, { title: "A video title", showFullscreenTitle: false });
+    expect(titleShown()).toBe(false);
+  });
+
+  it("stays in the pop-out window, which has no page under the video", () => {
+    render(false, { title: "A video title", isPopOut: true });
+    expect(titleShown()).toBe(true);
+  });
+
+  it("defaults the fullscreen switch to on", async () => {
+    const { getSettingDefinition } = await import("../../lib/settings/values");
+    expect(getSettingDefinition(SETTINGS.SHOW_FULLSCREEN_TITLE).defaultValue).toBe("true");
   });
 });

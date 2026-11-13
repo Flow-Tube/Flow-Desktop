@@ -267,6 +267,8 @@ LINUX
 - Stable, Beta and Nightly .deb and .rpm packages now install side by side. Their commands are flow-desktop, flow-desktop-beta and flow-desktop-nightly, so pin Flow to your dock again after updating.
 - Flow is listed under Sound and Video in app menus with sharper icons, and the .rpm installs on openSUSE as well as Fedora.
 - The Flatpak can use the keyring, the tray, Discord and Show in folder. A new Linux help page covers packages, graphics, codecs, sync and moving from Beta to Stable.
+- Arch Linux: the flow-desktop (built from source) and flow-desktop-bin (the release package) AUR packages now update with every release, betas included.
+- A new flow-desktop-git AUR package builds the latest development code. None of them installs the flow command, which belongs to another Arch package.
 
 FIXES
 - The rows on the About page that open something, such as Changelog, can be reached and opened with the keyboard.

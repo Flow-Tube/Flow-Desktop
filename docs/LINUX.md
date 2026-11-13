@@ -11,7 +11,8 @@ supported systems, see the [README](../README.md#downloads-and-supported-systems
 | Fedora, RHEL and its rebuilds | `.rpm` | `sudo dnf install ./Flow_*.rpm` |
 | openSUSE | `.rpm` | `sudo zypper install ./Flow_*.rpm` |
 | Arch, Manjaro, EndeavourOS | AUR | `flow-desktop-bin` (prebuilt) or `flow-desktop` (built from source) |
-| Anything else, or an immutable system (Fedora Silverblue, SteamOS) | AppImage | Make it executable and run it |
+| Any distribution with Flatpak, including immutable ones (Fedora Silverblue, SteamOS) | Flatpak from [FlatPark](https://flatpark.org/apps/io.github.aedev.flow.desktop/) | `flatpak remote-add --if-not-exists flatpark https://dl.flatpark.org/flatpark.flatpakrepo`, then `flatpak install flatpark io.github.aedev.flow.desktop` |
+| Anything else | AppImage | Make it executable and run it |
 
 Install a `.deb` or `.rpm` with the commands above rather than `dpkg -i` or
 `rpm -i`, so the codec packages Flow needs come with it.
@@ -19,7 +20,11 @@ Install a `.deb` or `.rpm` with the commands above rather than `dpkg -i` or
 The AppImage brings its own WebKitGTK and codecs, so it plays everything
 without system packages. The `.deb`, `.rpm` and AUR packages use your
 system's WebKitGTK and GStreamer, which get your distribution's security
-updates. A Flatpak is in testing in the nightly builds.
+updates. The FlatPark Flatpak installs the official `.deb` unmodified on the
+GNOME runtime with its codecs, and updates through `flatpak update` (Flow's
+own updater stays off there). It follows the latest release, betas included,
+keeps its data inside its sandbox, and has no access to your files. Flow's own
+Flatpak is still in testing in the nightly builds.
 
 ### Stable, Beta and Nightly
 

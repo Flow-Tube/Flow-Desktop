@@ -53,6 +53,7 @@ export function PlayerTab() {
   const [speedSlider, setSpeedSlider] = useBoolPref(SETTINGS.SPEED_SLIDER_ENABLED, false);
 
   const [doubleTapSeek, setDoubleTapSeek] = useNumberPref(SETTINGS.DOUBLE_TAP_SEEK_SECONDS, 10);
+  const [doubleClickSeek, setDoubleClickSeek] = useBoolPref(SETTINGS.DOUBLE_CLICK_SEEK_ENABLED, true);
 
   const [subtitles, setSubtitles] = useBoolPref(SETTINGS.SUBTITLES_ENABLED, false);
   const [subtitleLang, setSubtitleLang] = usePreference(SETTINGS.PREFERRED_SUBTITLE_LANGUAGE, 'en');
@@ -165,6 +166,9 @@ export function PlayerTab() {
             { value: '5', label: '5s' }, { value: '10', label: '10s' }, { value: '15', label: '15s' },
             { value: '20', label: '20s' }, { value: '30', label: '30s' },
           ]} />
+        </SettingItem>
+        <SettingItem title={getString('settings_double_click_seek')} description={getString('settings_double_click_seek_desc')}>
+          <ToggleSwitch checked={doubleClickSeek} onChange={setDoubleClickSeek} />
         </SettingItem>
       </SettingsGroup>
 

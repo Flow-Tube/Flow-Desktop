@@ -415,6 +415,7 @@ export const Player: React.FC<PlayerProps> = ({
   const longPressSpeedSetting = useAppSettingsStore((state) => state.values[SETTINGS.LONG_PRESS_PLAYBACK_SPEED] ?? "2.0");
   const speedSliderEnabled = useAppSettingsStore((state) => state.values[SETTINGS.SPEED_SLIDER_ENABLED] === "true");
   const seekIntervalSetting = useAppSettingsStore((state) => state.values[SETTINGS.DOUBLE_TAP_SEEK_SECONDS] ?? "10");
+  const doubleClickSeek = useAppSettingsStore((state) => state.values[SETTINGS.DOUBLE_CLICK_SEEK_ENABLED] !== "false");
   const subtitlesEnabled = useAppSettingsStore((state) => state.values[SETTINGS.SUBTITLES_ENABLED] === "true");
   const preferredAudioLanguage = useAppSettingsStore((state) => state.values[SETTINGS.PREFERRED_AUDIO_LANGUAGE]);
   const preferredSubtitleLanguage = useAppSettingsStore((state) => state.values[SETTINGS.PREFERRED_SUBTITLE_LANGUAGE] ?? "en");
@@ -2620,6 +2621,7 @@ export const Player: React.FC<PlayerProps> = ({
         bitrate={selectedQuality?.bitrate}
         captionCount={captions.length}
         seekIntervalSeconds={seekIntervalSeconds}
+        doubleClickSeek={doubleClickSeek}
         longPressPlaybackRate={longPressPlaybackRate}
         loopEnabled={videoLoopEnabled}
         setPlaybackRate={setPlaybackRate}

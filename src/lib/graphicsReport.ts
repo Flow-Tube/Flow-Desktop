@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { useEffect, useState } from "react";
 import { isTauriEnv } from "./api/env";
 
 /** What this Linux launch did about graphics; see `linux_system::GraphicsReport`. */
@@ -55,4 +56,24 @@ export function getGraphicsReport(): Promise<GraphicsReport | null> {
       return null;
     });
   return cached;
+}
+
+/** GTK3 can't keep a window above others on Wayland, so pinning does nothing there. */
+export function canPinWindows(report: GraphicsReport | null): boolean {
+  return !(report && report.session === "wayland" && !report.x11Backend);
+}
+
+/** True until the report says otherwise, and always off Linux. */
+export function useCanPinWindows(): boolean {
+  const [canPin, setCanPin] = useState(true);
+  useEffect(() => {
+    let active = true;
+    void getGraphicsReport().then((report) => {
+      if (active) setCanPin(canPinWindows(report));
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+  return canPin;
 }

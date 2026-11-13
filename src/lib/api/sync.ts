@@ -105,6 +105,18 @@ export function getSyncStatus(): Promise<SyncStatus> {
   return invokeBackend<SyncStatus>("sync_status");
 }
 
+/** Mirrors `commands::sync::FirewallHelp`. */
+export interface FirewallHelp {
+  /** `ufw` and/or `firewalld`, when installed; always empty off Linux. */
+  firewalls: string[];
+  /** The port Linked devices listens on, once its service started. */
+  linkedPort: number | null;
+}
+
+export function getSyncFirewallHelp(): Promise<FirewallHelp> {
+  return invokeBackend<FirewallHelp>("sync_firewall_help");
+}
+
 export function startSyncHost(collections: string[]): Promise<HostStartInfo> {
   return invokeBackend<HostStartInfo>("sync_start_host", { collections });
 }

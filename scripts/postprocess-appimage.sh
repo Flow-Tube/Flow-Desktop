@@ -101,10 +101,26 @@ for plugin in libgstlibav.so libgstplayback.so libgstvpx.so; do
     || { echo "$plugin missing from the AppImage: GStreamer bundling is broken" >&2; exit 1; }
 done
 
+# Pinned by checksum: appimagetool, and the runtime it embeds, which it would
+# otherwise download from type2-runtime's moving "continuous" release
+# (20251108 is its newest tagged one).
+case "$arch" in
+  x86_64)
+    tool_sha256=ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0
+    runtime_sha256=2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d
+    ;;
+  aarch64)
+    tool_sha256=f0837e7448a0c1e4e650a93bb3e85802546e60654ef287576f46c71c126a9158
+    runtime_sha256=00cbdfcf917cc6c0ff6d3347d59e0ca1f7f45a6df1a428a0d6d8a78664d87444
+    ;;
+esac
 curl -fsSL -o appimagetool.AppImage \
   "https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-$arch.AppImage"
+curl -fsSL -o runtime \
+  "https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-$arch"
+printf '%s  %s\n' "$tool_sha256" appimagetool.AppImage "$runtime_sha256" runtime | sha256sum -c -
 chmod +x appimagetool.AppImage
-ARCH="$arch" ./appimagetool.AppImage --appimage-extract-and-run "$root" "$name"
+ARCH="$arch" ./appimagetool.AppImage --appimage-extract-and-run --runtime-file runtime "$root" "$name"
 
 # Verify the repack before it replaces the original: libs gone or moved, app
 # binary kept.

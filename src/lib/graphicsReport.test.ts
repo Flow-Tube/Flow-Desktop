@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatGraphics, type GraphicsReport } from "./graphicsReport";
+import { canPinWindows, formatGraphics, type GraphicsReport } from "./graphicsReport";
 
 const report: GraphicsReport = {
   tier: 0,
@@ -25,5 +25,20 @@ describe("formatGraphics", () => {
 
   it("keeps a reason it does not know rather than hiding it", () => {
     expect(formatGraphics({ ...report, tierReason: "new-rule", session: "" })).toContain("Tier 0 (new-rule), Automatic mode, unknown session");
+  });
+});
+
+describe("canPinWindows", () => {
+  it("allows pinning off Linux and on X11", () => {
+    expect(canPinWindows(null)).toBe(true);
+    expect(canPinWindows({ ...report, session: "x11" })).toBe(true);
+  });
+
+  it("allows pinning when Wayland is drawn through X11", () => {
+    expect(canPinWindows({ ...report, session: "wayland", x11Backend: true })).toBe(true);
+  });
+
+  it("hides pinning on native Wayland", () => {
+    expect(canPinWindows({ ...report, session: "wayland", x11Backend: false })).toBe(false);
   });
 });

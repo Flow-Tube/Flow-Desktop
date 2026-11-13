@@ -63,6 +63,8 @@ type PlayerGestureOverlayProps = {
   bitrate?: number | null;
   captionCount?: number;
   seekIntervalSeconds: number;
+  /** Off: a double-click anywhere toggles fullscreen instead of seeking on the sides. */
+  doubleClickSeek: boolean;
   /** Null when hold-to-speed-up is off. */
   longPressPlaybackRate: PlaybackRate | null;
   loopEnabled: boolean;
@@ -112,6 +114,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
   bitrate,
   captionCount,
   seekIntervalSeconds,
+  doubleClickSeek,
   longPressPlaybackRate,
   loopEnabled,
   setPlaybackRate,
@@ -306,7 +309,9 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
     clearClickTimer();
     const rect = event.currentTarget.getBoundingClientRect();
     const x = event.clientX - rect.left;
-    if (x < rect.width * 0.35) {
+    if (!doubleClickSeek) {
+      toggleFullscreen();
+    } else if (x < rect.width * 0.35) {
       seekTo(currentTime - seekIntervalSeconds);
       onSeekFeedback("backward", seekIntervalSeconds);
     } else if (x > rect.width * 0.65) {

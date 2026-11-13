@@ -130,6 +130,11 @@ export function useSubscriptionFeed(channels: SubscribedChannel[]) {
   );
   const channelIds = useMemo(() => feedKey(channels.map((channel) => channel.id)), [channels]);
   const scopeRequestRef = useRef(0);
+  // Read by the load effect, which runs after this one in the same commit.
+  const shownCountRef = useRef(0);
+  useEffect(() => {
+    shownCountRef.current = videos.length;
+  }, [videos]);
 
   useEffect(() => {
     let active = true;
@@ -149,13 +154,14 @@ export function useSubscriptionFeed(channels: SubscribedChannel[]) {
     // A refresh asks again however fresh the cached feed is.
     if (refreshNonce > 0) feedCache.delete(channelIds);
     const mem = feedCache.get(channelIds);
+    const alreadyShown = shownCountRef.current > 0;
     if (mem) {
       setVideos(mem.videos);
       setRssChannels(mem.channels);
       setFailedChannelIds(mem.failedChannelIds);
       setLastRefreshedAt(mem.cachedAt);
       setLoading(false);
-    } else {
+    } else if (!alreadyShown) {
       setLoading(true);
     }
     setError(null);
@@ -204,20 +210,29 @@ export function useSubscriptionFeed(channels: SubscribedChannel[]) {
         return;
       }
 
-      let sawVideos = haveVideos;
+      let sawVideos = haveVideos || alreadyShown;
+      // Each batch is the whole feed so far, re-sorted, and the first one covers only a few
+      // channels. Shown over a feed someone is already reading, every batch would shrink and
+      // reorder the page under them, so that feed stays until the scan is complete.
+      const holding = sawVideos;
 
       try {
 
         await streamSubscriptionRssFeed(ids, (feed) => {
           if (!active) return;
+          const done = feed.processed >= feed.total;
+          setScanProgress(done ? null : { processed: feed.processed, total: feed.total });
+          if (feed.videos.length > 0) sawVideos = true;
+          if (holding && !done) return;
+          if (holding && feed.videos.length === 0) {
+            // Nothing could be read, which says nothing about the uploads already shown.
+            setFailedChannelIds(feed.failedChannelIds);
+            return;
+          }
           setVideos(feed.videos);
           setRssChannels(feed.channels);
           setFailedChannelIds(feed.failedChannelIds);
-          if (feed.videos.length > 0) sawVideos = true;
           setLoading(false);
-
-          const done = feed.processed >= feed.total;
-          setScanProgress(done ? null : { processed: feed.processed, total: feed.total });
           if (done && feed.videos.length > 0) {
             setLastRefreshedAt(Date.now());
             rememberFinishedFeed(channelIds, feed);

@@ -277,6 +277,8 @@ LINUX
 - Opening a link or the launcher while Flow is already running no longer counts as a failed start, so Flow stops slipping into slower graphics modes on its own.
 - When the page keeps crashing after it opened, the next launch uses a safer graphics mode.
 - On Wayland, the pop-out player no longer offers Pin and Settings no longer offers Always on top, since Wayland doesn't let apps keep a window above others. The Shorts menu hides Mini player where it can't open.
+- Arch Linux: the flow-desktop (built from source) and flow-desktop-bin (the release package) AUR packages now update with every release, betas included.
+- A new flow-desktop-git AUR package builds the latest development code. None of them installs the flow command, which belongs to another Arch package.
 
 NIGHTLY BUILDS
 - Nightly builds of Flow Nightly are now on a Nightly release on GitHub, so anyone can download them without a GitHub account. Each new build replaces the files there, and a checksum file lists them.

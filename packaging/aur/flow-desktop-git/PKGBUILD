@@ -1,0 +1,154 @@
+# Maintainer: A-EDev
+
+pkgname=flow-desktop-git
+_pkgname=flow-desktop
+pkgver=0.1.0beta3.r315.g6960897
+pkgrel=1
+pkgdesc='Privacy-first YouTube and YouTube Music client, the desktop companion to Flow for Android (development version)'
+arch=('x86_64' 'aarch64')
+url='https://github.com/Flow-Tube/Flow-Desktop'
+license=('GPL-3.0-only')
+depends=(
+  'cairo'
+  'dbus'
+  'gcc-libs'
+  'gdk-pixbuf2'
+  'glib2'
+  'glibc'
+  'gst-libav'
+  'gst-plugins-bad'
+  'gst-plugins-base'
+  'gst-plugins-good'
+  'gtk3'
+  'hicolor-icon-theme'
+  'libsoup3'
+  'nodejs'
+  'webkit2gtk-4.1'
+)
+makedepends=('git' 'libayatana-appindicator' 'pnpm' 'rust')
+optdepends=('gst-plugins-ugly: more audio and video codecs'
+            'libayatana-appindicator: music controls in the system tray')
+provides=("$_pkgname")
+conflicts=("$_pkgname" "$_pkgname-bin")
+# The release profile already strips symbols, so a debug package would be empty.
+options=('!debug')
+source=("git+$url.git")
+sha256sums=('SKIP')
+
+# --- Shared flow-desktop install steps: keep identical in every PKGBUILD. ---
+
+# The release workflow builds every tag with a "-" (betas, release
+# candidates) with src-tauri/tauri.prerelease.conf.json, which renames the app.
+_flow_product() {
+  if [[ $_tag == *-* ]]; then
+    printf 'Flow Beta'
+  else
+    printf 'Flow'
+  fi
+}
+
+# Installs the data tree of a Flow .deb into $pkgdir.
+_flow_install() {
+  local data=$1 product resdir desktop bin
+  product=$(_flow_product)
+  resdir="$pkgdir/usr/lib/$product"
+  desktop="$pkgdir/usr/share/applications/$product.desktop"
+
+  cp -a --no-preserve=ownership "$data/usr" "$pkgdir/"
+  if [[ ! -f $resdir/sidecar/integrity.cjs || ! -f $desktop ]]; then
+    error "The .deb does not have the expected '$product' layout."
+    return 1
+  fi
+
+  # The AUR ships one name for every channel. Releases up to 0.1.0-beta3
+  # install /usr/bin/flow, which belongs to the AUR's flow and flow-bin
+  # packages; later ones install flow-desktop, or flow-desktop-beta for betas.
+  local bin
+  for bin in flow flow-desktop-beta; do
+    if [[ -e $pkgdir/usr/bin/$bin ]]; then
+      mv "$pkgdir/usr/bin/$bin" "$pkgdir/usr/bin/flow-desktop"
+    fi
+  done
+  sed -Ei 's/^(Exec|StartupWMClass)=flow(-desktop-beta)?( |$)/\1=flow-desktop\3/' "$desktop"
+  if [[ ! -x $pkgdir/usr/bin/flow-desktop ]] ||
+    grep -E '^Exec=' "$desktop" | grep -Evq '^Exec=flow-desktop( |$)'; then
+    error "Could not point $product.desktop at flow-desktop."
+    return 1
+  fi
+
+  # Tells Flow that pacman owns its updates, so the in-app updater stays off.
+  install -m644 /dev/null "$resdir/distro-managed"
+}
+
+# --- End of shared steps. ---
+
+# package.json pins pnpm 11.9.0 in "packageManager", and pnpm 11+ then
+# downloads and re-runs that exact version by default (pmOnFail=download),
+# outside makepkg's checksums and again for the nested `pnpm build` that
+# Tauri starts. pnpm 12 keeps pnpm 11's lockfile format and settings, so use
+# Arch's pnpm and only log the mismatch.
+_flow_pnpm_env() {
+  export pnpm_config_pm_on_fail=warn
+}
+
+# main's package.json holds the version of the last or next release, which
+# _flow_product reads from $_tag to name the app like that release.
+_flow_version() {
+  node -p 'require("./package.json").version'
+}
+
+pkgver() {
+  cd Flow-Desktop
+  # v0.1.0-beta3-42-gabc1234 becomes 0.1.0beta3.r42.gabc1234, which sorts
+  # after flow-desktop's 0.1.0beta3 and before its 0.1.0.
+  git describe --long --tags --abbrev=7 --match 'v[0-9]*' |
+    sed -E 's/^v//; s/-(alpha|beta|rc)/\1/; s/([^-]*-g)/r\1/; s/-/./g'
+}
+
+prepare() {
+  cd Flow-Desktop
+  _flow_pnpm_env
+  pnpm install --frozen-lockfile
+
+  cd src-tauri
+  export RUSTUP_TOOLCHAIN=stable
+  cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+}
+
+build() {
+  cd Flow-Desktop
+  local _tag
+  _tag=$(_flow_version)
+  _flow_pnpm_env
+  export RUSTUP_TOOLCHAIN=stable
+  export CARGO_TARGET_DIR=target
+  export CARGO_NET_OFFLINE=true
+  # makepkg sets RUSTFLAGS, and cargo then ignores the build.rustflags in
+  # src-tauri/.cargo/config.toml, so repeat its cfg here.
+  export RUSTFLAGS+=" --cfg reqwest_unstable"
+  # The C parts of ring, aws-lc and SQLite are linked by rustc, which can't
+  # read makepkg's slim LTO objects.
+  export CFLAGS+=" -ffat-lto-objects"
+
+  # No updater artifacts, so no signing key is needed.
+  local config=(--config '{"bundle":{"createUpdaterArtifacts":false}}')
+  if [[ $_tag == *-* ]]; then
+    config+=(--config src-tauri/tauri.prerelease.conf.json)
+  fi
+  pnpm tauri build --bundles deb "${config[@]}"
+}
+
+package() {
+  cd Flow-Desktop
+  local _tag debarch
+  _tag=$(_flow_version)
+  case $CARCH in
+    x86_64) debarch=amd64 ;;
+    aarch64) debarch=arm64 ;;
+  esac
+
+  mkdir -p "$srcdir/deb-data"
+  bsdtar -xOf "src-tauri/target/release/bundle/deb/$(_flow_product)_${_tag}_$debarch.deb" 'data.tar.*' |
+    bsdtar -xf - -C "$srcdir/deb-data"
+  _flow_install "$srcdir/deb-data"
+}

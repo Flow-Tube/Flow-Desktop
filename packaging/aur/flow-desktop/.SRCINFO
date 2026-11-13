@@ -1,6 +1,6 @@
 pkgbase = flow-desktop
 	pkgdesc = Privacy-first YouTube and YouTube Music client, the desktop companion to Flow for Android
-	pkgver = 0.1.0beta2
+	pkgver = 0.1.0beta3
 	pkgrel = 1
 	url = https://github.com/Flow-Tube/Flow-Desktop
 	arch = x86_64
@@ -28,7 +28,7 @@ pkgbase = flow-desktop
 	optdepends = libayatana-appindicator: music controls in the system tray
 	conflicts = flow-desktop-bin
 	options = !debug
-	source = flow-desktop-0.1.0beta2.tar.gz::https://github.com/Flow-Tube/Flow-Desktop/archive/refs/tags/v0.1.0-beta2.tar.gz
-	sha256sums = c812728e887ffe35480f432313169be682e198d1f961bfaf56911d0d95a00e16
+	source = flow-desktop-0.1.0beta3.tar.gz::https://github.com/Flow-Tube/Flow-Desktop/archive/refs/tags/v0.1.0-beta3.tar.gz
+	sha256sums = 96bf1ee079042b181102f8f32a866aef6546d99d03cbb49850abb50f376f431a
 
 pkgname = flow-desktop

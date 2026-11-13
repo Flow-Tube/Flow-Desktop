@@ -13,6 +13,8 @@ import { parseTabSession, restoreTabSession, serializeTabSession } from "./tabSe
 import { playerSnapshot } from "./tabPlayback";
 import { watchVideoIdFromPath } from "../watchRouteSync";
 import { onBeforeProfileSwitch } from "../profiles/beforeSwitch";
+import { claimStartPage, startPagePath } from "../startPage";
+import { sessionStore } from "../storage/profileStorage";
 
 const SAVE_DELAY_MS = 1_000;
 
@@ -35,6 +37,26 @@ function save(): void {
   void setSetting(SETTINGS.TAB_SESSION, JSON.stringify(session)).catch((error) =>
     console.warn("Failed to save open tabs", error),
   );
+}
+
+/** The page this launch opens on, or null after the first load of a launch. */
+async function readStartPath(): Promise<string | null> {
+  if (!claimStartPage(sessionStore)) return null;
+  const [page, shortsContent, shortsNav, musicContent, musicNav, explore] = await Promise.all(
+    [
+      SETTINGS.DEFAULT_NAV_TAB_INDEX,
+      SETTINGS.SHORTS_CONTENT_ENABLED,
+      SETTINGS.SHORTS_NAVIGATION_ENABLED,
+      SETTINGS.MUSIC_CONTENT_ENABLED,
+      SETTINGS.MUSIC_NAVIGATION_ENABLED,
+      SETTINGS.CATEGORIES_NAV_TAB_ENABLED,
+    ].map((key) => getSetting(key)),
+  );
+  return startPagePath(page, {
+    shorts: shortsContent !== "false" && shortsNav !== "false",
+    music: musicContent !== "false" && musicNav !== "false",
+    explore: explore !== "false",
+  });
 }
 
 /** An extra window starts on the page it was opened for, with a moved video picking up where it was. */
@@ -71,11 +93,16 @@ export function useTabSession(): boolean {
     let cancelled = false;
     // Read here rather than from the settings store, which has not loaded yet. The
     // session is saved with tabs off too, so turning them on never brings back an old one.
-    void Promise.all([getSetting(SETTINGS.TABS_ENABLED), getSetting(SETTINGS.TAB_SESSION)])
-      .catch(() => [null, null])
-      .then(([enabled, raw]) => {
+    void Promise.all([getSetting(SETTINGS.TABS_ENABLED), getSetting(SETTINGS.TAB_SESSION), readStartPath()])
+      .catch(() => [null, null, null] as const)
+      .then(([enabled, raw, startPath]) => {
         if (cancelled) return;
         const session = enabled === "true" ? parseTabSession(raw) : null;
+        // Only a plain launch onto Home moves: a link Flow was opened with, or restored tabs, win.
+        const launched = useTabsStore.getState();
+        if (!session && startPath && startPath !== "/" && currentEntry(activeTab(launched)).pathname === "/") {
+          launched.replace(startPath);
+        }
         if (session) {
           const tabs = useTabsStore.getState();
           tabs.restoreTabs(restoreTabSession(session));

@@ -1,56 +1,39 @@
 import { describe, expect, it } from "vitest";
-import {
-  colorDistance,
-  distinctCardStyles,
-  hexToRgb,
-  isLightColor,
-  looksAlike,
-  rgbToHex,
-  type CardStyleOption,
-} from "./palette";
 
-describe("lyrics/palette", () => {
-  it("converts rgb to hex and back accurately", () => {
-    const rgb = { r: 255, g: 128, b: 64 };
-    const hex = rgbToHex(rgb);
-    expect(hex.toLowerCase()).toBe("#ff8040");
+import { cardStyles, colorDistance, distinctCardStyles, inkFor, type CardStyle } from "./palette";
 
-    const parsed = hexToRgb(hex);
-    expect(parsed).toEqual(rgb);
+const rgb = (r: number, g: number, b: number) => ({ r, g, b });
+const theme = { surface: rgb(40, 40, 40), onSurface: rgb(240, 240, 240), primary: rgb(255, 78, 69), onPrimary: rgb(255, 255, 255) };
+
+describe("lyric card looks", () => {
+  it("measures colour distance on a 0 to 1 scale", () => {
+    expect(colorDistance(rgb(0, 0, 0), rgb(0, 0, 0))).toBe(0);
+    expect(colorDistance(rgb(32, 32, 32), rgb(36, 36, 36))).toBeLessThan(0.06);
   });
 
-  it("detects light and dark colors correctly", () => {
-    expect(isLightColor("#ffffff")).toBe(true);
-    expect(isLightColor("#f8f9fa")).toBe(true);
-    expect(isLightColor("#fed7aa")).toBe(true); // light peach
-    expect(isLightColor("#000000")).toBe(false);
-    expect(isLightColor("#121212")).toBe(false);
-    expect(isLightColor("#1e293b")).toBe(false);
-    expect(isLightColor("#4c0519")).toBe(false); // deep wine
-    expect(isLightColor("cover")).toBe(false);
+  it("picks the ink that reads best", () => {
+    expect(inkFor(rgb(250, 240, 220))).toEqual(rgb(17, 17, 17));
+    expect(inkFor(rgb(30, 20, 60))).toEqual(rgb(255, 255, 255));
   });
 
-  it("computes normalized Euclidean color distance accurately", () => {
-    // Identical colors
-    expect(colorDistance("#112233", "#112233")).toBe(0);
-
-    // Very close colors (distance < 0.06)
-    expect(looksAlike("#202020", "#242424")).toBe(true);
-
-    // Different colors (distance >= 0.06)
-    expect(looksAlike("#000000", "#ffffff")).toBe(false);
-    expect(looksAlike("#ff0000", "#00ff00")).toBe(false);
-  });
-
-  it("deduplicates styles with similar ground colors while preserving cover", () => {
-    const styles: CardStyleOption[] = [
-      { id: "cover", label: "Cover", ground: "#121212", hex: "#121212", ink: "#ffffff", isCover: true, isLight: false },
-      { id: "dark1", label: "Dark 1", ground: "#121212", hex: "#121212", ink: "#ffffff", isLight: false },
-      { id: "dark2", label: "Dark 2", ground: "#141414", hex: "#141414", ink: "#ffffff", isLight: false }, // Should be dropped
-      { id: "accent", label: "Red", ground: "#e11d48", hex: "#e11d48", ink: "#ffffff", isLight: false },
+  it("drops look-alike grounds but always keeps the cover", () => {
+    const styles: CardStyle[] = [
+      { id: "cover", ground: rgb(20, 20, 20), ink: rgb(255, 255, 255), mesh: new Uint8ClampedArray(4) },
+      { id: "artwork", ground: rgb(20, 20, 20), ink: rgb(255, 255, 255) },
+      { id: "surface", ground: rgb(22, 22, 22), ink: rgb(255, 255, 255) },
+      { id: "primary", ground: rgb(225, 29, 72), ink: rgb(255, 255, 255) },
     ];
+    expect(distinctCardStyles(styles).map((style) => style.id)).toEqual(["cover", "artwork", "primary"]);
+  });
 
-    const result = distinctCardStyles(styles);
-    expect(result.map((s) => s.id)).toEqual(["cover", "dark1", "accent"]);
+  it("offers the cover, its swatches and the app theme, in Android's order", () => {
+    const cover = { backdrop: rgb(60, 30, 90), mesh: new Uint8ClampedArray(4) };
+    const ids = cardStyles(cover, { base: rgb(30, 60, 40), accent: rgb(240, 180, 30) }, theme).map((style) => style.id);
+    expect(ids).toEqual(["cover", "artwork", "accent", "surface", "inverse", "primary"]);
+    expect(cardStyles(null, null, theme)[0]).toMatchObject({ id: "surface", ground: theme.surface, ink: theme.onSurface });
+  });
+
+  it("still offers a look when neither the cover nor the theme can be read", () => {
+    expect(cardStyles(null, null, null)).toHaveLength(1);
   });
 });

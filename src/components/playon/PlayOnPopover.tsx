@@ -21,6 +21,7 @@ export function PlayOnPopover({ onClose }: { onClose: () => void }) {
   const { devices, active } = usePlayOn();
   const pickDevice = usePlayOnStore((state) => state.pick);
   const movingTo = usePlayOnStore((state) => state.movingTo);
+  const failed = usePlayOnStore((state) => state.failed);
   const navigate = useNavigate();
   const showToast = useUiStore((state) => state.showToast);
 
@@ -65,6 +66,7 @@ export function PlayOnPopover({ onClose }: { onClose: () => void }) {
                 device={device}
                 active={device.did === active?.did}
                 moving={device.did === movingTo}
+                failed={device.did === failed}
                 disabled={movingTo !== null || device.group === "offline" || (device.thisDevice && device.did === active?.did)}
                 onPick={() => pick(device)}
               />

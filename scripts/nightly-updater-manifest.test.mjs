@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildNightlyManifests, planNightlySigning } from "./nightly-updater-manifest.mjs";
+import { buildNightlyManifests, nightlyPackages } from "./nightly-updater-manifest.mjs";
 import { nightlyVersion } from "./nightly-version.mjs";
 
 const V = "0.1.0-nightly.812";
@@ -66,7 +66,12 @@ describe("nightly updater manifests", () => {
   });
 
   it("plans each package's signature for its own manifest's version", () => {
-    const plan = planNightlySigning({ files: FILES, runNumber: "812", baseVersion: "0.1.0-beta4" });
+    const plan = nightlyPackages({
+      files: FILES,
+      repository: "Flow-Tube/Flow-Desktop",
+      runNumber: "812",
+      baseVersion: "0.1.0-beta4",
+    });
     expect(plan.map(({ file }) => file).sort()).toEqual([...PACKAGES].sort());
     const versionOf = (suffix) => plan.find(({ file }) => file.endsWith(suffix)).version;
     expect(versionOf("windows-x64-setup.exe")).toBe("0.1.0-nightly.812");

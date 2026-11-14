@@ -409,6 +409,7 @@ jobs:
             scripts/nightly-updater-manifest.mjs
             scripts/nightly-version.mjs
             scripts/sign-updater-files.sh
+            scripts/updater-manifest.mjs
             scripts/verify-updater-manifests.mjs
             src-tauri/tauri.conf.json
             src-tauri/updater-nightly.pub
@@ -469,6 +470,7 @@ jobs:
             scripts/nightly-updater-manifest.mjs
             scripts/nightly-version.mjs
             scripts/sign-updater-files.sh
+            scripts/updater-manifest.mjs
             scripts/verify-updater-manifests.mjs
             src-tauri/tauri.conf.json
 

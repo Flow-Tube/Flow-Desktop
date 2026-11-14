@@ -412,7 +412,8 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
-          cache: pnpm
+          # No cache in the job that holds the signing key.
+          package-manager-cache: false
 
       # Only the Tauri CLI is used here, to sign. No install script runs in the
       # job that holds the signing key.

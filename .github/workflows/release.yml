@@ -10,8 +10,8 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
-permissions:
-  contents: write
+# Each job asks for what it needs.
+permissions: {}
 
 env:
   CARGO_TERM_COLOR: always
@@ -20,6 +20,8 @@ jobs:
   prepare:
     name: Prepare release metadata
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
     outputs:
       version: ${{ steps.release.outputs.version }}
       tag: ${{ steps.release.outputs.tag }}
@@ -35,6 +37,7 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
+          package-manager-cache: false
 
       - name: Resolve release channel
         id: release
@@ -84,6 +87,10 @@ jobs:
     name: ${{ matrix.name }}
     needs: prepare
     timeout-minutes: 120
+    # Creates the release and uploads to it. No cache is restored in this job,
+    # since the updater signing key is in its environment.
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -183,21 +190,13 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
-          cache: pnpm
+          package-manager-cache: false
 
       - name: Install Rust target
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
           toolchain: stable
           targets: ${{ matrix.target }}
-
-      - name: Cache Rust build data
-        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          workspaces: src-tauri -> target
-          # Per runner image: build scripts compiled against 24.04's glibc
-          # can't run on 22.04.
-          shared-key: release-${{ matrix.target }}-${{ matrix.runner }}
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile

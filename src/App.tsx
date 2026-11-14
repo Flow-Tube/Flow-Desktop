@@ -71,6 +71,7 @@ import { LayoutGroup } from "framer-motion";
 import { ToastHost } from "./components/layout/ToastHost";
 import { GlobalMusicAudio } from "./components/music/GlobalMusicAudio";
 import { GlobalMusicDock } from "./components/music/GlobalMusicDock";
+import { PlayingElsewhereBar } from "./components/playon/PlayingElsewhereBar";
 import { RemoteDock } from "./components/playon/RemoteDock";
 import { ConsentDialog } from "./components/playon/ConsentDialog";
 import { MusicOverlay } from "./components/music/MusicOverlay";
@@ -355,6 +356,7 @@ function App() {
           <LayoutGroup>
             <GlobalMusicDock />
             <RemoteDock />
+            <PlayingElsewhereBar />
             <ConsentDialog />
             <MusicOverlay />
           </LayoutGroup>

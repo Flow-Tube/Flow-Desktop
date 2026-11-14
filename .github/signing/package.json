@@ -1,0 +1,8 @@
+{
+  "name": "flow-desktop-updater-signing",
+  "private": true,
+  "description": "The only tool the updater signing jobs install.",
+  "dependencies": {
+    "@tauri-apps/cli": "2.12.4"
+  }
+}

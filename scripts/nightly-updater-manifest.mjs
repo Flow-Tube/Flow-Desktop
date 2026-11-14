@@ -1,8 +1,10 @@
-// Writes the nightly updater manifests from the signed packages in a folder:
-// latest.json for Windows and macOS, latest-linux.json for Linux (see
-// nightly-version.mjs for why they differ).
-// Usage: node scripts/nightly-updater-manifest.mjs <folder>
-// Env: GITHUB_REPOSITORY, GITHUB_RUN_NUMBER, NIGHTLY_NOTES (plain text).
+// Plans the signing of the nightly updater packages in a folder, then writes
+// their manifests from the signatures: latest.json for Windows and macOS,
+// latest-linux.json for Linux (see nightly-version.mjs for why they differ).
+// Usage: node scripts/nightly-updater-manifest.mjs plan <folder>
+//          prints "<version>\t<file>" for each package to sign
+//        node scripts/nightly-updater-manifest.mjs write <folder>
+// Env: GITHUB_REPOSITORY (write), GITHUB_RUN_NUMBER, NIGHTLY_NOTES (plain text).
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -37,9 +39,20 @@ const EXPECTED = {
 };
 
 /**
- * Returns `{ [fileName]: manifest }`, or null when nothing is signed (a build
- * without the signing key, which then can't update itself).
+ * Returns `[{ file, version }]` for every updater package in `files`. The
+ * installed app refuses a package signed for another version than its
+ * manifest announces, so each one is signed for its manifest's version.
  */
+export function planNightlySigning({ files, runNumber, baseVersion }) {
+  return files
+    .filter((name) => PACKAGE.test(name))
+    .map((file) => ({
+      file,
+      version: nightlyVersion(baseVersion, runNumber, OS[PACKAGE.exec(file)[1]]),
+    }));
+}
+
+/** Returns `{ [fileName]: manifest }`. Every package must be signed. */
 export function buildNightlyManifests({
   files,
   signatures,
@@ -49,25 +62,18 @@ export function buildNightlyManifests({
   notes,
   pubDate,
 }) {
-  const packages = files.filter((name) => PACKAGE.test(name));
-  const signed = packages.filter((name) => signatures[name]);
-  if (signed.length === 0) return null;
-  const unsigned = packages.filter((name) => !signatures[name]);
+  const packages = planNightlySigning({ files, runNumber, baseVersion });
+  const unsigned = packages.filter(({ file }) => !signatures[file]).map(({ file }) => file);
   if (unsigned.length > 0) {
     throw new Error(`unsigned updater packages: ${unsigned.join(", ")}`);
   }
 
   const manifests = {};
-  for (const name of packages) {
+  for (const { file: name, version } of packages) {
     const [, os, arch, suffix] = PACKAGE.exec(name);
     const platform = OS[os];
     const file = nightlyManifestName(platform);
-    manifests[file] ??= {
-      version: nightlyVersion(baseVersion, runNumber, platform),
-      notes,
-      pub_date: pubDate,
-      platforms: {},
-    };
+    manifests[file] ??= { version, notes, pub_date: pubDate, platforms: {} };
     const key = `${platform}-${ARCH[arch]}`;
     const entry = {
       signature: signatures[name].trim(),
@@ -84,13 +90,22 @@ export function buildNightlyManifests({
   return manifests;
 }
 
-function main(folder) {
+function main(mode, folder) {
   const repository = process.env.GITHUB_REPOSITORY;
   const runNumber = process.env.GITHUB_RUN_NUMBER;
-  if (!folder || !repository || !runNumber) {
-    throw new Error("usage: GITHUB_REPOSITORY=… GITHUB_RUN_NUMBER=… nightly-updater-manifest.mjs <folder>");
+  if (!["plan", "write"].includes(mode) || !folder || !runNumber || (mode === "write" && !repository)) {
+    throw new Error("usage: GITHUB_REPOSITORY=… GITHUB_RUN_NUMBER=… nightly-updater-manifest.mjs plan|write <folder>");
   }
   const files = readdirSync(folder);
+  const baseVersion = JSON.parse(readFileSync("src-tauri/tauri.conf.json", "utf8")).version;
+
+  if (mode === "plan") {
+    const plan = planNightlySigning({ files, runNumber, baseVersion });
+    if (plan.length === 0) throw new Error(`no updater packages in ${folder}`);
+    for (const { file, version } of plan) console.log(`${version}\t${file}`);
+    return;
+  }
+
   const signatures = Object.fromEntries(
     files
       .filter((name) => files.includes(`${name}.sig`))
@@ -101,14 +116,10 @@ function main(folder) {
     signatures,
     repository,
     runNumber,
-    baseVersion: JSON.parse(readFileSync("src-tauri/tauri.conf.json", "utf8")).version,
+    baseVersion,
     notes: process.env.NIGHTLY_NOTES ?? "",
     pubDate: new Date().toISOString(),
   });
-  if (!manifests) {
-    console.log("No signed packages: the updater manifests are left out.");
-    return;
-  }
   for (const [file, manifest] of Object.entries(manifests)) {
     writeFileSync(join(folder, file), `${JSON.stringify(manifest, null, 2)}\n`);
     console.log(`Wrote ${file} for ${manifest.version}: ${Object.keys(manifest.platforms).join(", ")}`);
@@ -116,5 +127,5 @@ function main(folder) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main(process.argv[2]);
+  main(process.argv[2], process.argv[3]);
 }

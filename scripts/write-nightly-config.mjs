@@ -31,11 +31,13 @@ const nightlyConfig = {
       endpoints: [
         nightlyDownloadUrl(repository, nightlyManifestName(process.platform)),
       ],
-      pubkey: baseUpdater.pubkey,
+      // Nightlies have their own key, so the stable key signs only tagged
+      // releases.
+      pubkey: readFileSync("src-tauri/updater-nightly.pub", "utf8").trim(),
     },
   },
   bundle: {
-    // The publish job signs the packages, so the signing key never reaches the
+    // A later job signs the packages, so the signing key never reaches the
     // build or its dependencies.
     createUpdaterArtifacts: false,
     // The firewall profiles belong to the stable package: two channels shipping the same files

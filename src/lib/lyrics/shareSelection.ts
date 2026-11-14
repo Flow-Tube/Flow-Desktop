@@ -35,6 +35,25 @@ export function shareLineIndexAt(lines: ShareLine[], positionMs: number): number
   return index;
 }
 
+/**
+ * Automatically selects a cohesive group of lyric lines (up to maxCount)
+ * starting at the line where playback is currently playing or paused.
+ */
+export function autoSelectLyricIndices(totalLines: number, targetIndex: number, maxCount = 4): number[] {
+  if (totalLines <= 0) return [];
+  if (totalLines <= maxCount) {
+    return Array.from({ length: totalLines }, (_, i) => i);
+  }
+
+  const clampedTarget = Math.max(0, Math.min(totalLines - 1, targetIndex));
+  let start = clampedTarget;
+  if (start + maxCount > totalLines) {
+    start = Math.max(0, totalLines - maxCount);
+  }
+  const count = Math.min(maxCount, totalLines - start);
+  return Array.from({ length: count }, (_, i) => start + i);
+}
+
 /** Selects or deselects `index`, keeping song order and refusing a line past the cap. */
 export function toggleShareLine(selected: number[], index: number): number[] {
   if (selected.includes(index)) return selected.filter((i) => i !== index);

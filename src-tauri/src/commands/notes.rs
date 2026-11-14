@@ -6,7 +6,7 @@ use crate::db::notes::{self, NoteRow};
 use crate::errors::{AppError, ErrorResponse};
 use crate::services::notes_service::{self, NoteSubject};
 use crate::sync2::profile_actions::edits_sync;
-use crate::sync2::service::push_soon;
+use crate::sync2::push::push_soon;
 
 async fn announce(app: &AppHandle) {
     if edits_sync(app).await {

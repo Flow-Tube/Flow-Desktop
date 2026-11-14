@@ -92,6 +92,7 @@ import { GlobalMediaKeysController } from "./components/shortcuts/GlobalMediaKey
 import { KeyboardHelpHost } from "./components/shortcuts/KeyboardHelpHost";
 import { CrashReportHost } from "./components/diagnostics/CrashReportHost";
 import { ScrobbleController } from "./components/scrobbling/ScrobbleController";
+import { HistorySettleController } from "./components/sync/HistorySettleController";
 import { WellbeingController } from "./components/settings/WellbeingController";
 import { DownloadDialog } from "./components/downloads/DownloadDialog";
 import { DownloadActivity } from "./components/downloads/DownloadActivity";
@@ -363,6 +364,7 @@ function App() {
           <GlobalMediaKeysController />
           <ShellPagesController />
           <ScrobbleController />
+          <HistorySettleController />
           <WellbeingController />
         </>
       )}

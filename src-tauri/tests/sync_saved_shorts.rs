@@ -6,7 +6,7 @@ use flow_desktop_lib::sync::canonical::{Collection, Playlist};
 use flow_desktop_lib::sync::changes::{self, Change};
 use flow_desktop_lib::sync::codec::sha256_hex;
 use flow_desktop_lib::sync::export::{export_collections, export_for_backup};
-use flow_desktop_lib::sync::local_edits::{diff_blob, is_synced_setting, record_blob_write};
+use flow_desktop_lib::sync::local_edits::{diff_blob, is_collection_setting, record_blob_write};
 use flow_desktop_lib::sync::protocol::StagedCollection;
 use flow_desktop_lib::sync::saved_shorts::{
     PEER_KEEPS_LIST_SETTING_KEY, SAVED_SHORTS_SETTING_KEY, adopt_synced_playlist, library_blob,
@@ -344,7 +344,7 @@ async fn a_merge_keeps_what_android_does_not_carry() {
 
 #[test]
 fn the_library_setting_counts_as_synced_and_its_edits_are_recorded() {
-    assert!(is_synced_setting(SAVED_SHORTS_SETTING_KEY));
+    assert!(is_collection_setting(SAVED_SHORTS_SETTING_KEY));
     let edits = diff_blob(
         SAVED_SHORTS_SETTING_KEY,
         r#"[{"id":"a"},{"id":"b"}]"#,
@@ -416,4 +416,12 @@ async fn a_playlist_an_earlier_sync_brought_in_moves_to_the_library_once() {
     let before = setting(&pool, SAVED_SHORTS_SETTING_KEY).await;
     adopt_synced_playlist(&pool).await.unwrap();
     assert_eq!(setting(&pool, SAVED_SHORTS_SETTING_KEY).await, before);
+}
+
+#[test]
+fn app_settings_wait_for_the_next_sync() {
+    let key = flow_desktop_lib::sync::settings_map::desktop_keys()
+        .next()
+        .expect("a synced app setting");
+    assert!(!is_collection_setting(key));
 }

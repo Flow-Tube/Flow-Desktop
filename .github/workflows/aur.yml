@@ -31,7 +31,7 @@ jobs:
         run: pacman -Syu --noconfirm --needed git namcap
 
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Check the shared install steps are identical
         run: |
@@ -75,7 +75,7 @@ jobs:
         run: pacman -Syu --noconfirm --needed git jq namcap
 
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # makepkg refuses to run as root; -s installs dependencies through sudo.
       - name: Create the build user

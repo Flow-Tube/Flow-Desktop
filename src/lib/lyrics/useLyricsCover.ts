@@ -36,7 +36,12 @@ export function readLyricsCover(image: HTMLImageElement): LyricsCover | null {
   if (!context || image.naturalWidth === 0) return null;
   try {
     context.imageSmoothingQuality = "high";
-    context.drawImage(image, 0, 0, COVER_CELLS, COVER_CELLS);
+    const width = image.naturalWidth || image.width;
+    const height = image.naturalHeight || image.height;
+    const side = Math.min(width, height);
+    const sx = (width - side) / 2;
+    const sy = (height - side) / 2;
+    context.drawImage(image, sx, sy, side, side, 0, 0, COVER_CELLS, COVER_CELLS);
     return lyricsCover(context.getImageData(0, 0, COVER_CELLS, COVER_CELLS).data);
   } catch {
     // A tainted canvas (no CORS on this image): the lyrics keep the player's background.

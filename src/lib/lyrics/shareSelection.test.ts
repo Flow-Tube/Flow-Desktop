@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { isShareableLine, MAX_SHARE_LINES, shareLineIndexAt, shareLines, toggleShareLine } from "./shareSelection";
+import {
+  autoSelectLyricIndices,
+  isShareableLine,
+  MAX_SHARE_LINES,
+  shareLineIndexAt,
+  shareLines,
+  toggleShareLine,
+} from "./shareSelection";
 
 describe("shareLines", () => {
   it("skips blank lines and section markers, from synced or plain lyrics", () => {
@@ -26,6 +33,24 @@ describe("shareLineIndexAt", () => {
     expect(shareLineIndexAt(lines, 3500)).toBe(1);
     expect(shareLineIndexAt(lines, 9000)).toBe(2);
     expect(shareLineIndexAt([{ text: "plain", time: null }], 9000)).toBe(0);
+  });
+});
+
+describe("autoSelectLyricIndices", () => {
+  it("returns empty array for empty lines", () => {
+    expect(autoSelectLyricIndices(0, 0, 4)).toEqual([]);
+  });
+
+  it("returns all lines when total lines is less than or equal to maxCount", () => {
+    expect(autoSelectLyricIndices(3, 1, 4)).toEqual([0, 1, 2]);
+  });
+
+  it("selects a cohesive group of 4 lines starting at the target index", () => {
+    expect(autoSelectLyricIndices(10, 2, 4)).toEqual([2, 3, 4, 5]);
+  });
+
+  it("shifts back when target is near the end to select the last 4 lines", () => {
+    expect(autoSelectLyricIndices(10, 8, 4)).toEqual([6, 7, 8, 9]);
   });
 });
 

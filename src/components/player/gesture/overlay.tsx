@@ -2,13 +2,11 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   AppWindow,
   Bug,
-  FastForward,
   Info,
   Link,
   Pause,
   PictureInPicture2,
   Play,
-  Rewind,
   Repeat1,
 } from "lucide-react";
 import { usePlayerStore, type PlaybackRate } from "../../../store/usePlayerStore";
@@ -21,6 +19,8 @@ import { youtubeWatchUrl } from "../../../lib/youtubeUrl";
 import { LONG_PRESS_MS, shouldStartDrag } from "../../../lib/pointerGesture";
 import { startWindowDrag } from "../../../lib/api/pip";
 import { StatsForNerds } from "../StatsForNerds";
+import { seekSideAt, type SeekDirection, type SeekFeedback as SeekFeedbackState } from "../../../lib/seekFeedback";
+import { SeekFeedback } from "./SeekFeedback";
 import { PlayerContextMenu, type PlayerContextMenuItem } from "./PlayerContextMenu";
 import { isPopOutWindow } from "../../../lib/api/pip";
 import { moveVideoToNewWindow } from "../../../lib/openTarget";
@@ -29,12 +29,6 @@ import {
   classifyPlayerPress,
   dismissForPress,
 } from "../../../lib/playerMenuDismiss";
-
-export type PlayerSeekFeedback = {
-  id: number;
-  direction: "forward" | "backward";
-  seconds: number;
-};
 
 const SINGLE_CLICK_DELAY_MS = 220;
 
@@ -56,7 +50,7 @@ type PlayerGestureOverlayProps = {
   playbackRate: PlaybackRate;
   currentTime: number;
   duration: number;
-  seekFeedback: PlayerSeekFeedback | null;
+  seekFeedback: SeekFeedbackState | null;
   volumeFeedback: VolumeFeedback | null;
   qualityLabel?: string | null;
   mimeType?: string | null;
@@ -73,8 +67,8 @@ type PlayerGestureOverlayProps = {
   togglePlay: () => void;
   toggleFullscreen: () => void;
   togglePictureInPicture: () => void;
-  seekTo: (time: number) => void;
-  onSeekFeedback: (direction: PlayerSeekFeedback["direction"], seconds: number) => void;
+  /** Seeks from the video's own position and shows the running total. */
+  seekBy: (delta: number) => void;
   onRevealControls: () => void;
   isCompact?: boolean;
   /** In the pop-out window, a press that moves drags the window. */
@@ -122,8 +116,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
   togglePlay,
   toggleFullscreen,
   togglePictureInPicture,
-  seekTo,
-  onSeekFeedback,
+  seekBy,
   onRevealControls,
   isCompact = false,
   canDragWindow = false,
@@ -154,6 +147,9 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
   const toggledByFirstClickRef = useRef(false);
   const isPlayingRef = useRef(isPlaying);
   isPlayingRef.current = isPlaying;
+
+  const seekSide = (direction: SeekDirection) =>
+    seekBy(direction === "forward" ? seekIntervalSeconds : -seekIntervalSeconds);
 
   const clearClickTimer = () => {
     if (clickTimerRef.current) {
@@ -281,6 +277,21 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
       return;
     }
 
+    // As on Android, every click after a double-click on the same side adds another step:
+    // a third click in the burst, or a single click on the side whose total is still showing.
+    if (doubleClickSeek) {
+      const rect = event.currentTarget.getBoundingClientRect();
+      const side = seekSideAt(event.clientX - rect.left, rect.width);
+      const sideShowing = seekFeedback?.visible === true && seekFeedback.direction === side;
+      if (side && (event.detail > 2 || (event.detail === 1 && sideShowing))) {
+        clearClickTimer();
+        toggledByFirstClickRef.current = false;
+        seekSide(side);
+        onRevealControls();
+        return;
+      }
+    }
+
     if (event.detail > 1) {
       clearClickTimer();
       if (toggledByFirstClickRef.current) {
@@ -307,19 +318,12 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
 
   const handleDoubleClick = (event: React.MouseEvent<HTMLDivElement>) => {
     clearClickTimer();
+    // Some engines repeat dblclick on every even click; the click handler already counted those.
+    if (event.detail > 2) return;
     const rect = event.currentTarget.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    if (!doubleClickSeek) {
-      toggleFullscreen();
-    } else if (x < rect.width * 0.35) {
-      seekTo(currentTime - seekIntervalSeconds);
-      onSeekFeedback("backward", seekIntervalSeconds);
-    } else if (x > rect.width * 0.65) {
-      seekTo(currentTime + seekIntervalSeconds);
-      onSeekFeedback("forward", seekIntervalSeconds);
-    } else {
-      toggleFullscreen();
-    }
+    const side = doubleClickSeek ? seekSideAt(event.clientX - rect.left, rect.width) : null;
+    if (side) seekSide(side);
+    else toggleFullscreen();
   };
 
   const handleContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -467,30 +471,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
         <VolumeFeedbackPill feedback={volumeFeedback} tone="video" className="absolute left-1/2 top-8 z-30 -translate-x-1/2" />
       )}
 
-      {seekFeedback && (
-        <div
-          key={seekFeedback.id}
-          className={`pointer-events-none absolute top-1/2 z-30 -translate-y-1/2 ${
-            seekFeedback.direction === "forward" ? "right-[16%]" : "left-[16%]"
-          }`}
-        >
-          <div
-            className={`flex flex-col items-center justify-center rounded-full bg-chrome-black/60 text-chrome-white animate-player-seek ${
-              isCompact ? "h-14 w-14" : "h-24 w-24"
-            }`}
-          >
-            {seekFeedback.direction === "forward" ? (
-              <FastForward size={isCompact ? 20 : 34} />
-            ) : (
-              <Rewind size={isCompact ? 20 : 34} />
-            )}
-            <span className={`mt-1 font-black ${isCompact ? "text-xs" : "text-lg"}`}>
-              {seekFeedback.direction === "forward" ? "+" : "-"}
-              {seekFeedback.seconds}
-            </span>
-          </div>
-        </div>
-      )}
+      {seekFeedback && <SeekFeedback feedback={seekFeedback} compact={isCompact} />}
 
       {contextMenu && (
         <PlayerContextMenu at={contextMenu} groups={menuGroups} onSelect={(item) => void runMenuAction(item)} />

@@ -51,14 +51,12 @@ import { shouldPublishPlaybackTime } from "../../lib/playerProgress";
 import { SponsorBlockTracker } from "../../lib/sponsorBlockPolicy";
 import { useManualSponsorSegment } from "../../lib/useManualSponsorSegment";
 import { useVolumeFeedback } from "../../lib/useVolumeFeedback";
+import { useSeekFeedback } from "../../lib/useSeekFeedback";
 import type { SponsorBlockSegment } from "../../lib/api/foss";
 import { recapSponsorSkip } from "../../lib/recap/recapQueue";
 import { longPressRate } from "../../lib/pointerGesture";
 import { isPopOutWindow } from "../../lib/api/pip";
-import {
-  PlayerGestureOverlay,
-  type PlayerSeekFeedback,
-} from "./gesture/overlay";
+import { PlayerGestureOverlay } from "./gesture/overlay";
 import { SubtitleOverlay } from "./SubtitleOverlay";
 import { isLocalCaption } from "../../lib/captionText";
 import { useSubtitleFileDrop } from "../../lib/localSubtitles";
@@ -352,7 +350,6 @@ export const Player: React.FC<PlayerProps> = ({
   const qualitySwitchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mediaBufferingRef = useRef(false);
   const bufferingStartedAtRef = useRef<number | null>(null);
-  const seekFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Stall watchdog / source-fallback bookkeeping.
   const waitingSinceRef = useRef<number | null>(null);
   const stallCountRef = useRef(0);
@@ -508,7 +505,7 @@ export const Player: React.FC<PlayerProps> = ({
   const [selectedAudioTrackId, setSelectedAudioTrackId] = useState<string | null>(null);
   const [hasStartedPlayback, setHasStartedPlayback] = useState(false);
   const [isSourceSwitching, setIsSourceSwitching] = useState(false);
-  const [seekFeedback, setSeekFeedback] = useState<PlayerSeekFeedback | null>(null);
+  const { feedback: seekFeedback, show: showSeekFeedback } = useSeekFeedback();
   const { feedback: volumeFeedback, show: showVolumeFeedback } = useVolumeFeedback();
   const [videoCodecUnsupported, setVideoCodecUnsupported] = useState(false);
   const [pendingQualitySwitch, setPendingQualitySwitch] = useState<PendingQualitySwitch | null>(null);
@@ -961,9 +958,6 @@ export const Player: React.FC<PlayerProps> = ({
       if (notifyTimeoutRef.current !== null) {
         window.clearTimeout(notifyTimeoutRef.current);
       }
-      if (seekFeedbackTimerRef.current) {
-        clearTimeout(seekFeedbackTimerRef.current);
-      }
       if (hideTimerRef.current) {
         clearTimeout(hideTimerRef.current);
       }
@@ -1170,18 +1164,6 @@ export const Player: React.FC<PlayerProps> = ({
     keyboardFocusInsideRef.current = false;
     revealControls();
   }, [revealControls]);
-
-  const showSeekFeedback = useCallback((direction: PlayerSeekFeedback["direction"], seconds: number) => {
-    setSeekFeedback({
-      id: Date.now(),
-      direction,
-      seconds,
-    });
-    if (seekFeedbackTimerRef.current) clearTimeout(seekFeedbackTimerRef.current);
-    seekFeedbackTimerRef.current = setTimeout(() => {
-      setSeekFeedback(null);
-    }, 1200);
-  }, []);
 
   const seekTo = useCallback((time: number) => {
     const video = videoRef.current;
@@ -2629,8 +2611,7 @@ export const Player: React.FC<PlayerProps> = ({
         togglePlay={togglePlay}
         toggleFullscreen={toggleFullscreen}
         togglePictureInPicture={togglePictureInPicture}
-        seekTo={seekTo}
-        onSeekFeedback={showSeekFeedback}
+        seekBy={seekBy}
         onRevealControls={revealControls}
         isCompact={isPipMode}
         canDragWindow={isPopOut}
@@ -2801,6 +2782,7 @@ export const Player: React.FC<PlayerProps> = ({
         togglePictureInPicture={togglePictureInPicture}
         showPipButton={manualPipButtonEnabled}
         showFullscreenTitle={showFullscreenTitle}
+        isPopOut={isPopOut}
         seekTo={seekTo}
         togglePlay={togglePlay}
         stepFrame={isLive ? undefined : stepFrame}

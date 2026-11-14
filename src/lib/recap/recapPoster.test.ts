@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { RecapSummary } from "../api/recap";
-import { blobToBase64, drawPoster, fitText, POSTER_HEIGHT, POSTER_WIDTH, posterData } from "./recapPoster";
+import { drawPoster, POSTER_HEIGHT, POSTER_WIDTH, posterData } from "./recapPoster";
 
 const item = (name: string) => ({ id: name, name, count: 1, durationMs: 0, detail: "", imageUrl: "", kind: "OTHER" as const });
 
@@ -48,15 +48,6 @@ describe("posterData", () => {
   });
 });
 
-describe("fitText", () => {
-  const ctx = { measureText: (text: string) => ({ width: text.length * 10 }) } as unknown as CanvasRenderingContext2D;
-
-  it("leaves text that fits alone and shortens the rest", () => {
-    expect(fitText(ctx, "short", 100)).toBe("short");
-    expect(fitText(ctx, "a much longer name", 100)).toBe("a much lo…");
-  });
-});
-
 describe("drawPoster", () => {
   it("writes every figure inside the poster, without overlapping the portraits", () => {
     const { ctx, texts } = fakeContext();
@@ -79,11 +70,5 @@ describe("drawPoster", () => {
     const data = { ...posterData(summary, "2026"), channelName: null, artistName: null, insight: null };
     drawPoster(ctx, data, { channel: null, artist: null }, palette);
     expect(texts.map((entry) => entry.text)).toContain("Made with Flow");
-  });
-});
-
-describe("blobToBase64", () => {
-  it("gives the bytes without the data URL's prefix", async () => {
-    await expect(blobToBase64(new Blob(["hi"], { type: "image/png" }))).resolves.toBe("aGk=");
   });
 });

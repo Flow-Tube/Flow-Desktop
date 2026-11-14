@@ -70,7 +70,7 @@ export function PlayerTab() {
   const [idleProgress, setIdleProgress] = useBoolPref(SETTINGS.IDLE_PROGRESS_STRIP_ENABLED);
   const [frameStep, setFrameStep] = useBoolPref(SETTINGS.FRAME_STEP_BUTTONS_ENABLED);
 
-  const [fullscreenTitle, setFullscreenTitle] = useBoolPref(SETTINGS.SHOW_FULLSCREEN_TITLE, false);
+  const [fullscreenTitle, setFullscreenTitle] = useBoolPref(SETTINGS.SHOW_FULLSCREEN_TITLE);
   const [ambientMode, setAmbientMode] = useBoolPref(SETTINGS.AMBIENT_MODE_ENABLED);
   const [ambientGlow, setAmbientGlow] = useBoolPref(SETTINGS.AMBIENT_GLOW_ENABLED);
   const [ambientIntensity, setAmbientIntensity] = useNumberPref(SETTINGS.AMBIENT_MODE_INTENSITY);

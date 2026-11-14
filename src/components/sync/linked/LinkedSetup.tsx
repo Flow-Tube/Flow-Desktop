@@ -9,7 +9,6 @@ import { SegmentedControl } from "../../ui/SegmentedControl";
 import { TextInput } from "../../ui/TextInput";
 import { Card, Field } from "./Card";
 import { CodeEntry } from "./CodeEntry";
-import { CreateGroup } from "./CreateGroup";
 import { RestoreChoice } from "./RestoreChoice";
 import { WebdavLoginFields } from "./WebdavLoginFields";
 
@@ -50,11 +49,12 @@ function ThroughFolder() {
   );
 }
 
-function JoinGroup() {
+/** Joins a group with a code from one of its devices, or with the server's token or the folder's login. */
+export function JoinGroup() {
   const { showCode, busy } = useLinkedDevicesStore();
   const [way, setWay] = useState<"code" | "token" | "folder">("code");
   return (
-    <Card title={getString("linked_join_title")} subtitle={getString("linked_join_subtitle")} className="col-span-12 lg:col-span-6">
+    <Card>
       {way === "token" && <AskToJoin />}
       {way === "folder" && <ThroughFolder />}
       {way === "code" && (
@@ -74,7 +74,8 @@ function JoinGroup() {
   );
 }
 
-function RestoreGroup() {
+/** Brings a group back on a new device from where it lives and its recovery words. */
+export function RestoreGroup() {
   const { previewRestore, restore, restoreDevices, busy } = useLinkedDevicesStore();
   const [place, setPlace] = useState<"server" | "webdav">("server");
   const [url, setUrl] = useState("");
@@ -86,16 +87,18 @@ function RestoreGroup() {
     return <RestoreChoice devices={restoreDevices} onRestore={(kept) => void restore(url, words, onWebdav ? login : undefined, kept)} />;
   }
   return (
-    <Card title={getString("linked_restore_title")} subtitle={getString("linked_restore_subtitle")} className="col-span-12">
-      <SegmentedControl<"server" | "webdav">
-        label={getString("linked_store_choice")}
-        value={place}
-        onChange={setPlace}
-        options={[
-          { value: "server", label: getString("linked_store_server") },
-          { value: "webdav", label: getString("linked_store_webdav") },
-        ]}
-      />
+    <Card>
+      <div className="self-start">
+        <SegmentedControl<"server" | "webdav">
+          label={getString("linked_store_choice")}
+          value={place}
+          onChange={setPlace}
+          options={[
+            { value: "server", label: getString("linked_store_server") },
+            { value: "webdav", label: getString("linked_store_webdav") },
+          ]}
+        />
+      </div>
       <div className="grid grid-cols-12 gap-4">
         <div className="col-span-12 flex flex-col gap-4 lg:col-span-4">
           <Field label={getString(onWebdav ? "linked_webdav_url" : "linked_server_url")}>
@@ -123,16 +126,5 @@ function RestoreGroup() {
         {getString("linked_restore_next")}
       </Button>
     </Card>
-  );
-}
-
-/** For a device in no group yet: start one, join one, or restore one. */
-export function LinkedSetup() {
-  return (
-    <div className="grid grid-cols-12 gap-4">
-      <CreateGroup />
-      <JoinGroup />
-      <RestoreGroup />
-    </div>
   );
 }

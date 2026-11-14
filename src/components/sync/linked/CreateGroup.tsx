@@ -98,17 +98,19 @@ function OnLan() {
 export function CreateGroup() {
   const [place, setPlace] = useState<Place>("server");
   return (
-    <Card title={getString("linked_setup_title")} subtitle={getString("linked_setup_subtitle")} className="col-span-12 lg:col-span-6">
-      <SegmentedControl<Place>
-        label={getString("linked_store_choice")}
-        value={place}
-        onChange={setPlace}
-        options={[
-          { value: "server", label: getString("linked_store_server") },
-          { value: "webdav", label: getString("linked_store_webdav") },
-          { value: "lan", label: getString("linked_store_lan") },
-        ]}
-      />
+    <Card>
+      <div className="self-start">
+        <SegmentedControl<Place>
+          label={getString("linked_store_choice")}
+          value={place}
+          onChange={setPlace}
+          options={[
+            { value: "server", label: getString("linked_store_server") },
+            { value: "webdav", label: getString("linked_store_webdav") },
+            { value: "lan", label: getString("linked_store_lan") },
+          ]}
+        />
+      </div>
       {place === "server" && <OnServer />}
       {place === "webdav" && <OnWebdav />}
       {place === "lan" && <OnLan />}

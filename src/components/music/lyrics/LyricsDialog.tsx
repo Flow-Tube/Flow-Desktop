@@ -11,12 +11,15 @@ export function LyricsDialog({
   onClose,
   children,
   footer,
+  widthClass = "max-w-lg",
 }: {
   title: string;
   titleId: string;
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
+  /** Wider for dialogs that show a preview beside their controls. */
+  widthClass?: string;
 }) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -40,7 +43,7 @@ export function LyricsDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="animate-fade-in flex max-h-[min(640px,calc(100vh-4rem))] w-full max-w-lg flex-col rounded-2xl border border-chrome-neutral-800 bg-surface-container"
+        className={`animate-fade-in flex max-h-[min(640px,calc(100vh-4rem))] w-full ${widthClass} flex-col rounded-2xl border border-chrome-neutral-800 bg-surface-container`}
       >
         <div className="flex items-center justify-between border-b border-chrome-neutral-800 px-6 py-4">
           <h2 id={titleId} className="text-base font-medium text-chrome-neutral-100">

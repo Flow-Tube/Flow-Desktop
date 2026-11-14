@@ -58,8 +58,7 @@ describe("PlayerGestureOverlay double-click vs single-click", () => {
       togglePlay: vi.fn(),
       toggleFullscreen: vi.fn(),
       togglePictureInPicture: vi.fn(),
-      seekTo: vi.fn(),
-      onSeekFeedback: vi.fn(),
+      seekBy: vi.fn(),
       onRevealControls: vi.fn(),
       settingsOpen: false,
       onCloseSettings: vi.fn(),
@@ -111,8 +110,8 @@ describe("PlayerGestureOverlay double-click vs single-click", () => {
 
   it("undoes the toggle when a slow double click's second click comes after it fired", () => {
     const togglePlay = vi.fn();
-    const seekTo = vi.fn();
-    const { overlay } = renderOverlay({ togglePlay, seekTo, currentTime: 50, seekIntervalSeconds: 10 });
+    const seekBy = vi.fn();
+    const { overlay } = renderOverlay({ togglePlay, seekBy, currentTime: 50, seekIntervalSeconds: 10 });
     vi.spyOn(overlay, "getBoundingClientRect").mockReturnValue({
       left: 0,
       top: 0,
@@ -140,14 +139,13 @@ describe("PlayerGestureOverlay double-click vs single-click", () => {
     });
 
     expect(togglePlay).toHaveBeenCalledTimes(2);
-    expect(seekTo).toHaveBeenCalledWith(60);
+    expect(seekBy).toHaveBeenCalledWith(10);
   });
 
   it("cancels togglePlay and seeks when double-clicking on the right side", () => {
     const togglePlay = vi.fn();
-    const seekTo = vi.fn();
-    const onSeekFeedback = vi.fn();
-    const { overlay } = renderOverlay({ togglePlay, seekTo, onSeekFeedback, currentTime: 50, seekIntervalSeconds: 10 });
+    const seekBy = vi.fn();
+    const { overlay } = renderOverlay({ togglePlay, seekBy, currentTime: 50, seekIntervalSeconds: 10 });
 
     vi.spyOn(overlay, "getBoundingClientRect").mockReturnValue({
       left: 0,
@@ -185,15 +183,14 @@ describe("PlayerGestureOverlay double-click vs single-click", () => {
     expect(togglePlay).not.toHaveBeenCalled();
 
     // Seek forward must have been called
-    expect(seekTo).toHaveBeenCalledWith(60);
-    expect(onSeekFeedback).toHaveBeenCalledWith("forward", 10);
+    expect(seekBy).toHaveBeenCalledTimes(1);
+    expect(seekBy).toHaveBeenCalledWith(10);
   });
 
   it("cancels togglePlay and seeks when double-clicking on the left side", () => {
     const togglePlay = vi.fn();
-    const seekTo = vi.fn();
-    const onSeekFeedback = vi.fn();
-    const { overlay } = renderOverlay({ togglePlay, seekTo, onSeekFeedback, currentTime: 50, seekIntervalSeconds: 10 });
+    const seekBy = vi.fn();
+    const { overlay } = renderOverlay({ togglePlay, seekBy, currentTime: 50, seekIntervalSeconds: 10 });
 
     vi.spyOn(overlay, "getBoundingClientRect").mockReturnValue({
       left: 0,
@@ -228,14 +225,14 @@ describe("PlayerGestureOverlay double-click vs single-click", () => {
     expect(togglePlay).not.toHaveBeenCalled();
 
     // Seek backward
-    expect(seekTo).toHaveBeenCalledWith(40);
-    expect(onSeekFeedback).toHaveBeenCalledWith("backward", 10);
+    expect(seekBy).toHaveBeenCalledTimes(1);
+    expect(seekBy).toHaveBeenCalledWith(-10);
   });
 
   it("toggles fullscreen on the sides when double-click seek is off", () => {
-    const seekTo = vi.fn();
+    const seekBy = vi.fn();
     const toggleFullscreen = vi.fn();
-    const { overlay } = renderOverlay({ seekTo, toggleFullscreen, doubleClickSeek: false });
+    const { overlay } = renderOverlay({ seekBy, toggleFullscreen, doubleClickSeek: false });
     vi.spyOn(overlay, "getBoundingClientRect").mockReturnValue({
       left: 0, top: 0, right: 1000, bottom: 600, width: 1000, height: 600, x: 0, y: 0, toJSON: () => {},
     });
@@ -251,7 +248,89 @@ describe("PlayerGestureOverlay double-click vs single-click", () => {
     }
 
     expect(toggleFullscreen).toHaveBeenCalledTimes(2);
-    expect(seekTo).not.toHaveBeenCalled();
+    expect(seekBy).not.toHaveBeenCalled();
+  });
+
+  describe("clicks that keep adding to a seek", () => {
+    const rect = { left: 0, top: 0, right: 1000, bottom: 600, width: 1000, height: 600, x: 0, y: 0, toJSON: () => {} };
+    const click = (overlay: Element, clientX: number, detail: number) =>
+      overlay.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, clientX, clientY: 300, detail }));
+    const showing = (direction: "forward" | "backward") => ({ id: 1, direction, seconds: 10, visible: true });
+
+    it("adds a step for the third click of a burst on a side", () => {
+      const togglePlay = vi.fn();
+      const seekBy = vi.fn();
+      const { overlay } = renderOverlay({ togglePlay, seekBy });
+      vi.spyOn(overlay, "getBoundingClientRect").mockReturnValue(rect);
+
+      act(() => {
+        click(overlay, 800, 1);
+        click(overlay, 800, 2);
+        overlay.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true, clientX: 800, clientY: 300, detail: 2 }));
+        click(overlay, 800, 3);
+        click(overlay, 800, 4);
+        overlay.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true, clientX: 800, clientY: 300, detail: 4 }));
+      });
+      act(() => {
+        vi.advanceTimersByTime(300);
+      });
+
+      expect(seekBy).toHaveBeenCalledTimes(3);
+      expect(seekBy).toHaveBeenNthCalledWith(3, 10);
+      expect(togglePlay).not.toHaveBeenCalled();
+    });
+
+    it("adds a step for a single click on the side whose total is showing", () => {
+      const togglePlay = vi.fn();
+      const seekBy = vi.fn();
+      const { overlay } = renderOverlay({ togglePlay, seekBy, seekFeedback: showing("backward") });
+      vi.spyOn(overlay, "getBoundingClientRect").mockReturnValue(rect);
+
+      act(() => click(overlay, 150, 1));
+      act(() => {
+        vi.advanceTimersByTime(300);
+      });
+
+      expect(seekBy).toHaveBeenCalledWith(-10);
+      expect(togglePlay).not.toHaveBeenCalled();
+    });
+
+    it("still toggles play for a single click on the other side or the middle", () => {
+      const togglePlay = vi.fn();
+      const seekBy = vi.fn();
+      const { overlay } = renderOverlay({ togglePlay, seekBy, seekFeedback: showing("forward") });
+      vi.spyOn(overlay, "getBoundingClientRect").mockReturnValue(rect);
+
+      for (const clientX of [150, 500]) {
+        act(() => click(overlay, clientX, 1));
+        act(() => {
+          vi.advanceTimersByTime(300);
+        });
+      }
+
+      expect(seekBy).not.toHaveBeenCalled();
+      expect(togglePlay).toHaveBeenCalledTimes(2);
+    });
+
+    it("toggles play once the total has faded", () => {
+      const togglePlay = vi.fn();
+      const seekBy = vi.fn();
+      const { overlay } = renderOverlay({ togglePlay, seekBy, seekFeedback: { ...showing("forward"), visible: false } });
+      vi.spyOn(overlay, "getBoundingClientRect").mockReturnValue(rect);
+
+      act(() => click(overlay, 800, 1));
+      act(() => {
+        vi.advanceTimersByTime(300);
+      });
+
+      expect(seekBy).not.toHaveBeenCalled();
+      expect(togglePlay).toHaveBeenCalledTimes(1);
+    });
+
+    it("shows the running total beside the chevrons", () => {
+      renderOverlay({ seekFeedback: { id: 3, direction: "forward", seconds: 30, visible: true } });
+      expect(host.textContent).toContain("+30");
+    });
   });
 
   describe("dragging the mini player", () => {

@@ -137,6 +137,8 @@ windows-core = "0.62"
 # The version wry uses, for WebKit preferences wry does not expose (src/macos_window.rs).
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
+# statfs, to tell a read-only app location (a disk image, a translocated copy) from Applications.
+libc = "0.2"
 
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }

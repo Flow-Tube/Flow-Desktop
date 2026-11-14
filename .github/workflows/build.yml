@@ -563,12 +563,25 @@ jobs:
           done > SHA256SUMS
           cat SHA256SUMS
 
+      # The update dialog and the release list the changes the next release's
+      # changelog holds so far, as the Android nightly does.
+      - name: Write the release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          node scripts/release-notes.mjs --next "$version" > changes.md
+          node scripts/release-notes.mjs --next "$version" --app > changes.txt
+
       - name: Write the updater manifests
         shell: bash
         run: |
           set -euo pipefail
-          NIGHTLY_NOTES="Nightly build of main at ${GITHUB_SHA::7}, $(date -u +%Y-%m-%d). Nightly builds can break and are not for daily use." \
-            node scripts/nightly-updater-manifest.mjs write upload
+          notes="Nightly build of main at ${GITHUB_SHA::7}, $(date -u +%Y-%m-%d). Nightly builds can break and are not for daily use."
+          if [[ -s changes.txt ]]; then
+            notes+=$'\n\n'"$(cat changes.txt)"
+          fi
+          NIGHTLY_NOTES="$notes" node scripts/nightly-updater-manifest.mjs write upload
 
       - name: Check the signatures against the nightly key
         run: node scripts/verify-updater-manifests.mjs upload src-tauri/updater-nightly.pub
@@ -617,6 +630,10 @@ jobs:
           fi
 
           printf '\n%s\n' "Installed nightly builds look for the next one and update themselves." >> notes.md
+          if [[ -s changes.md ]]; then
+            printf '\n%s\n\n' "**What's new since the last release.** These changes ship in the next one." >> notes.md
+            cat changes.md >> notes.md
+          fi
 
           if [[ "$exists" == true ]]; then
             gh release edit "$tag" --title "$title" --notes-file notes.md --prerelease --latest=false

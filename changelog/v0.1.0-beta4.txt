@@ -292,6 +292,7 @@ MACOS
 NIGHTLY BUILDS
 - Nightly builds of Flow Nightly are now on a Nightly release on GitHub, so anyone can download them without a GitHub account. Each new build replaces the files there, and a checksum file lists them.
 - Flow Nightly now updates itself to the newest nightly build, on Windows, macOS and Linux. A nightly build installed before this change needs one new install by hand first.
+- The Nightly release and Flow Nightly's update window list what has changed since the last release, from the changelog of the next one.
 
 FIXES
 - The rows on the About page that open something, such as Changelog, can be reached and opened with the keyboard.

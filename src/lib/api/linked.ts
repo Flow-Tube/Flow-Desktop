@@ -135,6 +135,11 @@ export const deleteSyncedProfile = (link: string) => invokeBackend<void>("linked
 /** A restored device's Default joins `link`, or starts its own with `null`. */
 export const chooseProfile = (link: string | null) => invokeBackend<void>("linked_choose_profile", { link });
 export const getLinkedDevices = () => invokeBackend<LinkedDevice[]>("linked_devices");
+/** What a device can leave out of its links (`sync2::left_out::SyncChoice`). */
+export type SyncChoice = "watchHistory" | "playlists" | "likes" | "subscriptions" | "notes" | "recommendations" | "settings";
+export const getLeftOut = () => invokeBackend<SyncChoice[]>("linked_left_out");
+/** Leaves `leftOut` out of this device's links; what is taken back is read again on the next sync. */
+export const setLeftOut = (leftOut: SyncChoice[]) => invokeBackend<void>("linked_set_left_out", { leftOut });
 export const getLinkPhase = () => invokeBackend<LinkPhase>("linked_link_phase");
 
 /** Resolves to the recovery words, shown once. */

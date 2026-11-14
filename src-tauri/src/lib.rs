@@ -78,11 +78,11 @@ use commands::linked::{
     linked_catch_up, linked_choose_profile, linked_contest, linked_create, linked_create_lan,
     linked_create_webdav, linked_dashboard, linked_decline_join, linked_delete_profile,
     linked_devices, linked_enter_code, linked_finish_login_change, linked_forget,
-    linked_join_requests, linked_keep_side, linked_leave, linked_link_phase,
+    linked_join_requests, linked_keep_side, linked_leave, linked_left_out, linked_link_phase,
     linked_preview_restore, linked_profiles, linked_recovery_saved, linked_remove, linked_rename,
-    linked_replace_recovery, linked_restore, linked_retry_keychain, linked_show_code,
-    linked_start_login_change, linked_status, linked_stop_profile, linked_sync_added_profile,
-    linked_sync_now, linked_sync_profile, linked_update_login,
+    linked_replace_recovery, linked_restore, linked_retry_keychain, linked_set_left_out,
+    linked_show_code, linked_start_login_change, linked_status, linked_stop_profile,
+    linked_sync_added_profile, linked_sync_now, linked_sync_profile, linked_update_login,
 };
 use commands::live::{live_consents, live_now, live_send, live_set_consent, live_status};
 use commands::lyrics::{
@@ -969,6 +969,8 @@ pub fn run() {
             live_set_consent,
             live_status,
             linked_sync_now,
+            linked_left_out,
+            linked_set_left_out,
             linked_profiles,
             linked_sync_profile,
             linked_sync_added_profile,

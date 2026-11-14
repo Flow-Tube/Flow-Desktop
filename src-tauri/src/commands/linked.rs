@@ -8,6 +8,7 @@ use crate::sync2::actions::{self, ContestSide, LinkedDevice, LinkedStatus};
 use crate::sync2::dashboard::{self, Dashboard};
 use crate::sync2::engine::EngineError;
 use crate::sync2::join_requests::JoinRequest;
+use crate::sync2::left_out::{self, SyncChoice};
 use crate::sync2::link_task::{self, LinkPhase};
 use crate::sync2::profile_actions::{self, LinkedProfiles};
 use crate::sync2::recovery_flow::RestoreDevice;
@@ -137,6 +138,31 @@ pub async fn linked_forget(app: AppHandle) -> Result<(), ErrorResponse> {
 #[tauri::command]
 pub async fn linked_sync_now(app: AppHandle) -> Result<Vec<Received>, ErrorResponse> {
     service::sync_now(&app).await.map_err(|e| err(&e))
+}
+
+/// What this device leaves out of its links.
+#[tauri::command]
+pub async fn linked_left_out(app: AppHandle) -> Result<Vec<SyncChoice>, ErrorResponse> {
+    let choices = left_out::left_out(&actions::state_pool(&app))
+        .await
+        .map_err(|e| err(&e.into()))?;
+    Ok(choices.into_iter().collect())
+}
+
+/// Leaves `left_out` out of this device's links; what was taken back is read again soon.
+#[tauri::command]
+pub async fn linked_set_left_out(
+    app: AppHandle,
+    left_out: Vec<SyncChoice>,
+) -> Result<(), ErrorResponse> {
+    let choices = left_out.into_iter().collect();
+    let taken_back = left_out::set_left_out(&actions::state_pool(&app), &choices)
+        .await
+        .map_err(|e| err(&e.into()))?;
+    if taken_back {
+        service::sync_soon(&app);
+    }
+    Ok(())
 }
 
 #[tauri::command]

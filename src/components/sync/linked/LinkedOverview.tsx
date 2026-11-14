@@ -22,6 +22,7 @@ import { JoinRequests } from "./JoinRequests";
 import { LoginChange } from "./LoginChange";
 import { ProfilesGroup } from "./ProfilesGroup";
 import { RecoveryNotices } from "./RecoveryNotices";
+import { SyncChoicesGroup } from "./SyncChoicesGroup";
 
 const ICON = "h-5 w-5";
 const STORE_TITLES = { server: "linked_server", webdav: "linked_webdav", lan: "linked_on_lan" } as const;
@@ -193,6 +194,7 @@ export function LinkedOverview({ status }: { status: LinkedStatus }) {
       <DevicesGroup />
       <ProfilesGroup />
       <ThisDeviceGroup />
+      <SyncChoicesGroup />
       <GroupSettings status={status} />
     </div>
   );

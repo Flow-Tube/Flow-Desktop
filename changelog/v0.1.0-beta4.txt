@@ -57,6 +57,7 @@ SYNC
 - When the store refuses something this computer wrote, Linked devices keep receiving changes, retry it in order and show the error, instead of stopping the sync.
 - On the local network, a connection that stays silent is dropped after a few seconds, and it no longer stops this computer from meeting your other devices or answering them.
 - Linked devices sign in to your Flow server about once every 15 minutes instead of before every sync.
+- Linked devices: a Sync automatically switch for this computer. Turn it off and it syncs only when you click Sync now or change which profiles sync. Play on keeps working.
 - Notes sync with Flow for Android, over the QR code and Linked devices, and are part of backups. Notes your phone sent before this version come back on the next sync, and a device that joins later gets them from this computer.
 - Saved Shorts sync with your phone in both directions, as the same list on each device, once the phone has saved a Short of its own. Saved Shorts that an earlier sync brought in as a playlist move to the Saved Shorts page.
 - Sync now listens on fixed ports when they are free: 47900 for Linked devices and 47901 for a one-time transfer, so a firewall rule made once keeps working. The Linux packages include a firewalld service and a ufw profile named flow-desktop.

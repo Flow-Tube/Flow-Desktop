@@ -18,6 +18,7 @@ use tokio_tungstenite::tungstenite::protocol::{Role, WebSocketConfig};
 use tokio_tungstenite::tungstenite::{Bytes, Message};
 
 use super::actions::{local, stopped};
+use super::auto_sync::SyncTrigger;
 use super::engine::Result;
 use super::live_hub::{announce, receive, set_server_online, subscribe};
 use super::live_seal::MAX_LIVE_MESSAGE;
@@ -128,7 +129,9 @@ async fn relay(
         tokio::select! {
             message = socket.next() => match message {
                 Some(Ok(Message::Text(text))) => match serde_json::from_str::<Notice>(&text) {
-                    Ok(notice) if notice.kind == "changed" => sync_after(app, CHANGED_DELAY),
+                    Ok(notice) if notice.kind == "changed" => {
+                        sync_after(app, CHANGED_DELAY, SyncTrigger::ServerChange);
+                    }
                     Ok(notice) if notice.kind == "peers" => {
                         set_server_online(app, Some(notice.online));
                     }

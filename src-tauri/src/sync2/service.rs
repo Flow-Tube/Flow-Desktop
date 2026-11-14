@@ -3,7 +3,7 @@
 //! FLOW-SYNC/1.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
 use serde::Serialize;
@@ -14,6 +14,7 @@ use super::actions::{
     Local, local, login_refused, open_session, set_login_refused, state_pool, stop_if_shut_out,
     stopped, try_pending_login,
 };
+use super::auto_sync::{SyncTrigger, allows};
 use super::batches::{IncomingBatch, apply_batches};
 use super::engine::{EngineError, Result, Session, now_ms};
 use super::error_log;
@@ -42,6 +43,7 @@ pub const EVENT_SYNCING: &str = "sync2://syncing";
 pub const EVENT_JOIN_REQUESTS: &str = "sync2://join-requests";
 const FIRST_RUN_DELAY: Duration = Duration::from_secs(15);
 const INTERVAL: Duration = Duration::from_mins(5);
+const LOCAL_EDIT_DELAY: Duration = Duration::from_secs(10);
 
 /// When the last run ended, and the kind of error it ended with, if any.
 #[derive(Debug, Clone, Serialize)]
@@ -58,6 +60,8 @@ pub struct BackgroundSync {
     last: std::sync::Mutex<Option<LastSync>>,
     /// Counts [`sync_after`] calls, so only the latest one runs.
     scheduled: AtomicU64,
+    /// One of the calls waiting runs whether or not this device syncs on its own.
+    forced: AtomicBool,
 }
 
 /// Records applied from one device in one run.
@@ -383,23 +387,39 @@ pub fn sync_soon(app: &AppHandle) {
     tauri::async_runtime::spawn(async move { log_failure(sync_now(&app).await) });
 }
 
+/// Syncs once without waiting for `trigger`, when this device syncs on its own or the trigger
+/// runs anyway.
+pub fn sync_soon_for(app: &AppHandle, trigger: SyncTrigger) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        if allows(&app, trigger).await {
+            log_failure(sync_now(&app).await);
+        }
+    });
+}
+
+/// Sends a change the user made to how this device syncs, once such changes stop for a few seconds.
+pub fn follow_up_soon(app: &AppHandle) {
+    sync_after(app, LOCAL_EDIT_DELAY, SyncTrigger::FollowUp);
+}
+
 /// Syncs once `delay` after the last of several calls in a row, such as a burst of edits or of
-/// changes announced by the server. A run already under way is never interrupted.
-pub fn sync_after(app: &AppHandle, delay: Duration) {
-    let mine = app
-        .state::<BackgroundSync>()
-        .scheduled
-        .fetch_add(1, Ordering::SeqCst)
-        + 1;
+/// changes announced by the server. A run already under way is never interrupted. The run is
+/// skipped when this device doesn't sync on its own, unless a call in the burst runs anyway.
+pub fn sync_after(app: &AppHandle, delay: Duration, trigger: SyncTrigger) {
+    let state = app.state::<BackgroundSync>();
+    if trigger.runs(false) {
+        state.forced.store(true, Ordering::SeqCst);
+    }
+    let mine = state.scheduled.fetch_add(1, Ordering::SeqCst) + 1;
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(delay).await;
-        if app
-            .state::<BackgroundSync>()
-            .scheduled
-            .load(Ordering::SeqCst)
-            == mine
-        {
+        let state = app.state::<BackgroundSync>();
+        if state.scheduled.load(Ordering::SeqCst) != mine {
+            return;
+        }
+        if state.forced.swap(false, Ordering::SeqCst) || allows(&app, trigger).await {
             log_failure(sync_now(&app).await);
         }
     });
@@ -412,18 +432,20 @@ fn log_failure<T>(result: Result<T>) {
 }
 
 /// Runs [`sync_now`] shortly after start, unless a catch-up already ran, and then every few
-/// minutes for the app's lifetime.
+/// minutes for the app's lifetime, each while this device syncs on its own.
 pub fn spawn(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(FIRST_RUN_DELAY).await;
         let mut timer = tokio::time::interval(INTERVAL);
         timer.tick().await;
-        if !is_syncing(&app) && last_sync(&app).is_none() {
+        if !is_syncing(&app) && last_sync(&app).is_none() && allows(&app, SyncTrigger::Open).await {
             log_failure(sync_now(&app).await);
         }
         loop {
             timer.tick().await;
-            log_failure(sync_now(&app).await);
+            if allows(&app, SyncTrigger::Interval).await {
+                log_failure(sync_now(&app).await);
+            }
         }
     });
 }

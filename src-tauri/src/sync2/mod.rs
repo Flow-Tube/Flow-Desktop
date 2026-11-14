@@ -4,6 +4,7 @@
 #![allow(clippy::must_use_candidate)]
 
 pub mod actions;
+pub mod auto_sync;
 pub mod batches;
 pub mod blob;
 pub mod bootstrap;

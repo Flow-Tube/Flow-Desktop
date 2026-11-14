@@ -273,6 +273,7 @@ export const SETTINGS = {
   DISCORD_RPC_MODE: "discord_rpc_mode",
   MUSIC_TRAY_ENABLED: "music_tray_enabled",
   GLOBAL_MEDIA_KEYS_ENABLED: "global_media_keys_enabled",
+  LINKED_AUTO_SYNC: "linked_auto_sync",
   SCROBBLE_NOW_PLAYING: "scrobble_now_playing",
   SCROBBLE_LOVE_LIKES: "scrobble_love_likes",
   DEEP_FLOW_SCROBBLE: "deep_flow_scrobble",
@@ -521,6 +522,7 @@ export const SETTING_SCOPES = {
   [SETTINGS.DISCORD_RPC_MODE]: "device",
   [SETTINGS.MUSIC_TRAY_ENABLED]: "device",
   [SETTINGS.GLOBAL_MEDIA_KEYS_ENABLED]: "device",
+  [SETTINGS.LINKED_AUTO_SYNC]: "device",
   [SETTINGS.SCROBBLE_NOW_PLAYING]: "profile",
   [SETTINGS.SCROBBLE_LOVE_LIKES]: "profile",
   [SETTINGS.DEEP_FLOW_SCROBBLE]: "profile",
@@ -871,6 +873,7 @@ export const SETTING_DEFINITIONS = [
   // Linux trays need an AppIndicator library and a desktop that shows them, so it is opt-in there.
   bool(SETTINGS.MUSIC_TRAY_ENABLED, "extensions", !IS_LINUX_RUNTIME, "wired"),
   bool(SETTINGS.GLOBAL_MEDIA_KEYS_ENABLED, "extensions", false, "wired"),
+  bool(SETTINGS.LINKED_AUTO_SYNC, "data", true, "wired"),
   bool(SETTINGS.SCROBBLE_NOW_PLAYING, "extensions", true, "wired"),
   bool(SETTINGS.SCROBBLE_LOVE_LIKES, "extensions", false, "wired"),
   bool(SETTINGS.DEEP_FLOW_SCROBBLE, "extensions", false, "wired"),

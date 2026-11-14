@@ -10,9 +10,10 @@ use sqlx::SqlitePool;
 use tauri::{AppHandle, Manager};
 use tokio::net::TcpListener;
 
+use super::auto_sync::SyncTrigger;
 use super::engine::now_ms;
 use super::lan_sync::Met;
-use super::service::sync_soon;
+use super::service::sync_soon_for;
 use crate::db::settings::{get_setting, set_setting};
 
 const ADDRESSES: &str = "sync2_lan_addresses";
@@ -82,7 +83,7 @@ pub fn note(app: &AppHandle, met: &Met) {
         remember(app, &met.peer, reach.clone());
     }
     if met.taken > 0 {
-        sync_soon(app);
+        sync_soon_for(app, SyncTrigger::LanMeeting);
     }
 }
 

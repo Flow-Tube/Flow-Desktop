@@ -24,8 +24,8 @@ import { useRemoteControlStore } from "./useRemoteControlStore";
 import { usePlayerStore } from "./usePlayerStore";
 import { useUiStore } from "./useUiStore";
 
-/** How long a handoff waits for the target's answer. */
-const HANDOFF_WITHIN_MS = 15_000;
+/** How long a handoff waits for the target's answer: longer than the 20 s the target waits for playback to start. */
+const HANDOFF_WITHIN_MS = 25_000;
 /** How long a remote command waits for its answer before what it showed is taken back. */
 const COMMAND_WITHIN_MS = 5_000;
 /** Answers kept for a request whose wait has not started yet; more than this are old. */

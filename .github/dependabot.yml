@@ -40,12 +40,18 @@ updates:
           - patch
 
   - package-ecosystem: github-actions
-    directory: /
+    # "/" covers .github/workflows; local composite actions are listed apart.
+    directories:
+      - /
+      - /.github/actions/*
     schedule:
       interval: weekly
       day: monday
       time: "06:30"
       timezone: Asia/Beirut
+    # A new action release waits a week before it is proposed.
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 10
     groups:
       action-updates:

@@ -1,14 +1,13 @@
-import { useEffect, useState } from "react";
 import { Volume2 } from "lucide-react";
 
 import { getString } from "../../lib/i18n/index";
 import type { PlayOnDevice } from "../../lib/live/devices";
 import { positionOf } from "../../lib/live/position";
+import { useVolumePick } from "../../lib/live/useVolumePick";
 import { useWheelVolume } from "../../lib/useWheelVolume";
 import { formatTime } from "../../lib/musicFormat";
 import { IS_LINUX_RUNTIME, IS_MACOS_RUNTIME } from "../../lib/platform";
 import { youtubeThumbnailUrl } from "../../lib/thumbnails";
-import { useDebounce } from "../../lib/useDebounce";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 import { usePlayOnStore } from "../../store/usePlayOnStore";
 import { TransportButtons } from "../music/player/PlayerTransport";
@@ -25,18 +24,12 @@ export function NowPlayingCard({ device, nowMs }: { device: PlayOnDevice; nowMs:
   const now = device.now;
   const target = device.thisDevice ? null : device.did;
   const art = useProxiedImageUrl(now?.video ? youtubeThumbnailUrl(now.video) : null);
-  const [volume, setVolume] = useState(now?.vol ?? 0);
-  const settled = useDebounce(volume, 250);
+  const { volume, pick, hold } = useVolumePick(device.did, now, (vol) => drive(target, "volume", { vol }));
   const volumeWheelRef = useWheelVolume<HTMLLabelElement>({
     volume: volume / 100,
     muted: false,
-    onVolumeChange: (value) => setVolume(Math.round(value * 100)),
+    onVolumeChange: (value) => pick(Math.round(value * 100)),
   });
-
-  // Runs only when the user's pick settles, not when `now` reports the volume back.
-  useEffect(() => {
-    if (now && settled !== now.vol) void drive(target, "volume", { vol: settled });
-  }, [settled]);
 
   if (!now?.video) return null;
   const playingHere = now.state === "playing";
@@ -94,9 +87,9 @@ export function NowPlayingCard({ device, nowMs }: { device: PlayOnDevice; nowMs:
           onTogglePlay={() => void drive(target, playingHere ? "pause" : "play")}
           onNext={() => void drive(target, "next")}
         />
-        <label ref={volumeWheelRef} className="flex min-w-0 flex-1 items-center gap-2 text-chrome-neutral-400">
+        <label ref={volumeWheelRef} onPointerDown={hold} className="flex min-w-0 flex-1 items-center gap-2 text-chrome-neutral-400">
           <Volume2 className="h-4 w-4 shrink-0" aria-hidden />
-          <Slider value={volume} min={0} max={100} onChange={setVolume} aria-label={getString("music_volume")} className="flex-1" />
+          <Slider value={volume} min={0} max={100} onChange={pick} aria-label={getString("music_volume")} className="flex-1" />
         </label>
       </div>
     </div>

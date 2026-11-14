@@ -83,7 +83,7 @@ function Swatches({ styles, selected, onSelect }: { styles: CardStyle[]; selecte
   const cover = styles.find((style) => style.mesh)?.mesh;
   const coverUrl = useMemo(() => (cover ? meshUrl(cover) : undefined), [cover]);
   return (
-    <div role="radiogroup" aria-label={getString("lyrics_share_style")} className="flex max-w-72 flex-wrap gap-3 p-1">
+    <div role="radiogroup" aria-label={getString("lyrics_share_style")} className="flex max-w-full flex-wrap gap-3 p-1">
       {styles.map((option) => {
         const isSelected = option.id === selected;
         const label = getString(CARD_STYLE_LABELS[option.id]);
@@ -252,23 +252,23 @@ export function LyricsShareDialog({ track, initialAlign, onClose }: { track: Son
           )}
         </div>
 
-        <div className="flex flex-col gap-4">
+        <div className="flex w-full flex-col gap-4 sm:w-80">
           {styles && styles.length > 1 && (
             <Control label={getString("lyrics_share_style")}>
               <Swatches styles={styles} selected={style?.id} onSelect={setStyleId} />
             </Control>
           )}
           <Control label={getString("lyrics_share_layout")}>
-            <SegmentedControl<CardLayout> label={getString("lyrics_share_layout")} value={layout} onChange={setLayout} options={layoutOptions()} />
+            <SegmentedControl<CardLayout> stretch label={getString("lyrics_share_layout")} value={layout} onChange={setLayout} options={layoutOptions()} />
           </Control>
           <Control label={getString("lyrics_share_size")}>
-            <SegmentedControl<CardAspect> label={getString("lyrics_share_size")} value={aspect} onChange={setAspect} options={aspectOptions()} />
+            <SegmentedControl<CardAspect> stretch label={getString("lyrics_share_size")} value={aspect} onChange={setAspect} options={aspectOptions()} />
           </Control>
           <Control label={getString("lyrics_share_frame")}>
-            <SegmentedControl<CardFrame> label={getString("lyrics_share_frame")} value={frame} onChange={setFrame} options={frameOptions()} />
+            <SegmentedControl<CardFrame> stretch label={getString("lyrics_share_frame")} value={frame} onChange={setFrame} options={frameOptions()} />
           </Control>
           <Control label={getString("lyrics_share_align")}>
-            <SegmentedControl<CardAlign> label={getString("lyrics_share_align")} value={align} onChange={setAlign} options={alignOptions()} />
+            <SegmentedControl<CardAlign> stretch label={getString("lyrics_share_align")} value={align} onChange={setAlign} options={alignOptions()} />
           </Control>
         </div>
       </div>

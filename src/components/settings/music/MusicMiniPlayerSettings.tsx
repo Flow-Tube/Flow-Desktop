@@ -12,6 +12,8 @@ import {
   miniBarButtonLabel,
   miniBarButtonLimit,
   miniBarProgressOptions,
+  miniBarSwipeOptions,
+  parseSwipeAction,
   miniBarTimeOptions,
   miniBarWidthOptions,
   miniCoverTapOptions,
@@ -33,6 +35,8 @@ export function MusicMiniPlayerSettings() {
   const [, setTime] = usePreference(SETTINGS.MINI_BAR_TIME);
   const [, setSungLine] = usePreference(SETTINGS.LYRICS_IN_MINI_PLAYER);
   const [, setCoverTap] = usePreference(SETTINGS.MINI_COVER_TAP);
+  const [swipeLeft, setSwipeLeft] = usePreference(SETTINGS.MINI_BAR_SWIPE_LEFT_ACTION);
+  const [swipeRight, setSwipeRight] = usePreference(SETTINGS.MINI_BAR_SWIPE_RIGHT_ACTION);
   const chosen = look.buttons;
   const limit = miniBarButtonLimit(look.width);
   // The chosen buttons first, in their order, then the rest to pick from.
@@ -47,6 +51,12 @@ export function MusicMiniPlayerSettings() {
       </SettingItem>
       <SettingItem title={getString('mini_bar_background')} description={getString('mini_bar_background_summary')}>
         <Select value={look.background} onChange={setBackground} options={miniBarBackgroundOptions()} />
+      </SettingItem>
+      <SettingItem title={getString('mini_bar_swipe_left')} description={getString('mini_bar_swipe_summary')}>
+        <Select value={parseSwipeAction(swipeLeft)} onChange={setSwipeLeft} options={miniBarSwipeOptions()} />
+      </SettingItem>
+      <SettingItem title={getString('mini_bar_swipe_right')} description={getString('mini_bar_swipe_summary')}>
+        <Select value={parseSwipeAction(swipeRight)} onChange={setSwipeRight} options={miniBarSwipeOptions()} />
       </SettingItem>
       {look.style === 'pill' && (
         <>

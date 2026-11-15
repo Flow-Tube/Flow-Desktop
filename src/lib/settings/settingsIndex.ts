@@ -151,6 +151,8 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     { title: "mini_bar_time", summary: "mini_bar_time_summary", keywords: ["dock", "elapsed", "remaining"] },
     { title: "lyrics_in_mini_player", summary: "lyrics_in_mini_player_summary", keywords: ["dock", "sung", "karaoke"] },
     { title: "mini_cover_tap", summary: "mini_cover_tap_summary", keywords: ["dock", "click", "play", "pause"] },
+    { title: "mini_bar_swipe_left", summary: "mini_bar_swipe_summary", keywords: ["dock", "gesture", "next", "close"] },
+    { title: "mini_bar_swipe_right", summary: "mini_bar_swipe_summary", keywords: ["dock", "gesture", "previous", "close"] },
     { title: "settings_music_artwork_size", summary: "settings_music_artwork_size_desc", keywords: ["cards", "cover"] },
     { title: "settings_music_artwork_control_colors", summary: "settings_music_artwork_control_colors_desc" },
     { title: "settings_music_split_transport", summary: "settings_music_split_transport_desc", keywords: ["previous", "next", "skip", "play", "pause", "buttons"] },

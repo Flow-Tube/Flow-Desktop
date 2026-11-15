@@ -125,6 +125,16 @@ export function useMiniPlayerLook(): MiniPlayerLook {
   };
 }
 
+/** What swiping the mini player sideways does. Device-wide, as on Android; Desktop starts at Nothing. */
+export type MiniBarSwipeAction = "nothing" | "close" | "next" | "previous";
+const SWIPE_ACTIONS: readonly MiniBarSwipeAction[] = ["nothing", "close", "next", "previous"];
+
+export function parseSwipeAction(stored: string | undefined): MiniBarSwipeAction {
+  return SWIPE_ACTIONS.includes(stored as MiniBarSwipeAction) ? (stored as MiniBarSwipeAction) : "nothing";
+}
+
+export const miniBarSwipeOptions = () => SWIPE_ACTIONS.map((value) => ({ value, label: getString(`mini_bar_swipe_${value}`) }));
+
 export const miniBarProgressOptions = () => PROGRESS.map((value) => ({ value, label: getString(`mini_bar_progress_${value}`) }));
 export const miniCoverTapOptions = () => COVER_TAPS.map((value) => ({ value, label: getString(`mini_cover_tap_${value}`) }));
 export const miniBarTimeOptions = () => TIMES.map((value) => ({ value, label: getString(`mini_bar_time_${value}`) }));

@@ -10,6 +10,7 @@ use tauri::{AppHandle, Manager};
 use tokio::sync::Notify;
 use tokio::time::Instant;
 
+use super::auto_sync::{SyncTrigger, allows};
 use super::device::DEVICE_KEYS;
 use super::live_hub::until_another_online;
 use super::service::sync_now;
@@ -97,6 +98,10 @@ pub fn spawn(app: AppHandle) {
                 continue;
             }
             if !pushes.take(seen) {
+                continue;
+            }
+            // With automatic sync off, a change waits for Sync now.
+            if !allows(&app, SyncTrigger::LocalChange).await {
                 continue;
             }
             let started = Instant::now();

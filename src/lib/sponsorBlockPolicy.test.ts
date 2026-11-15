@@ -119,3 +119,48 @@ describe("SponsorBlockTracker", () => {
     });
   });
 });
+
+describe("SponsorBlockTracker seeks and counts", () => {
+  it("lands a seek into a segment at the very start on its end every time", () => {
+    const tracker = new SponsorBlockTracker();
+    const intro = seg("i", "music_offtopic", 0, 148.99);
+    const actions = { music_offtopic: "skip" as SponsorBlockAction };
+    expect(tracker.skipForSeek(140, [intro], actions)?.segment[1]).toBe(148.99);
+    expect(tracker.skipForSeek(0, [intro], actions)?.segment[1]).toBe(148.99);
+  });
+
+  it("lets a seek outside every segment go where it was asked", () => {
+    const tracker = new SponsorBlockTracker();
+    const sponsor = seg("s", "sponsor", 10, 20);
+    expect(tracker.skipForSeek(9.999, [sponsor], { sponsor: "skip" })).toBeNull();
+    expect(tracker.skipForSeek(20, [sponsor], { sponsor: "skip" })).toBeNull();
+  });
+
+  it("doesn't skip again on the tick after a seek landed on the segment's end", () => {
+    const tracker = new SponsorBlockTracker();
+    const sponsor = seg("s", "sponsor", 10, 20);
+    tracker.skipForSeek(15, [sponsor], { sponsor: "skip" });
+    expect(tracker.tick(19.9, [sponsor], { sponsor: "skip" }, false).skip).toBeNull();
+  });
+
+  it("skips a skip-once segment on the first seek and then lets the user stay", () => {
+    const tracker = new SponsorBlockTracker();
+    const sponsor = seg("s", "sponsor", 10, 20);
+    const actions = { sponsor: "skip_once" as SponsorBlockAction };
+    expect(tracker.skipForSeek(12, [sponsor], actions)).not.toBeNull();
+    expect(tracker.skipForSeek(12, [sponsor], actions)).toBeNull();
+  });
+
+  it("doesn't skip a segment that only shows a button", () => {
+    const tracker = new SponsorBlockTracker();
+    expect(tracker.skipForSeek(15, [seg("s", "sponsor", 10, 20)], { sponsor: "skip_button" as SponsorBlockAction })).toBeNull();
+  });
+
+  it("counts a segment once per video", () => {
+    const tracker = new SponsorBlockTracker();
+    expect(tracker.countsOnce("s")).toBe(true);
+    expect(tracker.countsOnce("s")).toBe(false);
+    tracker.reset();
+    expect(tracker.countsOnce("s")).toBe(true);
+  });
+});

@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { AnimatePresence, motion, useTransform } from "framer-motion";
+import { useState, type CSSProperties } from "react";
 import { X } from "lucide-react";
 
 import { useMusicPlayerStore } from "../../../store/useMusicPlayerStore";
@@ -18,24 +17,10 @@ import { useDockControlColors, useDockToggleColors } from "../../../lib/usePlaye
 import { useMusicWheelVolume } from "../../../lib/useMusicWheelVolume";
 import { useVolumeFeedback } from "../../../lib/useVolumeFeedback";
 import { VolumeFeedbackPill } from "../../ui/VolumeFeedbackPill";
-import { upgradeMusicImageUrl } from "../../../lib/thumbnails";
+import { upgradeMusicImageUrl, youtubeThumbnailUrl } from "../../../lib/thumbnails";
 import { useProxiedImageUrl } from "../../../lib/useProxiedImageUrl";
-import {
-  dockOpacity,
-  dockRise,
-  pullOpacity,
-  registerSheetDock,
-  sheetBox,
-  sheetDockBox,
-  sheetProgress,
-  sheetPull,
-  sheetStretch,
-  sheetSwipe,
-} from "../../../lib/musicSheet";
-import { BarSwipeReveal } from "./BarSwipeReveal";
 import { useSheetDrag } from "../../../lib/useSheetDrag";
 import { useControlledDevice, useRemoteActive } from "../../../lib/live/usePlayOn";
-import { youtubeThumbnailUrl } from "../../../lib/thumbnails";
 import { useMiniPlayerLook } from "../../../lib/music/miniPlayerLook";
 import { useMiniBarSurface } from "../../../lib/music/miniBarSurface";
 import { useLyricsCover } from "../../../lib/lyrics/useLyricsCover";
@@ -51,7 +36,8 @@ const PILL_WIDTH = {
   wide: "w-[min(90%,56rem)]",
 } as const;
 
-export function MiniLayer() {
+/** Everything the mini player shows and the state its bar and its popovers share. */
+export function useMiniPlayer() {
   const currentTrack = useMusicPlayerStore((s) => s.currentTrack);
   const viewState = useMusicPlayerStore((s) => s.viewState);
   const isPlaying = useMusicPlayerStore((s) => s.isPlaying);
@@ -62,19 +48,15 @@ export function MiniLayer() {
   const volume = useMusicPlayerStore((s) => s.volume);
   const { feedback: volumeFeedback, show: showVolumeFeedback } = useVolumeFeedback();
   const volumeWheelRef = useMusicWheelVolume<HTMLButtonElement>({ onFeedback: showVolumeFeedback });
-
-  const openOverlay = useMusicPlayerStore((s) => s.openOverlay);
-  const dismiss = useMusicPlayerStore((s) => s.dismiss);
   const look = useMiniPlayerLook();
   const pill = look.style === "pill";
-
-  const { errorInfo, onRetry, onCopyLogs, onOpenInBrowser } = useMusicPlayerError();
-
+  const error = useMusicPlayerError();
   const [popover, setPopover] = useState<null | "eq" | "vol">(null);
+  const [hovered, setHovered] = useState(false);
   const menu = useMusicContextMenu(Boolean(currentTrack));
   const menuActions = useNowPlayingMenuActions(currentTrack);
 
-  // Same artwork URL the overlay samples, so this reads a warm cache entry.
+  // Same artwork URL the full player samples, so this reads a warm cache entry.
   const accentSrc = useProxiedImageUrl(upgradeMusicImageUrl(currentTrack?.thumbnail));
   const swatches = useArtworkSwatches(accentSrc);
   const accentActive = useDockToggleColors(swatches);
@@ -82,32 +64,7 @@ export function MiniLayer() {
   const surface = useMiniBarSurface(look.background, swatches);
   const cover = useLyricsCover(accentSrc, surface.coverColors);
 
-  const loading = isBuffering || loadingStreamId !== null;
-  const muted = isMuted || volume === 0;
-
-  // The dock stays under the full player, so the player can grow out of it and sink back into it.
-  const docked = viewState === "dock";
-  const sheetDrag = useSheetDrag();
-  // The bar rides the card's top edge as the player grows, and follows a pull down while closing.
-  const dockHeight = () => {
-    const dock = sheetDockBox();
-    return dock ? dock.bottom - dock.top : 64;
-  };
-  const opacity = useTransform([sheetProgress, sheetPull], ([progress, pull]: number[]) =>
-    dockOpacity(progress!) * pullOpacity(pull!, dockHeight()),
-  );
-  const y = useTransform([sheetProgress, sheetPull], ([progress, pull]: number[]) => {
-    const dock = sheetDockBox();
-    return dockRise(progress!, dock ? dock.top - sheetBox().top : 0) + pull!;
-  });
-  // Above the growing player until it has faded, and out of the pointer's way once it has.
-  const zIndex = useTransform(sheetProgress, (progress) => (progress > 0 ? 61 : 50));
-  const pointerEvents = useTransform(sheetProgress, (progress) => (progress < 0.5 ? "auto" : "none"));
-  // Android's 6 dp card shadow, only while the bar rests.
-  const boxShadow = useTransform([sheetProgress, sheetPull, sheetSwipe], ([progress, pull, swipe]: number[]) =>
-    pill && progress === 0 && pull === 0 && swipe === 0 ? "0 8px 24px rgb(0 0 0 / 0.35)" : "none",
-  );
-  // While this device controls another, the dock shows that device's music and its buttons drive
+  // While this device controls another, the bar shows that device's music and its buttons drive
   // it (the player's actions go there); a video there gets the remote dock instead.
   const remote = useRemoteActive();
   const controlled = useControlledDevice();
@@ -115,15 +72,13 @@ export function MiniLayer() {
   const shown = away
     ? { thumbnail: youtubeThumbnailUrl(away.now.video), title: away.now.title, by: away.now.by }
     : currentTrack && { thumbnail: currentTrack.thumbnail, title: currentTrack.title, by: artistsText(currentTrack.artists) };
-  const playing = away ? away.now.state === "playing" : isPlaying;
-  const busy = !away && loading;
   const model: DockModel | null = shown && {
     shown,
     track: currentTrack,
     away,
-    playing,
-    busy,
-    muted,
+    playing: away ? away.now.state === "playing" : isPlaying,
+    busy: !away && (isBuffering || loadingStreamId !== null),
+    muted: isMuted || volume === 0,
     eqActive: eqEnabled,
     popover,
     setPopover,
@@ -135,105 +90,112 @@ export function MiniLayer() {
     look,
   };
 
+  return {
+    model,
+    /** Whether the bar is on screen: a song here, or the music of a device this one controls. */
+    visible: !!model && (!!away || !remote),
+    docked: viewState === "dock",
+    away,
+    pill,
+    look,
+    surface,
+    cover,
+    /** The bar's paint: its background's colours, with the controls in the cover's or the plain colours. */
+    barStyle: { ...controlColors, ...surface.style } as CSSProperties,
+    error,
+    popover,
+    setPopover,
+    volumeFeedback,
+    hovered,
+    setHovered,
+    widthClass: pill ? `h-16 ${PILL_WIDTH[look.width]}` : "h-[72px] w-[90%] max-w-5xl",
+    restRadius: pill ? 32 : 16,
+  };
+}
+
+export type MiniPlayer = ReturnType<typeof useMiniPlayer>;
+
+/** The bar's content: it fills the card's top edge, so it widens with the card as the player grows. */
+export function MiniBar({ mini }: { mini: MiniPlayer }) {
+  const openOverlay = useMusicPlayerStore((s) => s.openOverlay);
+  const sheetDrag = useSheetDrag();
+  const { model, away, pill, surface, cover } = mini;
+  if (!model) return null;
   return (
-    <AnimatePresence>
-      {model && (away || !remote) && (
-        <motion.div
-          key="music-dock"
-          initial={{ y: 96, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={{ y: 96, opacity: 0 }}
-          transition={{ type: "spring", stiffness: 420, damping: 38, mass: 0.9 }}
-          inert={!docked}
-          ref={registerSheetDock}
-          style={{ zIndex }}
-          className={`group fixed bottom-6 left-1/2 -translate-x-1/2 ${pill ? `h-16 ${PILL_WIDTH[look.width]}` : "h-[72px] w-[90%] max-w-5xl"}`}
-        >
-          {!away && <BarSwipeReveal rounded={pill ? "rounded-full" : "rounded-2xl"} />}
-          <motion.div
-            style={{ opacity, y, x: sheetSwipe, scaleY: sheetStretch, originY: 1, pointerEvents }}
-            className="relative h-full"
-          >
-            {/* Dismiss — appears on hover at the corner, unless the Pill already shows Close. */}
-            {!away && !(pill && look.buttons.includes("close")) && (
-              <HapticButton
-                onClick={dismiss}
-                aria-label={getString("music_dismiss")}
-                className="absolute -end-2.5 -top-2.5 z-20 grid h-6 w-6 place-items-center rounded-full border border-chrome-neutral-700 bg-surface-container-highest text-chrome-neutral-300 opacity-0 transition-opacity duration-200 ease-out hover:text-chrome-neutral-100 group-hover:opacity-100"
-              >
-                <X className="h-3.5 w-3.5" />
-              </HapticButton>
-            )}
-
-            {/* Playback failure — floats above the pill so transport stays usable. */}
-            {errorInfo && (
-              <div className="absolute inset-x-0 bottom-full mb-3">
-                <PlayerErrorState
-                  variant="compact"
-                  error={errorInfo}
-                  onRetry={onRetry}
-                  onCopyLogs={onCopyLogs}
-                  onOpenInBrowser={onOpenInBrowser}
-                />
-              </div>
-            )}
-
-            {/* The bar (clips the edge progress line and the cover colours to its corners). Drag it up to open the player. */}
-            <motion.div
-              {...sheetDrag}
-              data-music-dock-bar
-              onClick={(e) => {
-                if (away) return;
-                const target = e.target instanceof Element ? e.target : null;
-                if (target?.closest("button, [role='slider'], [data-sheet-drag-ignore], a, input, select, textarea")) {
-                  return;
-                }
-                openOverlay("full");
-              }}
-              // Vivid paints its own controls, so the bar's surface wins over the control colours.
-              style={{ ...controlColors, ...surface.style, boxShadow }}
-              className={`relative isolate flex h-full touch-none select-none items-center overflow-hidden bg-surface-container-high ${
-                pill ? "gap-3 rounded-full ps-1.5 pe-3" : "rounded-2xl ps-3 pe-4"
-              } ${surface.bordered ? "border border-chrome-neutral-800" : ""} ${away ? "" : "cursor-pointer"}`}
-            >
-              {surface.coverColors && (
-                <>
-                  <div className="pointer-events-none absolute inset-0 -z-10">
-                    <LyricsCoverBackground cover={cover} moving={false} />
-                  </div>
-                  <span aria-hidden className="pointer-events-none absolute inset-0 -z-10 bg-chrome-black/40" />
-                </>
-              )}
-
-              {/* Grab handle, shown on hover so the drag up is discoverable. */}
-              <span
-                aria-hidden
-                className="pointer-events-none absolute left-1/2 top-1 h-1 w-8 -translate-x-1/2 rounded-full bg-chrome-neutral-600 opacity-0 transition-opacity duration-200 ease-out group-hover:opacity-100"
-              />
-
-              {pill ? <PillDockBody model={model} /> : <ClassicDockBody model={model} />}
-            </motion.div>
-
-            {/* Popovers — rendered outside the clipped pill so they aren't cut off. */}
-            <div className="absolute bottom-full end-2 mb-3">
-              <EqPanel
-                open={popover === "eq"}
-                onClose={() => setPopover(null)}
-                placement="top"
-              />
-            </div>
-            <div className="absolute bottom-full end-2 mb-3">
-              {volumeFeedback && popover !== "vol" && (
-                <VolumeFeedbackPill feedback={volumeFeedback} tone="surface" />
-              )}
-              <VolumePopover
-                open={popover === "vol"}
-                onClose={() => setPopover((p) => (p === "vol" ? null : p))}
-              />
-            </div>
-          </motion.div>
-        </motion.div>
+    <div
+      {...sheetDrag}
+      data-music-dock-bar
+      onPointerEnter={() => mini.setHovered(true)}
+      onPointerLeave={() => mini.setHovered(false)}
+      onClick={(e) => {
+        if (away) return;
+        const target = e.target instanceof Element ? e.target : null;
+        if (target?.closest("button, [role='slider'], [data-sheet-drag-ignore], a, input, select, textarea")) return;
+        openOverlay("full");
+      }}
+      className={`group relative isolate flex h-full touch-none select-none items-center ${
+        pill ? "gap-3 ps-1.5 pe-3" : "ps-3 pe-4"
+      } ${away ? "" : "cursor-pointer"}`}
+    >
+      {surface.coverColors && (
+        <>
+          <div className="pointer-events-none absolute inset-0 -z-10">
+            <LyricsCoverBackground cover={cover} moving={false} />
+          </div>
+          <span aria-hidden className="pointer-events-none absolute inset-0 -z-10 bg-chrome-black/40" />
+        </>
       )}
-    </AnimatePresence>
+      {/* Grab handle, shown on hover so the drag up is discoverable. */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute left-1/2 top-1 h-1 w-8 -translate-x-1/2 rounded-full bg-chrome-neutral-600 opacity-0 transition-opacity duration-200 ease-out group-hover:opacity-100"
+      />
+      {pill ? <PillDockBody model={model} /> : <ClassicDockBody model={model} />}
+    </div>
+  );
+}
+
+/** What floats around the resting bar outside the card's clip: Dismiss, a playback failure and the popovers. */
+export function MiniChrome({ mini }: { mini: MiniPlayer }) {
+  const dismiss = useMusicPlayerStore((s) => s.dismiss);
+  const { away, pill, look, error, popover, setPopover, volumeFeedback, hovered } = mini;
+  return (
+    <>
+      {/* Dismiss: appears on hover at the corner, unless the Pill already shows Close. */}
+      {!away && !(pill && look.buttons.includes("close")) && (
+        <HapticButton
+          onClick={dismiss}
+          onPointerEnter={() => mini.setHovered(true)}
+          onPointerLeave={() => mini.setHovered(false)}
+          aria-label={getString("music_dismiss")}
+          className={`pointer-events-auto absolute -end-2.5 -top-2.5 z-20 grid h-6 w-6 place-items-center rounded-full border border-chrome-neutral-700 bg-surface-container-highest text-chrome-neutral-300 transition-opacity duration-200 ease-out hover:text-chrome-neutral-100 ${
+            hovered ? "opacity-100" : "opacity-0"
+          }`}
+        >
+          <X className="h-3.5 w-3.5" />
+        </HapticButton>
+      )}
+
+      {/* Playback failure, above the bar so the transport stays usable. */}
+      {error.errorInfo && (
+        <div className="pointer-events-auto absolute inset-x-0 bottom-full mb-3">
+          <PlayerErrorState
+            variant="compact"
+            error={error.errorInfo}
+            onRetry={error.onRetry}
+            onCopyLogs={error.onCopyLogs}
+            onOpenInBrowser={error.onOpenInBrowser}
+          />
+        </div>
+      )}
+
+      <div className="pointer-events-auto absolute bottom-full end-2 mb-3">
+        <EqPanel open={popover === "eq"} onClose={() => setPopover(() => null)} placement="top" />
+      </div>
+      <div className="pointer-events-auto absolute bottom-full end-2 mb-3">
+        {volumeFeedback && popover !== "vol" && <VolumeFeedbackPill feedback={volumeFeedback} tone="surface" />}
+        <VolumePopover open={popover === "vol"} onClose={() => setPopover((p) => (p === "vol" ? null : p))} />
+      </div>
+    </>
   );
 }

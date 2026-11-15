@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { AnimatePresence, motion, useMotionValueEvent, useTransform } from "framer-motion";
+import { AnimatePresence, motion, useMotionValueEvent, useTransform, type MotionValue } from "framer-motion";
 import { ChevronDown, ListMusic, Mic2, Minimize2, SlidersHorizontal, Volume2, VolumeX } from "lucide-react";
 
 import { useMusicPlayerStore } from "../../../store/useMusicPlayerStore";
-import { useMusicSheetStore } from "../../../store/useMusicSheetStore";
 import { useMusicPlayerError } from "../../../lib/useMusicPlayerError";
 import { useCoverAppContent } from "../../../lib/useCoverAppContent";
 import { useMusicPlayerKeyboard } from "../../../lib/useMusicPlayerKeyboard";
@@ -35,17 +34,7 @@ import { useFullPlayerColors } from "../../../lib/usePlayerColors";
 import { coverSurfaceVariables } from "../../../lib/playerColors";
 import { upgradeMusicImageUrl } from "../../../lib/thumbnails";
 import { useProxiedImageUrl } from "../../../lib/useProxiedImageUrl";
-import {
-  contentOpacity,
-  contentRise,
-  settleSheet,
-  sheetBox,
-  sheetClip,
-  sheetDockBox,
-  sheetOpacity,
-  sheetProgress,
-  sheetStretch,
-} from "../../../lib/musicSheet";
+import { contentOpacity, contentRise, sheetOpacity, sheetProgress } from "../../../lib/musicSheet";
 import { usePlayerDrag } from "../../../lib/useSheetDrag";
 
 const rgbCss = ({ r, g, b }: { r: number; g: number; b: number }) => `rgb(${r} ${g} ${b})`;
@@ -53,7 +42,11 @@ const rgbCss = ({ r, g, b }: { r: number; g: number; b: number }) => `rgb(${r} $
 /** From this width the song keeps its column and Up next or the lyrics sit beside it, as on Android tablets. */
 const WIDE_QUERY = "(min-width: 1100px)";
 
-export function FullLayer() {
+/**
+ * The full player, laid out once at the window's size inside the sheet's card and moved by
+ * `offsetX`/`offsetY` so it stays still on screen while the card around it grows and shrinks.
+ */
+export function FullLayer({ offsetX, offsetY }: { offsetX: MotionValue<number>; offsetY: MotionValue<number> }) {
   const currentTrack = useMusicPlayerStore((s) => s.currentTrack);
   const viewState = useMusicPlayerStore((s) => s.viewState);
   const eqEnabled = useEqActive();
@@ -72,7 +65,6 @@ export function FullLayer() {
   const wide = useMediaQuery(WIDE_QUERY);
   const [paneVisible, setPaneVisible] = useBoolPref(SETTINGS.MUSIC_SIDE_PANE_VISIBLE);
   const open = currentTrack !== null && viewState !== "dock";
-  const peeking = useMusicSheetStore((s) => s.peeking);
   const isQueue = viewState === "queue";
   const isLyrics = viewState === "lyrics";
   /*
@@ -86,27 +78,7 @@ export function FullLayer() {
   const accentSrc = useProxiedImageUrl(upgradeMusicImageUrl(currentTrack?.thumbnail));
   const playerColors = useFullPlayerColors(useArtworkSwatches(accentSrc));
 
-  /*
-    The player grows out of the dock when it opens and sinks back into it when it closes, as
-    Android's player sheet does; a drag on the dock moves the same progress by hand. It stays
-    mounted until the sinking has finished.
-  */
-  const [closing, setClosing] = useState(false);
-  useEffect(() => {
-    if (open) {
-      setClosing(false);
-      void settleSheet(1);
-    } else if (sheetProgress.get() > 0 && !useMusicSheetStore.getState().peeking) {
-      setClosing(true);
-      void settleSheet(0).then((settled) => {
-        if (settled) setClosing(false);
-      });
-    }
-  }, [open]);
-  const shown = open || peeking || closing;
-
   const dialogRef = useRef<HTMLDivElement>(null);
-  const clipPath = useTransform(sheetProgress, (progress) => sheetClip(progress, sheetDockBox(), sheetBox()));
   const groundOpacity = useTransform(sheetProgress, sheetOpacity);
   const innerOpacity = useTransform(sheetProgress, contentOpacity);
   const innerRise = useTransform(sheetProgress, contentRise);
@@ -199,7 +171,7 @@ export function FullLayer() {
     </div>
   );
 
-  if (!shown || !currentTrack) return null;
+  if (!currentTrack) return null;
 
   return (
     <motion.div
@@ -210,8 +182,9 @@ export function FullLayer() {
       aria-label={currentTrack.title}
       aria-hidden={!open}
       // While the dock is dragged or the player sinks, the pointer belongs to the dock.
-      className={`fixed inset-x-0 bottom-0 top-[var(--app-titlebar-height)] z-[60] flex flex-col overflow-hidden bg-[var(--player-ground)] outline-none ${open ? "" : "pointer-events-none"}`}
-      style={{ ...playerColors.rootStyle, clipPath, opacity: groundOpacity, scaleY: sheetStretch, originY: 1 }}
+      className={`absolute top-0 flex h-[calc(100vh-var(--app-titlebar-height))] w-screen flex-col overflow-hidden bg-[var(--player-ground)] outline-none ${open ? "" : "pointer-events-none"}`}
+      // Screen coordinates, the same in either direction: the card it sits in is placed by them too.
+      style={{ ...playerColors.rootStyle, left: 0, x: offsetX, y: offsetY, opacity: groundOpacity }}
       {...(open ? drag : {})}
       // The cover is an image the browser would otherwise start dragging, taking the pointer away.
       onDragStart={(event) => event.preventDefault()}
@@ -225,7 +198,7 @@ export function FullLayer() {
           style={playerColors.style}
           artworkPlacement={artworkPlacement}
           track={playerColors.style === "immersive" ? currentTrack : null}
-          loopRunning={!fullBleedLyrics}
+          loopRunning={!fullBleedLyrics && entered}
           blurred={fullBleedLyrics && lyricsBackground === "player"}
         />
 

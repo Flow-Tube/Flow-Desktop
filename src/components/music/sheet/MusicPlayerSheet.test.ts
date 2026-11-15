@@ -32,7 +32,7 @@ import type { SongItem } from "../../../types/music";
 import { useMusicPlayerStore } from "../../../store/useMusicPlayerStore";
 import { useAppSettingsStore } from "../../../store/useAppSettingsStore";
 import { SETTINGS } from "../../../lib/settings/schema";
-import { MiniLayer } from "./MiniLayer";
+import { MusicPlayerSheet } from "./MusicPlayerSheet";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -53,7 +53,7 @@ const sampleTrack: SongItem = {
 let host: HTMLDivElement;
 let root: Root;
 
-describe("MiniLayer background click expansion", () => {
+describe("MusicPlayerSheet background click expansion", () => {
   beforeEach(() => {
     host = document.createElement("div");
     document.body.append(host);
@@ -94,7 +94,7 @@ describe("MiniLayer background click expansion", () => {
     useMusicPlayerStore.setState({ openOverlay });
 
     act(() => {
-      root.render(createElement(MiniLayer));
+      root.render(createElement(MusicPlayerSheet));
     });
 
     const pill = host.querySelector<HTMLDivElement>("[data-music-dock-bar]");
@@ -115,7 +115,7 @@ describe("MiniLayer background click expansion", () => {
     useMusicPlayerStore.setState({ openOverlay });
 
     act(() => {
-      root.render(createElement(MiniLayer));
+      root.render(createElement(MusicPlayerSheet));
     });
 
     const expandButton = host.querySelector<HTMLButtonElement>('button[aria-label="Expand"]');
@@ -135,7 +135,7 @@ describe("MiniLayer background click expansion", () => {
     useMusicPlayerStore.setState({ openOverlay, togglePlay });
 
     act(() => {
-      root.render(createElement(MiniLayer));
+      root.render(createElement(MusicPlayerSheet));
     });
 
     const playButton = host.querySelector<HTMLButtonElement>('button[aria-label="Play"]');
@@ -155,7 +155,7 @@ describe("MiniLayer background click expansion", () => {
     setLook({ [SETTINGS.MUSIC_MINI_PLAYER_STYLE]: "classic" });
 
     act(() => {
-      root.render(createElement(MiniLayer));
+      root.render(createElement(MusicPlayerSheet));
     });
 
     const scrubber = host.querySelector<HTMLElement>('[data-sheet-drag-ignore]');
@@ -171,7 +171,7 @@ describe("MiniLayer background click expansion", () => {
   it("shows the Pill's chosen buttons in their order", () => {
     setLook({ [SETTINGS.MINI_BAR_BUTTONS]: "next,play_pause,queue,close" });
     act(() => {
-      root.render(createElement(MiniLayer));
+      root.render(createElement(MusicPlayerSheet));
     });
 
     const labels = [...host.querySelectorAll<HTMLButtonElement>('[data-music-dock-bar] [dir="ltr"] button')].map((b) => b.getAttribute("aria-label"));
@@ -183,7 +183,7 @@ describe("MiniLayer background click expansion", () => {
   it("keeps the Classic bar's fixed transport and actions", () => {
     setLook({ [SETTINGS.MUSIC_MINI_PLAYER_STYLE]: "classic", [SETTINGS.MINI_BAR_BUTTONS]: "next" });
     act(() => {
-      root.render(createElement(MiniLayer));
+      root.render(createElement(MusicPlayerSheet));
     });
 
     for (const label of ["Shuffle", "Previous", "Play", "Next", "Repeat", "Volume", "Queue", "Lyrics", "Equalizer"]) {
@@ -205,7 +205,7 @@ describe("MiniLayer background click expansion", () => {
     const openOverlay = vi.fn();
     useMusicPlayerStore.setState({ openOverlay });
     act(() => {
-      root.render(createElement(MiniLayer));
+      root.render(createElement(MusicPlayerSheet));
     });
 
     pressAndRelease(host.querySelector<HTMLDivElement>("[data-music-dock-bar]")!, 3, 2);
@@ -220,7 +220,7 @@ describe("MiniLayer background click expansion", () => {
     const openOverlay = vi.fn();
     useMusicPlayerStore.setState({ openOverlay });
     act(() => {
-      root.render(createElement(MiniLayer));
+      root.render(createElement(MusicPlayerSheet));
     });
 
     pressAndRelease(host.querySelector<HTMLDivElement>("[data-music-dock-bar]")!, dx, dy);
@@ -250,7 +250,7 @@ describe("MiniLayer background click expansion", () => {
     useMusicPlayerStore.setState({ openOverlay });
 
     act(() => {
-      root.render(createElement(MiniLayer));
+      root.render(createElement(MusicPlayerSheet));
     });
 
     const pill = host.querySelector<HTMLDivElement>("[data-music-dock-bar]");

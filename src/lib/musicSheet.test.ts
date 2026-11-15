@@ -7,13 +7,12 @@ import {
   contentOpacity,
   contentRise,
   dockOpacity,
-  dockRise,
   openDragTarget,
   pullOpacity,
   shouldClosePulled,
   holdSheet,
   settleSheet,
-  sheetClip,
+  cardBox,
   sheetOpacity,
   sheetProgress,
   sheetTarget,
@@ -48,31 +47,27 @@ describe("sheet fades", () => {
     expect(contentRise(1)).toBe(0);
   });
 
-  it("lifts the mini player with the card's top edge", () => {
-    expect(dockRise(0, 600)).toBe(-0);
-    expect(dockRise(0.5, 600)).toBe(-300);
-    expect(dockRise(2, 600)).toBe(-600);
-  });
 });
 
-describe("sheetClip", () => {
+describe("cardBox", () => {
   const sheet = { top: 40, right: 1200, bottom: 800, left: 0 };
   const dock = { top: 712, right: 1140, bottom: 776, left: 60 };
 
-  it("starts at the dock's rectangle", () => {
-    expect(sheetClip(0, dock, sheet)).toBe("inset(672px 60px 24px 60px round 16px)");
+  it("rests on the mini player, as round as it is", () => {
+    expect(cardBox(0, 0, dock, sheet, 32)).toEqual({ left: 60, top: 712, width: 1080, height: 64, radius: 32 });
   });
 
-  it("is halfway there halfway through", () => {
-    expect(sheetClip(0.5, dock, sheet)).toBe("inset(336px 30px 12px 30px round 8px)");
+  it("grows wider and taller towards the whole player", () => {
+    expect(cardBox(0.5, 0, dock, sheet, 32)).toEqual({ left: 30, top: 376, width: 1140, height: 412, radius: 16 });
+    expect(cardBox(1, 0, dock, sheet, 32)).toEqual({ left: 0, top: 40, width: 1200, height: 760, radius: 0 });
   });
 
-  it("clips nothing once open", () => {
-    expect(sheetClip(1, dock, sheet)).toBe("none");
+  it("moves down whole while pulled to close", () => {
+    expect(cardBox(0, 20, dock, sheet, 32)).toEqual({ left: 60, top: 732, width: 1080, height: 64, radius: 32 });
   });
 
-  it("rises from the bottom edge without a dock", () => {
-    expect(sheetClip(0, null, sheet)).toBe("inset(760px 0px 0px 0px round 16px)");
+  it("rises from the bottom edge without a mini player", () => {
+    expect(cardBox(0, 0, null, sheet, 0)).toEqual({ left: 0, top: 800, width: 1200, height: 0, radius: 0 });
   });
 });
 

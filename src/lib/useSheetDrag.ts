@@ -11,6 +11,7 @@ import {
   clampPull,
   collapseSquash,
   holdSheet,
+  measureSheet,
   openDragTarget,
   queueSettle,
   settleSheet,
@@ -128,6 +129,7 @@ export function useSheetDrag(): SheetDragBind {
     // wheels once the player it opened covers it, and taking the sheet then would sink an open player.
     const dock = sheetDockBox();
     if (!dock || playerOpen()) return false;
+    measureSheet();
     if (mode === "rise") {
       holdSheet();
       useMusicSheetStore.getState().setPeeking(true);
@@ -319,6 +321,7 @@ export function usePlayerDrag(): SheetDragBind {
   const begin = (): boolean => {
     if (!playerOpen()) return false;
     holdSheet();
+    measureSheet();
     const dock = sheetDockBox();
     const sheet = sheetBox();
     drag.current = { down: 0, span: Math.max(1, (dock?.top ?? sheet.bottom) - sheet.top), samples: [] };

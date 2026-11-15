@@ -56,6 +56,7 @@ export function queueSettle(options: SettleOptions): void {
 }
 
 export async function settleSheet(target: 0 | 1, given: SettleOptions = {}): Promise<boolean> {
+  measureSheet();
   const options = { ...queued, ...given };
   queued = {};
   const run = ++sheetRun;
@@ -103,9 +104,6 @@ export const contentOpacity = (progress: number) => clamp01((progress - 0.25) / 
 /** The content rises 24 px as it fades in. */
 export const contentRise = (progress: number) => 24 * (1 - contentOpacity(progress));
 
-/** How far the mini player has risen with the card's top edge: `span` is its resting distance from the top. */
-export const dockRise = (progress: number, span: number) => -clamp01(progress) * span;
-
 /** A mini player pulled down this many heights closes; it can be pulled at most 1.5 heights. */
 const CLOSE_PULL_HEIGHTS = 0.5;
 const CLOSE_PULL_LIMIT_HEIGHTS = 1.5;
@@ -145,23 +143,32 @@ export function openDragTarget(progress: number, downward: number, downwardVeloc
 /** How squashed the card lands after a drag down, more the further it was open (0.97 at most). */
 export const collapseSquash = (progress: number) => 1 - 0.03 * clamp01(progress);
 
-const DOCK_RADIUS_PX = 16;
+export interface CardBox {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  radius: number;
+}
 
 /**
- * The sheet's clip at `progress`, in the player's own box: from the dock's rectangle at 0 to the
- * whole player at 1. Without a dock to grow from, it rises from the bottom edge.
+ * The card at `progress`, Android's `MusicSheetGeometry`: from the mini player's resting box,
+ * rounded as the mini player is, to the whole player below the title bar, square. A pull down moves
+ * the resting card down. Without a mini player to grow from, it rises from the bottom edge.
  */
-export function sheetClip(progress: number, dock: Box | null, sheet: Box): string {
+export function cardBox(progress: number, pull: number, dock: Box | null, sheet: Box, restRadius: number): CardBox {
   const p = clamp01(progress);
-  if (p >= 1) return "none";
   const from = dock ?? { top: sheet.bottom, right: sheet.right, bottom: sheet.bottom, left: sheet.left };
-  const lerp = (start: number) => Math.max(0, start * (1 - p));
-  const top = lerp(from.top - sheet.top);
-  const right = lerp(sheet.right - from.right);
-  const bottom = lerp(sheet.bottom - from.bottom);
-  const left = lerp(from.left - sheet.left);
-  const px = (value: number) => `${Math.round(value * 10) / 10}px`;
-  return `inset(${px(top)} ${px(right)} ${px(bottom)} ${px(left)} round ${px(DOCK_RADIUS_PX * (1 - p))})`;
+  const lerp = (start: number, end: number) => start + (end - start) * p;
+  const left = lerp(from.left, sheet.left);
+  const top = lerp(from.top, sheet.top) + pull;
+  return {
+    left,
+    top,
+    width: lerp(from.right, sheet.right) - left,
+    height: lerp(from.bottom, sheet.bottom) + pull - top,
+    radius: restRadius * (1 - p),
+  };
 }
 
 /** The full player's box: the window below the title bar. */
@@ -182,3 +189,24 @@ export function registerSheetDock(element: HTMLElement | null): void {
 export function sheetDockBox(): Box | null {
   return dockElement?.isConnected ? dockElement.getBoundingClientRect() : null;
 }
+
+let rest: { dock: Box | null; sheet: Box } = { dock: null, sheet: { top: 0, right: 0, bottom: 0, left: 0 } };
+
+/**
+ * Measures where the card rests and where it opens to, for the frames that follow. Measured at the
+ * start of a drag or a settle and when the window or the mini player resizes, never per frame: a
+ * layout read each frame while the card moves made every frame lay the page out again. Offsets
+ * are used, not the screen box, so the sheet's own entrance slide never shifts the resting box.
+ */
+export function measureSheet(): void {
+  const el = dockElement?.isConnected ? dockElement : null;
+  const dock = el ? { left: el.offsetLeft, top: el.offsetTop, right: el.offsetLeft + el.offsetWidth, bottom: el.offsetTop + el.offsetHeight } : null;
+  rest = { dock: dock && dock.right > dock.left ? dock : null, sheet: sheetBox() };
+  sheetMeasured.set(sheetMeasured.get() + 1);
+}
+
+/** Counts measurements, so the card's box is worked out again after one even when nothing moves. */
+export const sheetMeasured = motionValue(0);
+
+/** The last measured resting box and open box. */
+export const sheetRest = () => rest;

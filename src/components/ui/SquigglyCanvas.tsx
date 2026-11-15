@@ -150,10 +150,10 @@ export function SquigglyCanvas({ ratio, readRatio, playing, pressed, still = pre
       canvas.getContext("2d")?.setTransform(dpr, 0, 0, dpr, 0, 0);
       draw();
     };
-    const observer = new ResizeObserver(resize);
-    observer.observe(canvas);
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(resize);
+    observer?.observe(canvas);
     resize();
-    return () => observer.disconnect();
+    return () => observer?.disconnect();
   }, []);
 
   // Any change of what is shown wakes the loop; it stops itself once nothing moves.

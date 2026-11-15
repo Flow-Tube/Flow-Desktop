@@ -15,57 +15,55 @@ fn page_header(page: &Value) -> &Value {
     &page["header"]["pageHeaderRenderer"]["content"]["pageHeaderViewModel"]
 }
 
-/// The counts row after the handle, part by part: subscribers, then videos.
-fn counts_row(header: &Value) -> Vec<String> {
-    header["metadata"]["contentMetadataViewModel"]["metadataRows"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .map(|row| {
-            row["metadataParts"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter_map(|part| text_of(&part["text"]))
-                .map(|text| text.trim().to_string())
-                .filter(|text| !text.is_empty())
-                .collect::<Vec<_>>()
-        })
-        .find(|parts| parts.first().is_some_and(|first| !first.starts_with('@')))
-        .unwrap_or_default()
+/// One part of the header's metadata rows: "@handle", "16.9M subscribers", "7.9K videos".
+struct MetadataPart {
+    text: String,
+    has_accessibility_label: bool,
 }
 
-/// The subscriber and video counts as written. English names them; other
-/// languages are read by position, subscribers first, and a lone part is
-/// shown as the subscriber count without being read as a number.
-fn counts(rows: &[String], header: &Value) -> (Option<String>, Option<String>) {
-    if crate::api::innertube::core::locale::is_english() {
-        return (
-            rows.iter().find(|row| mentions(row, "subscriber")).cloned(),
-            rows.iter()
-                .find(|row| mentions(row, "video") && !row.starts_with('@'))
-                .cloned(),
-        );
-    }
-    let row = counts_row(header);
-    (row.first().cloned(), row.get(1).cloned())
-}
-
-/// The header's metadata rows: "@handle", "16.9M subscribers", "7.9K videos".
-fn metadata_rows(header: &Value) -> Vec<String> {
+/// The header's metadata parts, row after row.
+fn metadata_parts(header: &Value) -> Vec<MetadataPart> {
     header["metadata"]["contentMetadataViewModel"]["metadataRows"]
         .as_array()
         .into_iter()
         .flatten()
         .flat_map(|row| row["metadataParts"].as_array().into_iter().flatten())
-        .filter_map(|part| text_of(&part["text"]))
-        .map(|text| text.trim().to_string())
-        .filter(|text| !text.is_empty())
+        .filter_map(|part| {
+            let text = text_of(&part["text"])?.trim().to_string();
+            (!text.is_empty()).then(|| MetadataPart {
+                text,
+                has_accessibility_label: part["accessibilityLabel"].is_string(),
+            })
+        })
         .collect()
 }
 
-fn mentions(text: &str, word: &str) -> bool {
-    text.to_lowercase().contains(word)
+/// The subscriber and video counts as written. The parts carry no field names
+/// and their words follow the content language, so they are told apart by
+/// shape, as Flow for Android does: only the subscriber count has an
+/// accessibility label (seen in en, es, ja and ar). Without one, two parts are
+/// subscribers then videos, and a lone part is the video count of a channel
+/// that hides its subscribers.
+fn counts(parts: &[MetadataPart]) -> (Option<String>, Option<String>) {
+    let counts: Vec<&MetadataPart> = parts
+        .iter()
+        .filter(|part| !part.text.starts_with('@'))
+        .collect();
+    let subscribers = counts
+        .iter()
+        .position(|part| part.has_accessibility_label)
+        .or_else(|| {
+            counts
+                .iter()
+                .position(|part| part.text.to_lowercase().contains("subscriber"))
+        })
+        .or_else(|| (counts.len() >= 2).then_some(0));
+    let videos = counts
+        .iter()
+        .enumerate()
+        .find(|(index, _)| Some(*index) != subscribers)
+        .map(|(_, part)| part.text.clone());
+    (subscribers.map(|index| counts[index].text.clone()), videos)
 }
 
 #[must_use]
@@ -73,10 +71,8 @@ pub fn parse_header(page: &Value, requested_id: &str) -> ChannelDetails {
     let header = page_header(page);
     let legacy = &page["header"]["c4TabbedHeaderRenderer"];
     let metadata = &page["metadata"]["channelMetadataRenderer"];
-    let rows = metadata_rows(header);
-    let (subscribers, videos) = counts(&rows, header);
-    // A lone count outside English may be the video count; it is shown, not read.
-    let read_subscribers = crate::api::innertube::core::locale::is_english() || videos.is_some();
+    let parts = metadata_parts(header);
+    let (subscribers, videos) = counts(&parts);
     let subscriber_count_text = subscribers.or_else(|| text_of(&legacy["subscriberCountText"]));
     let title = &header["title"]["dynamicTextViewModel"]["text"];
     ChannelDetails {
@@ -90,10 +86,10 @@ pub fn parse_header(page: &Value, requested_id: &str) -> ChannelDetails {
             .or_else(|| metadata["title"].as_str().map(ToOwned::to_owned))
             .or_else(|| text_of(&legacy["title"]))
             .unwrap_or_default(),
-        handle: rows
+        handle: parts
             .iter()
-            .find(|row| row.starts_with('@'))
-            .cloned()
+            .find(|part| part.text.starts_with('@'))
+            .map(|part| part.text.clone())
             .or_else(|| {
                 metadata["vanityChannelUrl"]
                     .as_str()
@@ -122,10 +118,7 @@ pub fn parse_header(page: &Value, requested_id: &str) -> ChannelDetails {
                 url.strip_prefix("//")
                     .map_or(url.clone(), |rest| format!("https://{rest}"))
             }),
-        subscriber_count: subscriber_count_text
-            .as_deref()
-            .filter(|_| read_subscribers)
-            .and_then(parse_count),
+        subscriber_count: subscriber_count_text.as_deref().and_then(parse_count),
         subscriber_count_text,
         video_count_text: videos.or_else(|| text_of(&legacy["videosCountText"])),
         verified: title["attachmentRuns"].to_string().contains("CHECK_CIRCLE")
@@ -179,5 +172,75 @@ mod tests {
         );
         assert!(details.verified);
         assert_eq!(details.about_token.as_deref(), Some("ABOUT"));
+    }
+
+    fn page_with_rows(rows: &serde_json::Value) -> serde_json::Value {
+        json!({ "header": { "pageHeaderRenderer": { "content": { "pageHeaderViewModel": {
+            "title": { "dynamicTextViewModel": { "text": { "content": "Canal" } } },
+            "metadata": { "contentMetadataViewModel": { "metadataRows": rows } }
+        } } } } })
+    }
+
+    #[test]
+    fn spanish_counts_are_read_by_the_subscriber_label() {
+        let page = page_with_rows(&json!([
+            { "metadataParts": [{ "text": { "content": "@KPOP_STUFFF" } }] },
+            { "metadataParts": [
+                { "text": { "content": "89,7 K suscriptores" }, "accessibilityLabel": "89,7 mil suscriptores" },
+                { "text": { "content": "279 vídeos" } }
+            ] }
+        ]));
+        let details = parse_header(&page, "UCx");
+        assert_eq!(details.handle.as_deref(), Some("@KPOP_STUFFF"));
+        assert_eq!(
+            details.subscriber_count_text.as_deref(),
+            Some("89,7 K suscriptores")
+        );
+        assert_eq!(details.video_count_text.as_deref(), Some("279 vídeos"));
+    }
+
+    #[test]
+    fn the_label_finds_subscribers_wherever_they_stand() {
+        let page = page_with_rows(&json!([
+            { "metadataParts": [{ "text": { "content": "@MrBeast" } }] },
+            { "metadataParts": [
+                { "text": { "content": "1013 本の動画" } },
+                { "text": { "content": "チャンネル登録者数 5.26億人" }, "accessibilityLabel": "チャンネル登録者数 5.26億人" }
+            ] }
+        ]));
+        let details = parse_header(&page, "UCx");
+        assert_eq!(
+            details.subscriber_count_text.as_deref(),
+            Some("チャンネル登録者数 5.26億人")
+        );
+        assert_eq!(details.video_count_text.as_deref(), Some("1013 本の動画"));
+    }
+
+    #[test]
+    fn a_lone_unlabelled_count_is_the_video_count_of_a_channel_hiding_subscribers() {
+        let page = page_with_rows(&json!([
+            { "metadataParts": [{ "text": { "content": "@quiet" } }] },
+            { "metadataParts": [{ "text": { "content": "12 vídeos" } }] }
+        ]));
+        let details = parse_header(&page, "UCx");
+        assert_eq!(details.subscriber_count_text, None);
+        assert_eq!(details.subscriber_count, None);
+        assert_eq!(details.video_count_text.as_deref(), Some("12 vídeos"));
+    }
+
+    #[test]
+    fn a_lone_labelled_count_is_the_subscriber_count() {
+        let page = page_with_rows(&json!([
+            { "metadataParts": [{ "text": { "content": "@solo" } }] },
+            { "metadataParts": [
+                { "text": { "content": "3,2 K suscriptores" }, "accessibilityLabel": "3,2 mil suscriptores" }
+            ] }
+        ]));
+        let details = parse_header(&page, "UCx");
+        assert_eq!(
+            details.subscriber_count_text.as_deref(),
+            Some("3,2 K suscriptores")
+        );
+        assert_eq!(details.video_count_text, None);
     }
 }

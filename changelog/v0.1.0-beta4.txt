@@ -96,6 +96,7 @@ LIBRARY
 - Discover channels, opened from Your taste, lists channels like the ones you follow and channels you watch without following, and searches for any channel.
 - A Posts chip first in Subscriptions shows recent community posts from the channels you follow, most active channels first, as on Android. It reads eight channels at a time, keeps posts from the last 30 days and follows the group you picked. Settings > Subscriptions can hide the chip.
 - AI channels, in Extensions, hides channels on the community list AiSList or labels their videos Suspected AI, as on Android. Both are off by default. The signed list is downloaded once a day and never synced or backed up. A channel page says when it is listed and can show its videos anyway, and a Report AI channel item in the video menu can send a channel to AiSList for review.
+- Hide AI music, in Extensions, hides songs, albums and playlists by artists on a public AI music list on Music Home, in radio and in search, as on Android. It is off by default. An artist page says when the artist is listed and can show their music anyway, and Settings credits the list's sources.
 
 MUSIC
 - Each credited artist on a song with multiple artists now has their own link in the player and track lists, opening their own profile instead of the primary artist's.

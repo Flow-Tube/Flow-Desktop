@@ -16,6 +16,7 @@ import type {
   PodcastItem,
   SongItem,
 } from '../types/music';
+import type { AiListMatcher } from './aiList/matcher';
 
 export type TopResult =
   | { kind: 'artist'; item: ArtistItem }
@@ -53,6 +54,28 @@ export interface SearchExclusions {
 }
 
 const cleanChannelId = (id?: string | null) => (id ?? '').replace('channel:', '');
+
+/**
+ * Leaves out music the AI filter hides: songs and albums by their credited artists, playlists by
+ * their author. Artist cards stay, as channel cards do in video search, so a listed artist can
+ * still be found and opened on purpose. The same object comes back when nothing goes.
+ */
+export function withoutAiMusic(results: CombinedSearchResults, ai: AiListMatcher): CombinedSearchResults {
+  if (!ai.isMusicActive) return results;
+  const hides = (ids: Array<string | null | undefined>) => ai.musicVerdict(ids) === 'block';
+  const byArtists = (item: { artists: Array<{ id?: string | null }> | null }) => hides((item.artists ?? []).map((a) => a.id));
+  const keep = <T,>(items: T[], hidden: (item: T) => boolean) => {
+    const kept = items.filter((item) => !hidden(item));
+    return kept.length === items.length ? items : kept;
+  };
+  const top = results.topResult;
+  const topHidden = (top?.kind === 'song' || top?.kind === 'album') && byArtists(top.item);
+  const songs = keep(results.songs, byArtists);
+  const albums = keep(results.albums, byArtists);
+  const playlists = keep(results.playlists, (playlist) => hides([playlist.author?.id]));
+  if (!topHidden && songs === results.songs && albums === results.albums && playlists === results.playlists) return results;
+  return { ...results, topResult: topHidden ? null : top, songs, albums, playlists };
+}
 
 export function withoutHidden(results: CombinedSearchResults, hidden: SearchExclusions): CombinedSearchResults {
   const asAi = hidden.hidesAsAi;

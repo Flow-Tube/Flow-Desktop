@@ -84,17 +84,21 @@ export function readAiListSwitches(values = useAppSettingsStore.getState().value
   return {
     blockEnabled: values[SETTINGS.AI_LIST_BLOCK_ENABLED] === "true",
     warnEnabled: values[SETTINGS.AI_LIST_WARN_ENABLED] === "true",
+    musicEnabled: values[SETTINGS.AI_MUSIC_BLOCK_ENABLED] === "true",
   };
 }
 
-function isOn(): boolean {
-  const { blockEnabled, warnEnabled } = readAiListSwitches();
-  return blockEnabled || warnEnabled;
+/** Any list switched on: AI channels hidden or labelled, or AI music hidden. */
+export function anyAiListOn(values = useAppSettingsStore.getState().values): boolean {
+  const { blockEnabled, warnEnabled, musicEnabled } = readAiListSwitches(values);
+  return blockEnabled || warnEnabled || musicEnabled;
 }
+
+const isOn = () => anyAiListOn();
 
 function rebuildMatcher() {
   const values = useAppSettingsStore.getState().values;
-  const { blockEnabled, warnEnabled } = readAiListSwitches(values);
+  const { blockEnabled, warnEnabled, musicEnabled } = readAiListSwitches(values);
   const allowed = parseAllowedAiChannels(values[SETTINGS.AI_LIST_ALLOWED]);
   const subscribed = useSubscriptionStore.getState().subscriptions.map((channel) => channel.id);
   const matcher = createAiListMatcher(
@@ -102,6 +106,7 @@ function rebuildMatcher() {
     {
       blockEnabled,
       warnEnabled,
+      musicEnabled,
       exemptIds: new Set([...subscribed, ...allowed.map((channel) => channel.id)]),
       exemptHandles: new Set(
         allowed.map((channel) => normalizeAiHandle(channel.handle)).filter((handle): handle is string => !!handle),
@@ -124,10 +129,10 @@ export async function loadAiList(): Promise<void> {
     const [data, status] = await Promise.all([getAiListMatcherData(), getAiListStatus()]);
     if (request !== loadRequest) return;
     index = new AiHandleIndex(data?.index ?? [], rememberLearned);
-    useAiListStore.setState({ lists: data ? toAiLists(data.block, data.warn) : null, status });
+    useAiListStore.setState({ lists: data ? toAiLists(data.block, data.warn, data.music) : null, status });
   } catch (error) {
     // The filter is optional: without a list nothing is flagged and feeds stay as they are.
-    console.warn("Failed to load the AI channel list", error);
+    console.warn("Failed to load the AI lists", error);
     if (request !== loadRequest) return;
   }
   rebuildMatcher();
@@ -142,7 +147,7 @@ export async function refreshAiList(): Promise<AiListOutcome | null> {
     if (result.status) useAiListStore.setState({ status: result.status });
     return result.outcome;
   } catch (error) {
-    console.warn("Failed to refresh the AI channel list", error);
+    console.warn("Failed to refresh the AI lists", error);
     return "retry";
   } finally {
     useAiListStore.setState({ refreshing: false });
@@ -158,7 +163,8 @@ export function startAiList(): void {
     const values = state.values;
     const switched =
       values[SETTINGS.AI_LIST_BLOCK_ENABLED] !== previous[SETTINGS.AI_LIST_BLOCK_ENABLED] ||
-      values[SETTINGS.AI_LIST_WARN_ENABLED] !== previous[SETTINGS.AI_LIST_WARN_ENABLED];
+      values[SETTINGS.AI_LIST_WARN_ENABLED] !== previous[SETTINGS.AI_LIST_WARN_ENABLED] ||
+      values[SETTINGS.AI_MUSIC_BLOCK_ENABLED] !== previous[SETTINGS.AI_MUSIC_BLOCK_ENABLED];
     const sourceChanged =
       values[SETTINGS.AI_LIST_SOURCE_URL] !== previous[SETTINGS.AI_LIST_SOURCE_URL] ||
       values[SETTINGS.AI_LIST_SOURCE_KEY] !== previous[SETTINGS.AI_LIST_SOURCE_KEY];

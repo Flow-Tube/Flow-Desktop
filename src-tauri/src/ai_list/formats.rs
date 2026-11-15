@@ -5,9 +5,26 @@ use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
 
-/// The list id the app asks for; it is inside the signed payload, so another list cannot stand in
-/// for it.
-pub const AI_LIST_ID: &str = "aislist";
+/// The two lists the app follows: AiSList channels and AI music artists.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum AiListKind {
+    Channels,
+    Music,
+}
+
+impl AiListKind {
+    pub const ALL: [Self; 2] = [Self::Channels, Self::Music];
+
+    /// The list id the app asks for; it is inside each signed payload, so one list cannot stand
+    /// in for another.
+    #[must_use]
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Channels => "aislist",
+            Self::Music => "aimusic",
+        }
+    }
+}
 
 /// The highest manifest schema this client understands.
 pub const AI_LIST_SCHEMA: i64 = 1;
@@ -109,12 +126,18 @@ pub struct StoredAiList {
 }
 
 impl StoredAiList {
+    /// Counts a channel once although the list publishes both its handle and its resolved id: the
+    /// larger of the two per side.
     #[must_use]
     pub fn channel_count(&self) -> usize {
-        self.block.handles.len()
-            + self.block.ids.len()
-            + self.warn.handles.len()
-            + self.warn.ids.len()
+        self.block.handles.len().max(self.block.ids.len())
+            + self.warn.handles.len().max(self.warn.ids.len())
+    }
+
+    /// The music list names artists by channel id only, and only to hide them.
+    #[must_use]
+    pub fn artist_count(&self) -> usize {
+        self.block.ids.len()
     }
 
     /// Removes first, then adds, as the contract orders; applying a delta twice changes nothing.
@@ -196,6 +219,33 @@ mod tests {
         assert_eq!(once.warn.ids, strings(&["UCx"]));
         assert_eq!(once.channel_count(), 3);
         assert_eq!(once.clone().applying(&delta), once);
+    }
+
+    #[test]
+    fn a_channel_listed_by_handle_and_resolved_id_counts_once_and_an_id_only_list_counts_its_ids() {
+        let channels = StoredAiList {
+            version: 1,
+            block: Entries {
+                handles: strings(&["a", "b", "c"]),
+                ids: strings(&["UC1", "UC2"]),
+            },
+            warn: Entries {
+                handles: strings(&["d"]),
+                ids: Vec::new(),
+            },
+            ..StoredAiList::default()
+        };
+        let music = StoredAiList {
+            version: 1,
+            block: Entries {
+                handles: Vec::new(),
+                ids: strings(&["UC1", "UC2"]),
+            },
+            ..StoredAiList::default()
+        };
+        assert_eq!(channels.channel_count(), 4);
+        assert_eq!(music.channel_count(), 2);
+        assert_eq!(music.artist_count(), 2);
     }
 
     #[test]

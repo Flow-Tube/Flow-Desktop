@@ -11,6 +11,7 @@ use super::parse::{continuation, shelves};
 use crate::api::innertube::InnertubeClient;
 use crate::api::innertube::core::http::custom_url_encode;
 use crate::errors::AppResult;
+use crate::models::music::{Artist, YTItem};
 use crate::models::music_pages::{
     MusicSearchResponse, MusicSearchSection, MusicSearchSuggestions, SearchSummaryPage,
 };
@@ -158,6 +159,13 @@ fn parse_search_sections(res: &Value) -> (Vec<MusicSearchSection>, Option<String
     for section in arr {
         if let Some(card) = section.get("musicCardShelfRenderer") {
             let mut items: Vec<_> = items::parse_card_shelf(card).into_iter().collect();
+            let card_artist = match items.first() {
+                Some(YTItem::Artist(artist)) => Some(Artist {
+                    name: artist.title.clone(),
+                    id: Some(artist.id.clone()),
+                }),
+                _ => None,
+            };
             items.extend(
                 card["contents"]
                     .as_array()
@@ -165,7 +173,8 @@ fn parse_search_sections(res: &Value) -> (Vec<MusicSearchSection>, Option<String
                     .flatten()
                     .filter_map(|row| {
                         items::parse_responsive_list_item(&row["musicResponsiveListItemRenderer"])
-                    }),
+                    })
+                    .map(|item| credited_to_card(item, card_artist.as_ref())),
             );
             if !items.is_empty() {
                 sections.insert(
@@ -207,4 +216,102 @@ fn parse_search_sections(res: &Value) -> (Vec<MusicSearchSection>, Option<String
     }
 
     (sections, cont)
+}
+
+/// A song under an artist's top result card names no artist: its byline is only its type and
+/// length, which the row parser reads as an unlinked artist. It is that artist's song.
+fn credited_to_card(item: YTItem, card_artist: Option<&Artist>) -> YTItem {
+    match (item, card_artist) {
+        (YTItem::Song(mut song), Some(artist))
+            if song.artists.iter().all(|credited| credited.id.is_none()) =>
+        {
+            song.artists = vec![artist.clone()];
+            YTItem::Song(song)
+        }
+        (item, _) => item,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const ACDC: &str = "UCVm4YdI3hobkwsHTTOMVJKg";
+
+    fn browse(id: &str, page_type: &str) -> Value {
+        json!({ "browseEndpoint": { "browseId": id, "browseEndpointContextSupportedConfigs": {
+            "browseEndpointContextMusicConfig": { "pageType": page_type } } } })
+    }
+
+    fn song_row(video_id: &str, byline: &[Value]) -> Value {
+        json!({ "musicResponsiveListItemRenderer": {
+            "flexColumns": [
+                { "musicResponsiveListItemFlexColumnRenderer": { "text": { "runs": [{
+                    "text": format!("Song {video_id}"),
+                    "navigationEndpoint": { "watchEndpoint": { "videoId": video_id } }
+                }] } } },
+                { "musicResponsiveListItemFlexColumnRenderer": { "text": { "runs": byline } } }
+            ],
+            "playlistItemData": { "videoId": video_id }
+        } })
+    }
+
+    fn search(card: &Value) -> Value {
+        json!({ "contents": { "tabbedSearchResultsRenderer": { "tabs": [{ "tabRenderer": { "content": {
+            "sectionListRenderer": { "contents": [card] } } } }] } } })
+    }
+
+    fn songs(page: &SearchSummaryPage) -> Vec<&crate::models::music::SongItem> {
+        page.summaries[0]
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                YTItem::Song(song) => Some(song),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn songs_under_an_artist_top_result_are_credited_to_that_artist_not_their_byline() {
+        let separator = json!({ "text": " \u{2022} " });
+        let by_acdc = json!({ "text": "AC/DC", "navigationEndpoint": browse(ACDC, "MUSIC_PAGE_TYPE_ARTIST") });
+        let card = json!({ "musicCardShelfRenderer": {
+            "header": { "musicCardShelfHeaderBasicRenderer": { "title": { "runs": [{ "text": "Top result" }] } } },
+            "title": { "runs": [{ "text": "AC/DC" }] },
+            "subtitle": { "runs": [{ "text": "Artist" }] },
+            "onTap": browse(ACDC, "MUSIC_PAGE_TYPE_ARTIST"),
+            "contents": [
+                song_row("c1", &[json!({ "text": "Song" }), separator.clone(), json!({ "text": "4:38" })]),
+                song_row("s1", &[json!({ "text": "Song" }), separator, by_acdc]),
+            ]
+        } });
+
+        let page = parse_summary(&search(&card));
+        let songs = songs(&page);
+        assert_eq!(songs.len(), 2);
+        for song in songs {
+            assert_eq!(song.artists.len(), 1, "{}", song.id);
+            assert_eq!(song.artists[0].name, "AC/DC");
+            assert_eq!(song.artists[0].id.as_deref(), Some(ACDC));
+        }
+    }
+
+    #[test]
+    fn songs_under_a_song_top_result_keep_their_own_byline() {
+        let card = json!({ "musicCardShelfRenderer": {
+            "title": { "runs": [{ "text": "Thunderstruck" }] },
+            "subtitle": { "runs": [{ "text": "Song" }] },
+            "onTap": { "watchEndpoint": { "videoId": "top" } },
+            "contents": [song_row("c1", &[json!({ "text": "Song" }), json!({ "text": "4:38" })])]
+        } });
+
+        let page = parse_summary(&search(&card));
+        let card_song = songs(&page)
+            .into_iter()
+            .find(|song| song.id == "c1")
+            .unwrap();
+        assert_eq!(card_song.artists[0].id, None);
+        assert_eq!(card_song.duration, Some(278));
+    }
 }

@@ -1,6 +1,6 @@
-//! The computer's one copy of the list, in `<app data>/ai_list/`: outside every profile folder and
-//! every database, so no backup, sync or profile copy reads it, and the same for every profile. A
-//! write goes to a side file and replaces the stored one only when complete, so a crash mid-write
+//! The computer's one copy of each list, in `<app data>/ai_list/`: outside every profile folder and
+//! every database, so no backup, sync or profile copy reads them, and the same for every profile.
+//! A write goes to a side file and replaces the stored one only when complete, so a crash mid-write
 //! keeps the previous list.
 
 use std::io;
@@ -8,10 +8,11 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use super::formats::StoredAiList;
+use super::formats::{AiListKind, StoredAiList};
 
 pub const DIRECTORY: &str = "ai_list";
 const LIST_FILE: &str = "list.json";
+const MUSIC_FILE: &str = "music.json";
 const INDEX_FILE: &str = "handle-index.json";
 const SCHEDULE_FILE: &str = "schedule.json";
 
@@ -22,7 +23,7 @@ pub struct Schedule {
     pub next_check_at_ms: i64,
 }
 
-/// Loads and commits the stored list; the updater only sees this.
+/// Loads and commits one stored list; the updater only sees this.
 pub trait AiListStorage {
     fn load(&self) -> Option<StoredAiList>;
     fn commit(&self, list: &StoredAiList) -> io::Result<()>;
@@ -38,6 +39,18 @@ impl AiListStore {
     pub fn new(app_data_dir: &Path) -> Self {
         Self {
             directory: app_data_dir.join(DIRECTORY),
+        }
+    }
+
+    /// One list's file.
+    #[must_use]
+    pub fn list(&self, kind: AiListKind) -> AiListFile {
+        AiListFile {
+            store: self.clone(),
+            name: match kind {
+                AiListKind::Channels => LIST_FILE,
+                AiListKind::Music => MUSIC_FILE,
+            },
         }
     }
 
@@ -76,13 +89,19 @@ impl AiListStore {
     }
 }
 
-impl AiListStorage for AiListStore {
+#[derive(Debug, Clone)]
+pub struct AiListFile {
+    store: AiListStore,
+    name: &'static str,
+}
+
+impl AiListStorage for AiListFile {
     fn load(&self) -> Option<StoredAiList> {
-        self.read(LIST_FILE)
+        self.store.read(self.name)
     }
 
     fn commit(&self, list: &StoredAiList) -> io::Result<()> {
-        self.write(LIST_FILE, list)
+        self.store.write(self.name, list)
     }
 }
 
@@ -98,7 +117,7 @@ mod tests {
     #[test]
     fn a_committed_list_reads_back_and_a_broken_file_reads_as_none() {
         let dir = temp_dir();
-        let store = AiListStore::new(&dir);
+        let store = AiListStore::new(&dir).list(AiListKind::Channels);
         assert_eq!(store.load(), None);
 
         let list = StoredAiList {
@@ -114,6 +133,21 @@ mod tests {
 
         std::fs::write(dir.join(DIRECTORY).join(LIST_FILE), b"{").unwrap();
         assert_eq!(store.load(), None);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn each_list_has_its_own_file() {
+        let dir = temp_dir();
+        let store = AiListStore::new(&dir);
+        let music = StoredAiList {
+            version: 2,
+            ..StoredAiList::default()
+        };
+        store.list(AiListKind::Music).commit(&music).unwrap();
+        assert_eq!(store.list(AiListKind::Music).load(), Some(music));
+        assert_eq!(store.list(AiListKind::Channels).load(), None);
+        assert!(dir.join(DIRECTORY).join(MUSIC_FILE).exists());
         let _ = std::fs::remove_dir_all(dir);
     }
 

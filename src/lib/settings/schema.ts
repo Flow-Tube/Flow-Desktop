@@ -296,6 +296,7 @@ export const SETTINGS = {
 
   AI_LIST_BLOCK_ENABLED: "ai_list_block_enabled",
   AI_LIST_WARN_ENABLED: "ai_list_warn_enabled",
+  AI_MUSIC_BLOCK_ENABLED: "ai_music_block_enabled",
   AI_LIST_ALLOWED: "ai_list_allowed",
   AI_LIST_REPORT_ENABLED: "ai_list_report_enabled",
   AI_LIST_REPORT_NAME: "ai_list_report_name",
@@ -560,6 +561,7 @@ export const SETTING_SCOPES = {
   [SETTINGS.SPONSORBLOCK_SKIPPED_SEGMENTS]: "profile",
   [SETTINGS.AI_LIST_BLOCK_ENABLED]: "profile",
   [SETTINGS.AI_LIST_WARN_ENABLED]: "profile",
+  [SETTINGS.AI_MUSIC_BLOCK_ENABLED]: "profile",
   [SETTINGS.AI_LIST_ALLOWED]: "profile",
   [SETTINGS.AI_LIST_REPORT_ENABLED]: "profile",
   [SETTINGS.AI_LIST_REPORT_NAME]: "profile",
@@ -930,6 +932,7 @@ export const SETTING_DEFINITIONS = [
   // backed up or synced; these switches and the allow list back up like any profile setting.
   bool(SETTINGS.AI_LIST_BLOCK_ENABLED, "extensions", false, "wired"),
   bool(SETTINGS.AI_LIST_WARN_ENABLED, "extensions", false, "wired"),
+  bool(SETTINGS.AI_MUSIC_BLOCK_ENABLED, "extensions", false, "wired"),
   json(SETTINGS.AI_LIST_ALLOWED, "extensions", "[]", "wired"),
   bool(SETTINGS.AI_LIST_REPORT_ENABLED, "extensions", false, "wired"),
   str(SETTINGS.AI_LIST_REPORT_NAME, "extensions", "", "wired"),

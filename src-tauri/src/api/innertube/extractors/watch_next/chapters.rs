@@ -63,13 +63,24 @@ fn panel_chapters(next: &Value, key: &str) -> Option<Vec<ChapterStart>> {
             .filter_map(|item| {
                 let renderer = &item["macroMarkersListItemRenderer"];
                 Some((
-                    renderer["onTap"]["watchEndpoint"]["startTimeSeconds"].as_u64()?,
+                    start_seconds(&renderer["onTap"]["watchEndpoint"]["startTimeSeconds"])?,
                     text_of(&renderer["title"])?,
                     largest_url(&renderer["thumbnail"]["thumbnails"]),
                 ))
             })
             .collect(),
     )
+}
+
+/// Whole seconds for an uploader's chapter, a decimal such as 75.2 for a
+/// generated one; both are cut to the second the chapter starts in.
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // Floats have no `TryFrom`; the value is checked finite and non-negative.
+fn start_seconds(value: &Value) -> Option<u64> {
+    value
+        .as_f64()
+        .or_else(|| value.as_str()?.trim().parse().ok())
+        .filter(|seconds| seconds.is_finite() && *seconds >= 0.0)
+        .map(|seconds| seconds as u64)
 }
 
 fn with_ends(starts: Vec<ChapterStart>, duration_seconds: u64) -> Vec<VideoChapter> {
@@ -243,6 +254,32 @@ mod tests {
                 .map(|c| c.title.as_str())
                 .collect::<Vec<_>>(),
             ["Start", "End"]
+        );
+    }
+
+    #[test]
+    fn generated_chapters_with_decimal_starts_are_kept() {
+        let item = |title: &str, start: Value| {
+            json!({ "macroMarkersListItemRenderer": { "title": { "simpleText": title },
+                "onTap": { "watchEndpoint": { "startTimeSeconds": start } } } })
+        };
+        let next = json!({ "engagementPanels": [{ "engagementPanelSectionListRenderer": {
+            "panelIdentifier": "engagement-panel-macro-markers-auto-chapters",
+            "content": { "macroMarkersListRenderer": { "contents": [
+                item("Start", json!(0)),
+                item("Middle", json!(75.2)),
+                item("End", json!("140.9")),
+                item("Broken", json!(-3.0))
+            ] } }
+        } }] });
+        let (chapters, auto) = chapters(&next, 200);
+        assert!(auto);
+        assert_eq!(
+            chapters
+                .iter()
+                .map(|c| (c.title.as_str(), c.start_seconds, c.end_seconds))
+                .collect::<Vec<_>>(),
+            [("Start", 0, 75), ("Middle", 75, 140), ("End", 140, 200)]
         );
     }
 

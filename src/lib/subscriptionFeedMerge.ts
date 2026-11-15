@@ -1,4 +1,4 @@
-import { parseRelativeToTimestamp } from "./publishedDate";
+import { backendPublishedTimestamp, parseRelativeToTimestamp } from "./publishedDate";
 import type { VideoSummary } from "../types/video";
 
 /**
@@ -19,7 +19,8 @@ export function mergeScopedFeed(previous: VideoSummary[], scope: string[], fresh
 }
 
 const publishedAt = (video: VideoSummary, now: number) =>
-  video.publishedText ? parseRelativeToTimestamp(video.publishedText, now) : null;
+  backendPublishedTimestamp(video) ??
+  (video.publishedText ? parseRelativeToTimestamp(video.publishedText, now) : null);
 
 /** Collaborations slotted into the feed by age; one the feed already has stays as it is. */
 export function mergeCollaborations(

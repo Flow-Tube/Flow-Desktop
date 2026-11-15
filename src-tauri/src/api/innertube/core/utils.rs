@@ -26,6 +26,7 @@ pub fn build_related_content_from_compact_video(video: &Value) -> Option<Related
         thumbnail_url: summary.thumbnail_url,
         duration_seconds: summary.duration_seconds,
         published_text: summary.published_text,
+        published_at_ms: summary.published_at_ms,
         view_count_text: summary.view_count_text,
         video_id: Some(summary.id),
         playlist_id: None,

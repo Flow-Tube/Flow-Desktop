@@ -1,5 +1,5 @@
 import { getString, type StringKey } from "./i18n/index";
-import { parseToTimestamp } from "./publishedDate";
+import { backendPublishedTimestamp, parseToTimestamp } from "./publishedDate";
 import type { VideoSummary } from "../types/video";
 import { profileStorage } from "./storage/profileStorage";
 
@@ -81,6 +81,8 @@ export const parseViewCount = (text?: string | null): number => {
 };
 
 function effectivePlaylistUploadTimestamp(video: VideoSummary, now: number): number {
+  const fromBackend = backendPublishedTimestamp(video);
+  if (fromBackend !== null) return fromBackend;
   const parsed = video.publishedText ? parseToTimestamp(video.publishedText, now) : null;
   const stored = video.publishedAt ?? 0;
   if (stored <= 0) return parsed ?? 0;

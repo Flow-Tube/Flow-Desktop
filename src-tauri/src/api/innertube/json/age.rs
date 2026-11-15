@@ -1,7 +1,7 @@
 //! Relative upload ages as feeds write them: "3 days ago", "Streamed 5 hours ago", and the
 //! compact "2d ago" that related-video and lockup cards use.
 
-use super::age_patterns::{AgePatterns, PATTERNS};
+use super::age_patterns::{ABBREVIATED, AgePatterns, PATTERNS};
 
 const SECOND_MS: u64 = 1_000;
 const MINUTE_MS: u64 = 60 * SECOND_MS;
@@ -104,12 +104,14 @@ pub fn relative_age_in(text: &str, language: &str) -> Option<RelativeAge> {
             unit: *unit,
         });
     }
-    let unit = patterns.units.iter().find_map(|(unit, words)| {
+    let Some(unit) = patterns.units.iter().find_map(|(unit, words)| {
         words
             .iter()
             .any(|word| phrase_in(&lower, &word.to_lowercase(), patterns.separator))
             .then_some(*unit)
-    })?;
+    }) else {
+        return abbreviated_age(&lower, patterns.language);
+    };
     // "vor 6 Tagen", "8 か月前": the text's number, or one when it names none ("a week").
     let value = lower
         .split(|c: char| !c.is_ascii_digit())
@@ -117,6 +119,47 @@ pub fn relative_age_in(text: &str, language: &str) -> Option<RelativeAge> {
         .and_then(|digits| digits.parse().ok())
         .unwrap_or(1);
     Some(RelativeAge { value, unit })
+}
+
+/// An abbreviated age ("hace 3 m", "5 дн. назад"). It carries exactly one
+/// number, so a premiere time ("le 12 oct. à 18 h") or a view count ("1,3 M")
+/// is left alone.
+fn abbreviated_age(lower: &str, language: &str) -> Option<RelativeAge> {
+    let base = language.split('-').next().unwrap_or_default();
+    let (_, units) = ABBREVIATED
+        .iter()
+        .find(|(candidate, _)| candidate.eq_ignore_ascii_case(base))?;
+    let digit_runs = lower
+        .split(|c: char| !c.is_ascii_digit())
+        .filter(|digits| !digits.is_empty())
+        .count();
+    if digit_runs != 1 {
+        return None;
+    }
+    units.iter().find_map(|(unit, abbreviations)| {
+        abbreviations.iter().find_map(|abbreviation| {
+            lower
+                .match_indices(abbreviation)
+                .filter(|(start, matched)| {
+                    !lower[start + matched.len()..]
+                        .chars()
+                        .next()
+                        .is_some_and(char::is_alphanumeric)
+                })
+                .find_map(|(start, _)| amount_before(lower, start))
+                .map(|value| RelativeAge { value, unit: *unit })
+        })
+    })
+}
+
+/// The number written right before `index`, one space apart at most.
+fn amount_before(text: &str, index: usize) -> Option<u64> {
+    let head = &text[..index];
+    let head = head
+        .strip_suffix([' ', '\u{a0}', '\u{202f}'])
+        .unwrap_or(head);
+    let number = head.trim_end_matches(|c: char| c.is_ascii_digit());
+    head[number.len()..].parse().ok()
 }
 
 /// The table for a host language: its own, else its base language's.
@@ -206,6 +249,14 @@ fn english_age(text: &str) -> Option<RelativeAge> {
 #[must_use]
 pub fn relative_age_ms(text: &str) -> Option<u64> {
     relative_age(text).map(RelativeAge::ms)
+}
+
+/// When the age `text` names places the upload, in epoch milliseconds, read
+/// now. The frontend reads its dates from this, as it only knows English.
+#[must_use]
+pub fn published_at_ms(text: &str) -> Option<u64> {
+    let now = u64::try_from(chrono::Utc::now().timestamp_millis()).ok()?;
+    relative_age_ms(text).map(|age| now.saturating_sub(age))
 }
 
 #[cfg(test)]
@@ -330,6 +381,70 @@ mod tests {
         assert_eq!(relative_age("Scheduled for 10/12/26, 7:00 PM"), None);
         assert_eq!(relative_age("12 waiting"), None);
         assert_eq!(relative_age(""), None);
+    }
+
+    #[test]
+    fn abbreviated_ages_of_the_related_list() {
+        let cases = [
+            ("vor 7 Std.", "de", age(7, AgeUnit::Hour)),
+            ("hace 7 h", "es", age(7, AgeUnit::Hour)),
+            ("hace 6 d", "es", age(6, AgeUnit::Day)),
+            ("Emitido hace 7 d", "es", age(7, AgeUnit::Day)),
+            ("hace 2 sem.", "es", age(2, AgeUnit::Week)),
+            ("hace 3 m", "es", age(3, AgeUnit::Month)),
+            ("Emitido hace 1 m", "es", age(1, AgeUnit::Month)),
+            ("hace 15 a", "es", age(15, AgeUnit::Year)),
+            ("hace 4 d", "es-419", age(4, AgeUnit::Day)),
+            ("il y a 7 h", "fr", age(7, AgeUnit::Hour)),
+            ("Diffusé il y a 7 j", "fr", age(7, AgeUnit::Day)),
+            ("il y a 3 sem.", "fr", age(3, AgeUnit::Week)),
+            ("il y a 2 m.", "fr", age(2, AgeUnit::Month)),
+            ("il y a 10 a", "fr", age(10, AgeUnit::Year)),
+            ("13 h fa", "it", age(13, AgeUnit::Hour)),
+            ("1 g fa", "it", age(1, AgeUnit::Day)),
+            ("4 gg fa", "it", age(4, AgeUnit::Day)),
+            ("2 sett. fa", "it", age(2, AgeUnit::Week)),
+            ("há 2 sem.", "pt", age(2, AgeUnit::Week)),
+            ("há 2 sem.", "pt-BR", age(2, AgeUnit::Week)),
+            ("21 ч назад", "ru", age(21, AgeUnit::Hour)),
+            (
+                "Трансляция закончилась 10 ч назад",
+                "ru",
+                age(10, AgeUnit::Hour),
+            ),
+            ("5 дн. назад", "ru", age(5, AgeUnit::Day)),
+            ("4 нед. назад", "ru", age(4, AgeUnit::Week)),
+            ("2 мес. назад", "ru", age(2, AgeUnit::Month)),
+            ("2 г. назад", "ru", age(2, AgeUnit::Year)),
+            ("15 л. назад", "ru", age(15, AgeUnit::Year)),
+        ];
+        for (text, language, expected) in cases {
+            assert_eq!(
+                relative_age_in(text, language),
+                Some(expected),
+                "{language}: {text}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_abbreviated_unit_counts_only_right_after_the_one_number() {
+        assert_eq!(relative_age_in("1,3 M", "es"), None);
+        assert_eq!(relative_age_in("il y a", "fr"), None);
+        assert_eq!(relative_age_in("Première le 12 oct. à 18 h", "fr"), None);
+        assert_ne!(
+            relative_age_in("hace 5 min", "es"),
+            Some(age(5, AgeUnit::Month))
+        );
+    }
+
+    #[test]
+    fn published_at_is_the_age_before_now() {
+        let now = u64::try_from(chrono::Utc::now().timestamp_millis()).unwrap();
+        let at = published_at_ms("2 days ago").unwrap();
+        let expected = now - 2 * DAY_MS;
+        assert!(at.abs_diff(expected) < 60_000);
+        assert_eq!(published_at_ms("Premieres 10/12/26"), None);
     }
 
     #[test]

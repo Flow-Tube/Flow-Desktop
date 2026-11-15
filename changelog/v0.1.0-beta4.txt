@@ -346,3 +346,4 @@ FIXES
 - Translated captions load more often. They are now made from YouTube's speech track, as the official apps and Flow for Android do, instead of the uploader's own track.
 - Auto chapters that start part-way through a second show again, and a music video no longer shows a hidden label channel, such as a VEVO channel, in place of the artist's own.
 - Outside English, a channel page no longer shows its video count as its subscribers, and a channel search that finds nothing in your language tries again in English.
+- Saved playlists, the playlist date sort and collaborations in Subscriptions read upload dates in every language now, including short forms such as hace 3 m and 5 дн., instead of only English.

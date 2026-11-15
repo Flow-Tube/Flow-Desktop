@@ -12,6 +12,10 @@ pub struct VideoSummary {
     pub thumbnail_url: Option<String>,
     pub duration_seconds: Option<u64>,
     pub published_text: Option<String>,
+    /// When `published_text` places the upload, in epoch milliseconds, read
+    /// in the content language when the card was fetched.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub published_at_ms: Option<u64>,
     pub view_count_text: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub channel_avatar_url: Option<String>,
@@ -74,6 +78,9 @@ pub struct RelatedContentItem {
     pub thumbnail_url: Option<String>,
     pub duration_seconds: Option<u64>,
     pub published_text: Option<String>,
+    /// [`VideoSummary::published_at_ms`] for a related video.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub published_at_ms: Option<u64>,
     pub view_count_text: Option<String>,
     pub video_id: Option<String>,
     pub playlist_id: Option<String>,

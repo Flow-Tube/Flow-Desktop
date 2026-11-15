@@ -160,6 +160,9 @@ fn parse_rss_feed_at(channel_id: &str, xml: &str, now: chrono::DateTime<chrono::
                     published_text: elapsed.filter(|_| !is_upcoming).map(|elapsed| {
                         format_relative_published(elapsed.max(chrono::TimeDelta::zero()))
                     }),
+                    published_at_ms: published
+                        .filter(|_| !is_upcoming)
+                        .and_then(|date| u64::try_from(date.timestamp_millis()).ok()),
                     // A premiere has no views to speak of, and the feed writes 0.
                     view_count_text: view_count
                         .filter(|_| !is_upcoming)

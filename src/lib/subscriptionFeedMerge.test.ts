@@ -25,6 +25,17 @@ describe("mergeCollaborations", () => {
     expect(merged.map((v) => v.id)).toEqual(["new", "collab", "old"]);
   });
 
+  it("slots a collaboration in another language by the time the backend read from it", () => {
+    const now = Date.UTC(2026, 10, 15, 12);
+    const day = 86_400_000;
+    const feed = [
+      { ...video("new", "a", "1 ч назад"), publishedAtMs: now - day / 24 },
+      { ...video("old", "a", "3 дня назад"), publishedAtMs: now - 3 * day },
+    ];
+    const collab = { ...video("collab", "z", "2 дн. назад"), publishedAtMs: now - 2 * day };
+    expect(mergeCollaborations(feed, [collab], now).map((v) => v.id)).toEqual(["new", "collab", "old"]);
+  });
+
   it("puts one of unknown age last", () => {
     const merged = mergeCollaborations([video("a", "a", "1 hour ago")], [video("z", "z")]);
     expect(merged.map((v) => v.id)).toEqual(["a", "z"]);

@@ -6,7 +6,7 @@
 use serde_json::Value;
 
 use super::collaborators::collaborators_in;
-use crate::api::innertube::json::age::relative_age;
+use crate::api::innertube::json::age::{published_at_ms, relative_age};
 use crate::api::innertube::json::count::parse_count;
 use crate::api::innertube::json::duration::parse_duration;
 use crate::api::innertube::json::text::browse_handle;
@@ -297,6 +297,7 @@ pub fn lockup_item(lockup: &Value) -> Option<RelatedContentItem> {
         duration_seconds: duration(lockup),
         is_upcoming: published.as_deref().is_some_and(is_upcoming_text)
             || views.as_deref().is_some_and(is_upcoming_text),
+        published_at_ms: published.as_deref().and_then(published_at_ms),
         published_text: published,
         view_count_text: views,
         video_id,
@@ -354,6 +355,7 @@ pub fn related_to_video(item: RelatedContentItem) -> VideoSummary {
         thumbnail_url: item.thumbnail_url,
         duration_seconds: item.duration_seconds,
         published_text: item.published_text,
+        published_at_ms: item.published_at_ms,
         view_count_text: item.view_count_text,
         channel_avatar_url: item.channel_avatar_url,
         is_live: item.is_live,
@@ -543,7 +545,10 @@ mod tests {
         assert_eq!(item.channel_name, "");
         assert_eq!(item.view_count_text.as_deref(), Some("1.2M views"));
         assert_eq!(item.published_text.as_deref(), Some("20 hours ago"));
+        let published_at = item.published_at_ms;
+        assert!(published_at.is_some());
         let video = related_to_video(item);
+        assert_eq!(video.published_at_ms, published_at);
         assert_eq!(video.channel_name, "");
         assert_eq!(video.view_count, Some(1_200_000));
         assert_eq!(video.view_count_text.as_deref(), Some("1.2M views"));

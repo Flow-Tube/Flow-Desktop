@@ -1041,6 +1041,37 @@ fn keyword_tags(details: &Value) -> Vec<String> {
     tags
 }
 
+// The watch page's owner is the channel people see: a music video's player
+// response can name a hidden VEVO channel, which would then sit beside the real
+// channel's avatar and subscribers. Name and id come from one side so they
+// never point at two channels.
+fn video_channel(details: &Value, owner: &watch_next::WatchOwner) -> (String, Option<String>) {
+    let author = details["author"]
+        .as_str()
+        .filter(|author| !author.is_empty());
+    if let Some(owner_id) = owner
+        .channel_id
+        .as_deref()
+        .filter(|id| id.starts_with("UC"))
+    {
+        let name = owner
+            .name
+            .as_deref()
+            .filter(|name| !name.is_empty())
+            .or(author)
+            .unwrap_or_default();
+        return (name.to_owned(), Some(owner_id.to_owned()));
+    }
+    let name = author
+        .or_else(|| owner.name.as_deref().filter(|name| !name.is_empty()))
+        .unwrap_or_default();
+    let channel_id = details["channelId"]
+        .as_str()
+        .filter(|id| !id.is_empty())
+        .or(owner.channel_id.as_deref());
+    (name.to_owned(), channel_id.map(ToOwned::to_owned))
+}
+
 // Decode `playerConfig.mediaCommonConfig.mediaUstreamerRequestConfig
 // .videoPlaybackUstreamerConfig` (URL-safe base64) into raw protobuf bytes.
 fn extract_ustreamer_config(res: &Value) -> Vec<u8> {
@@ -1880,6 +1911,7 @@ impl InnertubeClient {
         let next = next.as_deref().unwrap_or(&Value::Null);
         let primary = watch_next::primary(next);
         let owner = watch_next::owner(next);
+        let (channel_name, channel_id) = video_channel(details, &owner);
 
         // The TV client's details carry neither title, author nor description;
         // the watch answer fills them in.
@@ -1903,16 +1935,8 @@ impl InnertubeClient {
                 .map(ToOwned::to_owned)
                 .or(primary.title)
                 .unwrap_or_default(),
-            channel_name: details["author"]
-                .as_str()
-                .filter(|author| !author.is_empty())
-                .map(ToOwned::to_owned)
-                .or(owner.name)
-                .unwrap_or_default(),
-            channel_id: details["channelId"]
-                .as_str()
-                .map(ToOwned::to_owned)
-                .or(owner.channel_id),
+            channel_name,
+            channel_id,
             description,
             thumbnail_url: thumbnail_url_from_array(&details["thumbnail"]["thumbnails"]),
             duration_seconds,
@@ -3019,5 +3043,46 @@ mod keyword_tag_tests {
         let details = serde_json::json!({ "keywords": ["b", "a", "b", "  ", " c "] });
         assert_eq!(keyword_tags(&details), ["b", "a", "c"]);
         assert!(keyword_tags(&Value::Null).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod video_channel_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn owner(id: Option<&str>, name: Option<&str>) -> watch_next::WatchOwner {
+        watch_next::WatchOwner {
+            channel_id: id.map(ToOwned::to_owned),
+            name: name.map(ToOwned::to_owned),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn the_watch_page_owner_beats_a_hidden_channel_in_the_player_response() {
+        let details = json!({ "author": "CamilaCabelloVEVO", "channelId": "UCvevo" });
+        let (name, id) = video_channel(&details, &owner(Some("UCreal"), Some("Camila Cabello")));
+        assert_eq!(name, "Camila Cabello");
+        assert_eq!(id.as_deref(), Some("UCreal"));
+    }
+
+    #[test]
+    fn a_nameless_owner_keeps_its_id_and_borrows_the_author() {
+        let details = json!({ "author": "Camila Cabello", "channelId": "UCvevo" });
+        let (name, id) = video_channel(&details, &owner(Some("UCreal"), None));
+        assert_eq!(name, "Camila Cabello");
+        assert_eq!(id.as_deref(), Some("UCreal"));
+    }
+
+    #[test]
+    fn the_player_response_stands_in_without_a_watch_page_owner() {
+        let details = json!({ "author": "Rick Astley", "channelId": "UCuAXFkgsw1L7xaCfnd5JJOw" });
+        let (name, id) = video_channel(&details, &owner(None, None));
+        assert_eq!(name, "Rick Astley");
+        assert_eq!(id.as_deref(), Some("UCuAXFkgsw1L7xaCfnd5JJOw"));
+
+        let (name, id) = video_channel(&Value::Null, &owner(Some("UCreal"), Some("Real")));
+        assert_eq!((name.as_str(), id.as_deref()), ("Real", Some("UCreal")));
     }
 }

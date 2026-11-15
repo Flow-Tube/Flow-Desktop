@@ -152,6 +152,7 @@ use commands::scrobble::{
 use commands::shorts::{
     get_shorts_feed, load_more_shorts, record_seen_shorts, report_short_view, reset_shorts_feed,
 };
+use commands::subscription_posts::{forget_subscription_posts, get_subscription_posts};
 use commands::subtitle_file::read_subtitle_file;
 use commands::sync::{
     sync_cancel, sync_device_info, sync_firewall_help, sync_host_receive, sync_respond_consent,
@@ -839,6 +840,8 @@ pub fn run() {
             get_subscription_rss_feed,
             scan_subscription_collaborations,
             stream_subscription_rss_feed,
+            get_subscription_posts,
+            forget_subscription_posts,
             resolve_channel_id,
             fetch_subtitles,
             read_subtitle_file,

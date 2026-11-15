@@ -26,6 +26,7 @@ pub mod recap;
 pub mod recommendation;
 pub mod scrobble;
 pub mod shorts;
+pub mod subscription_posts;
 pub mod subtitle_file;
 pub mod sync;
 pub mod theme;

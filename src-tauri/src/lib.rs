@@ -53,7 +53,7 @@ use commands::db::{
     add_watch_record, add_watch_records_bulk, clear_watch_history, delete_short_watch_records,
     delete_watch_record, get_music_history, get_setting, get_watch_history,
     get_watch_history_years, get_watch_progress, get_watch_records, reset_app_data,
-    restore_watch_record, set_setting,
+    restore_watch_record, set_setting, watch_history_settled,
 };
 use commands::diagnostics::{
     clear_logs, crash_report_delete, crash_report_dismiss, crash_report_read, get_graphics_mode,
@@ -559,7 +559,9 @@ pub fn run() {
             app.manage(sync2::link_task::LinkTask::default());
             app.manage(sync2::lan_peers::LanPeers::default());
             app.manage(sync2::live_hub::LiveHub::default());
+            app.manage(sync2::push::LocalPushes::default());
             sync2::service::spawn(app.handle().clone());
+            sync2::push::spawn(app.handle().clone());
             sync2::lan_runtime::spawn(app.handle().clone());
             sync2::live::spawn(app.handle().clone());
 
@@ -703,6 +705,7 @@ pub fn run() {
             get_music_history,
             add_watch_record,
             add_watch_records_bulk,
+            watch_history_settled,
             restore_watch_record,
             delete_watch_record,
             delete_short_watch_records,

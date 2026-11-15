@@ -192,7 +192,7 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
         watchDurationSeconds: Math.floor(time),
         totalDurationSeconds: Math.floor(nextDuration || 0),
         isMusic: isMusicVideo(currentVideo),
-      });
+      }, { progress: true });
     },
     [
       currentVideo,
@@ -238,7 +238,7 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
         watchDurationSeconds: Math.floor(latest.time),
         totalDurationSeconds: Math.floor(latest.duration || video.durationSeconds || 0),
         isMusic: isMusicVideo(video),
-      });
+      }, { progress: true });
     };
 
     window.addEventListener("beforeunload", persistLatestProgress);

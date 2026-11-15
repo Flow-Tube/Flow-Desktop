@@ -80,12 +80,11 @@ pub async fn stamp_restored_watch(pool: &SqlitePool, video_id: &str) -> Result<(
     Ok(())
 }
 
-/// Whether writing settings `key` changes data that sync sends to other devices.
+/// A setting that holds a synced collection rather than an app setting. Changing one is sent soon;
+/// app settings wait for the next sync, as on Flow for Android.
 #[must_use]
-pub fn is_synced_setting(key: &str) -> bool {
-    is_tracked_blob(key)
-        || key == mapping::SUBSCRIBED_CHANNELS_SETTING_KEY
-        || crate::sync::settings_map::desktop_keys().any(|k| k == key)
+pub fn is_collection_setting(key: &str) -> bool {
+    is_tracked_blob(key) || key == mapping::SUBSCRIBED_CHANNELS_SETTING_KEY
 }
 
 fn is_tracked_blob(key: &str) -> bool {

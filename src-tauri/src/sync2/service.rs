@@ -42,7 +42,6 @@ pub const EVENT_SYNCING: &str = "sync2://syncing";
 pub const EVENT_JOIN_REQUESTS: &str = "sync2://join-requests";
 const FIRST_RUN_DELAY: Duration = Duration::from_secs(15);
 const INTERVAL: Duration = Duration::from_mins(5);
-const LOCAL_EDIT_DELAY: Duration = Duration::from_secs(10);
 
 /// When the last run ended, and the kind of error it ended with, if any.
 #[derive(Debug, Clone, Serialize)]
@@ -382,11 +381,6 @@ async fn apply(
 pub fn sync_soon(app: &AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move { log_failure(sync_now(&app).await) });
-}
-
-/// Sends a local edit soon, once edits stop for a few seconds.
-pub fn push_soon(app: &AppHandle) {
-    sync_after(app, LOCAL_EDIT_DELAY);
 }
 
 /// Syncs once `delay` after the last of several calls in a row, such as a burst of edits or of

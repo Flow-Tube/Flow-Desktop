@@ -9,7 +9,7 @@ import {
   updateStoredPlaylistTracks,
   type StoredPlaylist,
 } from "./playlistLibrary";
-import { appendUniqueVideos, walkRemainingPlaylistPages } from "./playlistPages";
+import { appendUniqueVideos, firstPlaylistPage, walkRemainingPlaylistPages } from "./playlistPages";
 import {
   applyVideoMetadata,
   ENRICHMENT_CHUNK_DELAY_MS,
@@ -81,7 +81,7 @@ export function usePlaylistDetails(playlistId: string | undefined) {
 
       if (!isProtectedPlaylistId(playlistId)) {
         try {
-          const details = await getPlaylistDetails(playlistId);
+          const details = await firstPlaylistPage(playlistId);
           remoteVideos = details.videos ?? [];
           remoteTitle = details.title;
           remoteChannel = details.channelName || remoteChannel;

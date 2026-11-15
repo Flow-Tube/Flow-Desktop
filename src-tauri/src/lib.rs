@@ -171,14 +171,14 @@ use commands::window::{PlayerFullscreenState, set_player_fullscreen};
 use commands::youtube::{
     fetch_subtitles, get_channel_about, get_channel_details, get_channel_page, get_channel_tab,
     get_comments, get_dearrow_override, get_explore_destination, get_explore_grid,
-    get_explore_page, get_live_chat, get_more_related_videos, get_non_music_segments,
-    get_original_title, get_paid_promotion, get_playlist_details, get_post_comments,
-    get_related_videos, get_return_youtube_dislike, get_sabr_debug_state, get_search_suggestions,
-    get_sponsorblock_segments, get_stream_info, get_subscription_rotation_feed,
-    get_subscription_rss_feed, get_unplayable_video_ids, get_video_category, get_video_details,
-    get_video_metadata, get_video_storyboard, parse_subscription_export, resolve_channel_id,
-    scan_subscription_collaborations, search_videos, stream_subscription_rss_feed,
-    submit_sponsorblock_segment,
+    get_explore_page, get_live_chat, get_mix_playlist, get_more_related_videos,
+    get_non_music_segments, get_original_title, get_paid_promotion, get_playlist_details,
+    get_post_comments, get_related_videos, get_return_youtube_dislike, get_sabr_debug_state,
+    get_search_suggestions, get_sponsorblock_segments, get_stream_info,
+    get_subscription_rotation_feed, get_subscription_rss_feed, get_unplayable_video_ids,
+    get_video_category, get_video_details, get_video_metadata, get_video_storyboard,
+    parse_subscription_export, resolve_channel_id, scan_subscription_collaborations, search_videos,
+    stream_subscription_rss_feed, submit_sponsorblock_segment,
 };
 use services::discord_presence::DiscordPresence;
 use services::music_service::MusicService;
@@ -701,6 +701,7 @@ pub fn run() {
             get_channel_about,
             get_channel_tab,
             get_playlist_details,
+            get_mix_playlist,
             get_comments,
             get_post_comments,
             get_live_chat,

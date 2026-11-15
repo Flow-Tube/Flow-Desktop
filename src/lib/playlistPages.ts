@@ -1,5 +1,14 @@
-import { getPlaylistDetails } from "./api/youtube";
-import type { VideoSummary } from "../types/video";
+import { getMixPlaylist, getPlaylistDetails } from "./api/youtube";
+import { isMix } from "./mixPlaylist";
+import type { PlaylistDetailsResponse, VideoSummary } from "../types/video";
+
+/**
+ * A playlist's first page. A Mix is read from its watch queue, around `videoId` when its id
+ * names no video, since YouTube refuses to browse one; it has no further pages.
+ */
+export function firstPlaylistPage(playlistId: string, videoId?: string | null): Promise<PlaylistDetailsResponse> {
+  return isMix(playlistId) ? getMixPlaylist(playlistId, videoId) : getPlaylistDetails(playlistId);
+}
 
 /** Pages a playlist reads before stopping, so a huge or looping playlist ends. */
 export const PLAYLIST_PAGE_GUARD = 30;

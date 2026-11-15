@@ -388,6 +388,12 @@ export async function getPlaylistDetails(
   });
 }
 
+/** A Mix's queue as a playlist. `videoId` seeds a Mix whose id names no video. */
+export async function getMixPlaylist(playlistId: string, videoId?: string | null): Promise<PlaylistDetailsResponse> {
+  if (!(await isTauriEnv())) throw new Error("Mixes require the desktop app.");
+  return invokeBackend<PlaylistDetailsResponse>("get_mix_playlist", { playlistId, videoId: videoId ?? null });
+}
+
 export async function getComments(
   videoId: string,
   pageToken?: string | null,

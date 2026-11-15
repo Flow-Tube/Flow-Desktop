@@ -347,3 +347,4 @@ FIXES
 - Auto chapters that start part-way through a second show again, and a music video no longer shows a hidden label channel, such as a VEVO channel, in place of the artist's own.
 - Outside English, a channel page no longer shows its video count as its subscribers, and a channel search that finds nothing in your language tries again in English.
 - Saved playlists, the playlist date sort and collaborations in Subscriptions read upload dates in every language now, including short forms such as hace 3 m and 5 дн., instead of only English.
+- Mixes open again. A Mix in related videos, in search or behind a Mix link now plays as a queue from YouTube's watch page, instead of a request YouTube refuses for Mixes.

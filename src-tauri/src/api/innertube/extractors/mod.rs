@@ -3,6 +3,7 @@ pub mod channel;
 pub mod comments;
 pub mod explore;
 pub mod live_chat;
+pub mod mix;
 pub mod playability;
 pub mod player;
 pub mod playlist;

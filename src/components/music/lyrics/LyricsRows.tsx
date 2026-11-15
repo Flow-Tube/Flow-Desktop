@@ -5,6 +5,7 @@ import type { KaraokeGeometry } from "../../../lib/lyrics/display/karaoke";
 import { KaraokeSurface, karaokePadding } from "../../../lib/lyrics/display/karaokeSurface";
 import type { LyricsAlign } from "../../../lib/lyrics/display/presentation";
 import type { RowMotion } from "../../../lib/lyrics/display/rowMotion";
+import type { LyricsAnimation, LyricsGlow } from "../../../lib/lyrics/useLyricsLook";
 import {
   ROMANIZATION_GAP,
   ROW_PADDING_X,
@@ -52,7 +53,9 @@ export interface KaraokeCanvasProps {
   textSize: number;
   accent: Rgb;
   unsungAlpha: number;
-  glow: boolean;
+  align: LyricsAlign;
+  animation: LyricsAnimation;
+  glow: LyricsGlow;
   motion: boolean;
   /** Bumped when the pixel ratio changes, so the backing store is resized. */
   pixelRatioVersion: number;
@@ -60,16 +63,16 @@ export interface KaraokeCanvasProps {
 }
 
 function KaraokeCanvas(props: KaraokeCanvasProps) {
-  const { lineIndex, geometry, width, height, textSize, accent, unsungAlpha, glow, motion, pixelRatioVersion, register } = props;
+  const { lineIndex, geometry, width, height, textSize, accent, unsungAlpha, align, animation, glow, motion, pixelRatioVersion, register } = props;
   const ref = useRef<HTMLCanvasElement | null>(null);
   useLayoutEffect(() => {
     const canvas = ref.current;
     if (!canvas) return;
-    const surface = new KaraokeSurface(canvas, { geometry, width, height, textSize, accent, unsungAlpha, glow, motion });
+    const surface = new KaraokeSurface(canvas, { geometry, width, height, textSize, accent, unsungAlpha, align, animation, glow, motion });
     register(lineIndex, surface);
     return () => register(lineIndex, null);
-  }, [lineIndex, geometry, width, height, textSize, accent, unsungAlpha, glow, motion, pixelRatioVersion, register]);
-  const pad = karaokePadding(textSize);
+  }, [lineIndex, geometry, width, height, textSize, accent, unsungAlpha, align, animation, glow, motion, pixelRatioVersion, register]);
+  const pad = karaokePadding(textSize, glow);
   return (
     <div className="relative" style={{ height }}>
       <canvas ref={ref} aria-hidden className="pointer-events-none absolute" style={{ left: -pad.x, top: -pad.y }} />
@@ -91,7 +94,7 @@ export interface LineRowProps {
   focused: boolean;
   romanization: string | null;
   translation: string | null;
-  karaoke: Omit<KaraokeCanvasProps, "lineIndex" | "width" | "height" | "textSize" | "accent"> | null;
+  karaoke: Omit<KaraokeCanvasProps, "lineIndex" | "width" | "height" | "textSize" | "accent" | "align"> | null;
   motion: RowMotion;
   /** The manual scroll at render time, so a re-rendered row lands where the frame loop has it. */
   manualOffset: number;
@@ -142,6 +145,7 @@ export const LineRow = memo(function LineRow(props: LineRowProps) {
               height={layout.main.height}
               textSize={layout.textSize}
               accent={accent}
+              align={align}
             />
           ) : (
             <TextRows block={layout.main} align={align} color={color} />

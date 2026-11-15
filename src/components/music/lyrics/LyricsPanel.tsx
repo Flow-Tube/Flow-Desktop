@@ -36,6 +36,7 @@ import { LyricsRowList, type DotsHandle } from "./LyricsRowList";
 import { stepDots } from "./indicatorDots";
 import { lyricsMeasurer, useKaraokeGeometry, useLineWords } from "./useLyricsGeometry";
 import { CurrentLineAnnouncer, LyricsProviderLabel, LyricsResyncButton } from "./LyricsPanelChrome";
+import type { LyricsAnimation, LyricsGlow } from "../../../lib/lyrics/useLyricsLook";
 
 const ANCHOR_RATIO = 0.35;
 const FADE_TOP = 130;
@@ -67,6 +68,8 @@ export interface LyricsPanelProps {
   /** A line's Latin version takes the place of the original instead of sitting under it. */
   romanizationOnly?: boolean;
   blurOtherLines: boolean;
+  animation: LyricsAnimation;
+  glow: LyricsGlow;
   /** Applied inside the sync loops, so a nudge takes effect mid-line. */
   syncOffsetMs: number;
   /** False while the host keeps the panel mounted but hidden: every loop stops. */
@@ -90,7 +93,7 @@ const NO_ROMANIZATIONS: Array<string | null> = [];
  */
 export function LyricsPanel(props: LyricsPanelProps) {
   const { lyrics, syncedLyrics, isLoading, providerName, accent, backdrop, baseTextSize, maxRowWidth, textAlign } = props;
-  const { showTranslation, showRomanization, autoRomanize = false, romanizationOnly = false, blurOtherLines, syncOffsetMs, active, isPlaying, onSeekTo, resyncBottom, className = "" } = props;
+  const { showTranslation, showRomanization, autoRomanize = false, romanizationOnly = false, blurOtherLines, animation, glow, syncOffsetMs, active, isPlaying, onSeekTo, resyncBottom, className = "" } = props;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [family, setFamily] = useState(DEFAULT_FAMILY);
@@ -130,7 +133,7 @@ export function LyricsPanel(props: LyricsPanelProps) {
     [items, presentation, rowWidth, family],
   );
   const lineWords = useLineWords(lines, presentation.nextLineTimes);
-  const geometryFor = useKaraokeGeometry(lines, layouts, lineWords, presentation);
+  const geometryFor = useKaraokeGeometry(lines, layouts, lineWords, presentation, animation === "cadence" && motionEnabled);
   const listIndexOfLine = useMemo(() => {
     const map = new Map<number, number>();
     items.forEach((item, i) => {
@@ -499,6 +502,8 @@ export function LyricsPanel(props: LyricsPanelProps) {
             rowWidth={rowWidth}
             focusedLine={focusedLine}
             motionEnabled={motionEnabled}
+            animation={animation}
+            glow={glow}
             pixelRatioVersion={pixelRatioVersion}
             onLineClick={onLineClick}
             registerSurface={registerSurface}

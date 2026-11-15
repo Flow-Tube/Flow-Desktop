@@ -10,7 +10,7 @@ import { IS_LINUX_RUNTIME, IS_MACOS_RUNTIME } from "../../lib/platform";
 import { youtubeThumbnailUrl } from "../../lib/thumbnails";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 import { usePlayOnStore } from "../../store/usePlayOnStore";
-import { TransportButtons } from "../music/player/PlayerTransport";
+import { TransportButtons, useSplitTransport } from "../music/player/PlayerTransport";
 import { Slider } from "../ui/Slider";
 import { DeviceKindIcon } from "./DeviceKindIcon";
 
@@ -21,6 +21,7 @@ const HERE = IS_MACOS_RUNTIME ? "play_on_here_mac" : IS_LINUX_RUNTIME ? "play_on
 /** What the active device plays, with controls that drive it, here or elsewhere. */
 export function NowPlayingCard({ device, nowMs }: { device: PlayOnDevice; nowMs: number }) {
   const drive = usePlayOnStore((state) => state.drive);
+  const split = useSplitTransport();
   const now = device.now;
   const target = device.thisDevice ? null : device.did;
   const art = useProxiedImageUrl(now?.video ? youtubeThumbnailUrl(now.video) : null);
@@ -81,6 +82,7 @@ export function NowPlayingCard({ device, nowMs }: { device: PlayOnDevice; nowMs:
 
       <div className="flex items-center justify-between gap-3">
         <TransportButtons
+          split={split}
           size="sm"
           playing={playingHere}
           onPrevious={() => void drive(target, "previous")}

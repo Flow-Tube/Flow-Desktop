@@ -30,6 +30,8 @@ const HANDOFF_WITHIN_MS = 15_000;
 const COMMAND_WITHIN_MS = 5_000;
 /** Answers kept for a request whose wait has not started yet; more than this are old. */
 const EARLY_LIMIT = 32;
+/** How long a device's row says a move to it failed, as on Android. */
+const FAILED_MS = 4_000;
 
 export type ConsentChoice = "always" | "once" | "decline";
 
@@ -46,6 +48,8 @@ interface PlayOnState {
   controlling: string | null;
   /** The device playback is on its way to; only one move runs at a time. */
   movingTo: string | null;
+  /** The device a move just failed to reach, for a few seconds. */
+  failed: string | null;
   /** The group's devices with their names, loaded once another device can be reached. */
   linked: LinkedDevice[];
   /** Requests waiting until the user allows their sender, oldest first. */
@@ -73,6 +77,7 @@ interface PlayOnState {
 }
 
 let watch: (videoId: string) => void = () => undefined;
+let failedTimer: ReturnType<typeof setTimeout> | undefined;
 const waiting = new Map<number, (answer: Answer) => void>();
 /** Answers that arrived before their wait started, as a fast device's can. */
 const early = new Map<number, Answer>();
@@ -187,6 +192,15 @@ export const usePlayOnStore = create<PlayOnState>((set, get) => {
     if (unknown) getLinkedDevices().then((linked) => set({ linked }), () => undefined);
   }
 
+  /** Marks `did` as the device a move just failed to reach, until a later move or a few seconds pass. */
+  function failedOn(did: string) {
+    clearTimeout(failedTimer);
+    set({ failed: did });
+    failedTimer = setTimeout(() => {
+      if (get().failed === did) set({ failed: null });
+    }, FAILED_MS);
+  }
+
   /** Playing here takes control back from the other devices. */
   function playingHere(isPlaying: boolean) {
     if (isPlaying) set({ controlling: null });
@@ -198,6 +212,7 @@ export const usePlayOnStore = create<PlayOnState>((set, get) => {
     overrides: {},
     controlling: null,
     movingTo: null,
+    failed: null,
     linked: [],
     asking: [],
 
@@ -220,11 +235,14 @@ export const usePlayOnStore = create<PlayOnState>((set, get) => {
         get().control(device.did);
         return;
       }
-      set({ movingTo: device.did });
+      set({ movingTo: device.did, failed: null });
       try {
         if (device.thisDevice) await get().pullFrom(driven);
         else if (movesDriven) await get().moveTo(device.did);
         else await get().transferTo(device.did);
+      } catch (error) {
+        failedOn(device.did);
+        throw error;
       } finally {
         set({ movingTo: null });
       }

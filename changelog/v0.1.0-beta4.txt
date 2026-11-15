@@ -64,6 +64,7 @@ SYNC
 - A connection that fails now says whether the other device turned it down or never answered, instead of one message for both.
 - The Sync page is now a short list, like Settings: join, start or restore a group, and send to or receive from a nearby device. Each one opens on its own, with a back arrow, instead of every form showing at once.
 - Once this device is in a group, its status, devices, profiles, recovery words, storage and recent errors sit on one page. The separate Dashboard tab is gone.
+- Play on: when playback can't move to a device, that device's row in the list says so for a few seconds, as on Android.
 
 LIBRARY
 - Notes on videos and channels: a Note button on the Watch and Channel pages, a small card that shows the note. Times like 12:34 in a video's note jump there. Settings > Content has the switches.

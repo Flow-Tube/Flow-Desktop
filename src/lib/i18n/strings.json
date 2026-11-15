@@ -3034,6 +3034,7 @@
   "play_on_seek": "Seek",
   "play_on_failed": "Couldn't play on %s: %s",
   "play_on_moving": "Moving playback…",
+  "play_on_move_failed": "Couldn't move playback",
   "play_on_took_over": "Playing from %s",
   "play_on_manage": "Manage linked devices",
   "play_on_manage_summary": "Rename devices and choose which can play here",

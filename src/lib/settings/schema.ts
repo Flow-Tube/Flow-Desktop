@@ -177,6 +177,7 @@ export const SETTINGS = {
   CATEGORIES_NAV_TAB_ENABLED: "categories_nav_tab_enabled",
   SUBSCRIPTION_REFRESH_ON_STARTUP: "subscription_refresh_on_startup",
   SUBS_SHOW_CHECKED_VIDEO_COUNT: "subs_show_checked_video_count",
+  SUBS_POSTS_CHIP: "subs_posts_chip",
   SUBSCRIPTION_COLLABORATIONS_ENABLED: "subscription_collaborations_enabled",
   SUBS_SORT_MODE: "subs_sort_mode",
   DEFAULT_NAV_TAB_INDEX: "default_nav_tab_index",
@@ -432,6 +433,7 @@ export const SETTING_SCOPES = {
   [SETTINGS.CATEGORIES_NAV_TAB_ENABLED]: "profile",
   [SETTINGS.SUBSCRIPTION_REFRESH_ON_STARTUP]: "profile",
   [SETTINGS.SUBS_SHOW_CHECKED_VIDEO_COUNT]: "profile",
+  [SETTINGS.SUBS_POSTS_CHIP]: "profile",
   [SETTINGS.SUBSCRIPTION_COLLABORATIONS_ENABLED]: "profile",
   [SETTINGS.SUBS_SORT_MODE]: "profile",
   [SETTINGS.DEFAULT_NAV_TAB_INDEX]: "profile",
@@ -776,6 +778,7 @@ export const SETTING_DEFINITIONS = [
   // The group chip last picked on Subscriptions, empty for All, as Android keeps it.
   str(SETTINGS.SUBS_SELECTED_GROUP, "content", "", "wired", undefined, "internal", "internal"),
   bool(SETTINGS.SUBS_SHOW_CHECKED_VIDEO_COUNT, "content", true, "wired"),
+  bool(SETTINGS.SUBS_POSTS_CHIP, "content", true, "wired"),
   bool(SETTINGS.SUBSCRIPTION_SHOW_VIDEOS, "content", true, "wired"),
   bool(SETTINGS.SUBSCRIPTION_SHOW_SHORTS, "content", true, "wired"),
   bool(SETTINGS.SUBSCRIPTION_SHOW_LIVE, "content", true, "wired"),

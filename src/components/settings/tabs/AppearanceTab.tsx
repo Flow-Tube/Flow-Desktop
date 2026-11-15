@@ -24,6 +24,8 @@ import { useTheme } from "../../../lib/useTheme";
 import { useThemeTransfer } from "../../../lib/useThemeTransfer";
 import { IS_LINUX_RUNTIME } from "../../../lib/platform";
 import { GraphicsCompatibilitySection } from "../GraphicsCompatibilitySection";
+import { MAX_FONT_MB, fontImportMessage, importCustomFont } from "../../../lib/appFont";
+import { useUiStore } from "../../../store/useUiStore";
 
 export function AppearanceTab() {
   const {
@@ -41,6 +43,8 @@ export function AppearanceTab() {
   const [darkThemeId, setDarkThemeId] = usePreference(SETTINGS.THEME_DARK_ID, "default");
   const [darkStyle, setDarkStyle] = usePreference(SETTINGS.THEME_DARK_STYLE, "dark");
   const [appFont, setAppFont] = usePreference(SETTINGS.APP_FONT, "inter");
+  const [customFontName] = usePreference(SETTINGS.APP_FONT_CUSTOM_NAME, "");
+  const fontInputRef = useRef<HTMLInputElement>(null);
   const themeOptions = [...BUILTIN_THEMES, ...customThemes].map((theme) => ({ value: theme.id, label: theme.name }));
   const [expressiveSliders, setExpressiveSliders] = useBoolPref(SETTINGS.EXPRESSIVE_SLIDERS_ENABLED, true);
   const [highlightNew, setHighlightNew] = useBoolPref(SETTINGS.HIGHLIGHT_NEW_SETTINGS, false);
@@ -48,6 +52,17 @@ export function AppearanceTab() {
   const { exportThemes, importThemes } = useThemeTransfer();
   const importInputRef = useRef<HTMLInputElement>(null);
   const usingThemeFile = themeId === THEME_FILE_ID;
+
+  const handleFontFile = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    void importCustomFont(file).then((error) => {
+      const { showToast } = useUiStore.getState();
+      if (error) showToast({ variant: "error", message: fontImportMessage(error) });
+      else showToast({ message: getString("font_imported", file.name.replace(/\.(ttf|otf)$/i, "")) });
+    });
+  };
 
   const handleImportFile = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -155,8 +170,17 @@ export function AppearanceTab() {
               options={[
                 { value: "inter", label: "Inter" },
                 { value: "system", label: getString("settings_app_font_system") },
+                { value: "condensed", label: getString("settings_app_font_condensed") },
+                { value: "serif", label: getString("settings_app_font_serif") },
+                ...(customFontName ? [{ value: "custom", label: getString("settings_app_font_custom", customFontName) }] : []),
               ]}
             />
+          </SettingItem>
+          <SettingItem title={getString("font_choose_file")} description={getString("font_choose_file_summary", MAX_FONT_MB)}>
+            <Button variant="secondary" onClick={() => fontInputRef.current?.click()}>
+              {getString("font_choose")}
+            </Button>
+            <input ref={fontInputRef} type="file" accept=".ttf,.otf" className="hidden" onChange={handleFontFile} />
           </SettingItem>
           <SettingItem title={getString("settings_expressive_sliders")} description={getString("settings_expressive_sliders_desc")}>
             <ToggleSwitch checked={expressiveSliders} onChange={setExpressiveSliders} />

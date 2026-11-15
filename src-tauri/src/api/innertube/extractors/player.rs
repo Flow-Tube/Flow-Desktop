@@ -394,6 +394,32 @@ fn caption_url(base_url: &str, translated_language_code: Option<&str>) -> Option
     append_or_replace_query_param(&url, "fmt", "vtt")
 }
 
+/// The sphere layout of a 360 video, read from its video formats' `projectionType`.
+/// Any equirectangular format makes the video one, since some formats of a 360
+/// upload are listed as rectangular.
+fn stream_projection(streaming_data: &Value) -> Option<String> {
+    let video_formats = ["adaptiveFormats", "formats"]
+        .iter()
+        .filter_map(|key| streaming_data[*key].as_array())
+        .flatten()
+        .filter(|format| {
+            format["mimeType"]
+                .as_str()
+                .is_some_and(|mime| mime.starts_with("video/"))
+        });
+    let mut projection = None;
+    for format in video_formats {
+        match format["projectionType"].as_str() {
+            Some("EQUIRECTANGULAR") => return Some("equirectangular".to_string()),
+            Some("EQUIRECTANGULAR_THREED_TOP_BOTTOM") => {
+                projection = Some("equirectangular_top_bottom".to_string());
+            }
+            _ => {}
+        }
+    }
+    projection
+}
+
 fn format_is_video(format: &Value) -> bool {
     format["mimeType"]
         .as_str()
@@ -2162,6 +2188,7 @@ impl InnertubeClient {
             is_live,
             loudness_db: stream_loudness_db(&res, streaming_data),
             storyboard: super::storyboard::parse_storyboard(&res, duration_seconds),
+            projection: stream_projection(streaming_data),
             sabr,
             sabr_descriptor,
         })
@@ -3019,5 +3046,42 @@ mod keyword_tag_tests {
         let details = serde_json::json!({ "keywords": ["b", "a", "b", "  ", " c "] });
         assert_eq!(keyword_tags(&details), ["b", "a", "c"]);
         assert!(keyword_tags(&Value::Null).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod projection_tests {
+    use super::stream_projection;
+    use serde_json::json;
+
+    #[test]
+    fn a_360_video_is_equirectangular_even_beside_rectangular_formats() {
+        let data = json!({ "adaptiveFormats": [
+            { "mimeType": "video/mp4; codecs=\"avc1\"", "projectionType": "RECTANGULAR" },
+            { "mimeType": "video/webm; codecs=\"vp9\"", "projectionType": "EQUIRECTANGULAR" },
+            { "mimeType": "audio/mp4", "projectionType": "EQUIRECTANGULAR_THREED_TOP_BOTTOM" },
+        ]});
+        assert_eq!(stream_projection(&data).as_deref(), Some("equirectangular"));
+    }
+
+    #[test]
+    fn stereo_top_bottom_is_its_own_layout() {
+        let data = json!({ "formats": [
+            { "mimeType": "video/mp4", "projectionType": "EQUIRECTANGULAR_THREED_TOP_BOTTOM" },
+        ]});
+        assert_eq!(
+            stream_projection(&data).as_deref(),
+            Some("equirectangular_top_bottom")
+        );
+    }
+
+    #[test]
+    fn flat_and_cube_map_videos_have_none() {
+        let flat = json!({ "adaptiveFormats": [{ "mimeType": "video/mp4", "projectionType": "RECTANGULAR" }] });
+        let mesh =
+            json!({ "adaptiveFormats": [{ "mimeType": "video/mp4", "projectionType": "MESH" }] });
+        assert_eq!(stream_projection(&flat), None);
+        assert_eq!(stream_projection(&mesh), None);
+        assert_eq!(stream_projection(&json!({})), None);
     }
 }

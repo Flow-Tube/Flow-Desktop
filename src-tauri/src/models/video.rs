@@ -269,6 +269,12 @@ pub struct StreamInfo {
     /// Seek-bar preview sheets, one entry per resolution, smallest first.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub storyboard: Vec<StoryboardLevel>,
+    /// How a 360 video's frames map onto the sphere around the viewer:
+    /// `equirectangular`, or `equirectangular_top_bottom` for one eye above the
+    /// other. `None` for a flat video, and for the cube-map (`MESH`) layout the
+    /// player can't draw.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub projection: Option<String>,
     // Internal: everything needed to spin up a SABR session. Never serialized;
     // consumed by the command layer to register a session with the proxy.
     #[serde(skip)]

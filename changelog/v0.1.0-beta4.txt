@@ -340,3 +340,4 @@ FIXES
 - The Subscriptions page no longer jumps while you scroll during a refresh. The feed you are reading stays on screen until the check of every channel finishes, cards keep their thumbnails when new videos arrive, and the video you are looking at stays in place when things above it change.
 - Play on: moving a video that takes a while to start no longer leaves it playing on both devices.
 - SponsorBlock: letting go of a seek inside a segment that skips on its own now lands at its end, as on Android, even for a segment at the very start of a video. Each segment counts once per video in your SponsorBlock stats and Recap, however often you rewind into it.
+- Lyrics: the word fill no longer jumps back at speeds below 1x, the lyrics hold still while the share, source or edit dialog is open over them, and saving a lyric card that could not be drawn now says so instead of doing nothing.

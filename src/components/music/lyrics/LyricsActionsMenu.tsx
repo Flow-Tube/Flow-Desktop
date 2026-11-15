@@ -147,6 +147,14 @@ export function LyricsActionsMenu({ track, className }: { track: SongItem | null
   const [glow, setGlow] = useLyricsGlow();
   const { copy, save } = useLyricsActions(track);
 
+  // The lyrics hold still under these dialogs, as Android's do under a sheet.
+  const dialogOpen = sourcesOpen || shareOpen || editText !== null;
+  useEffect(() => {
+    if (!dialogOpen) return;
+    useLyricsStore.getState().setCovered(true);
+    return () => useLyricsStore.getState().setCovered(false);
+  }, [dialogOpen]);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {

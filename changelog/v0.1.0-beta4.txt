@@ -344,3 +344,4 @@ FIXES
 - Saving the equalizer on this computer no longer turns Spatial sound off on a linked Android phone. Desktop now keeps the setting it syncs, though it doesn't play it yet.
 - Singer markers such as {agent:v1} and {bg} no longer show inside line-synced lyrics or lyrics saved by an earlier version. Their lines go to the right singer, and background vocals show as background lines.
 - Translated captions load more often. They are now made from YouTube's speech track, as the official apps and Flow for Android do, instead of the uploader's own track.
+- Auto chapters that start part-way through a second show again, and a music video no longer shows a hidden label channel, such as a VEVO channel, in place of the artist's own.

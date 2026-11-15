@@ -11,8 +11,8 @@ interface SegmentedControlProps<T extends string> {
   options: SegmentedOption<T>[];
   onChange: (value: T) => void;
   label: string;
+  /** Spreads the options evenly over the full width. */
   stretch?: boolean;
-  className?: string;
 }
 
 /** A pill row of mutually exclusive choices; the chosen one sits on the surface. */
@@ -22,13 +22,12 @@ export function SegmentedControl<T extends string>({
   onChange,
   label,
   stretch = false,
-  className = "",
 }: SegmentedControlProps<T>) {
   return (
     <div
       role="radiogroup"
       aria-label={label}
-      className={`${stretch ? "flex w-full" : "inline-flex"} gap-0.5 rounded-full border border-chrome-neutral-800 bg-surface-container-low p-[3px] ${className}`}
+      className={`${stretch ? "flex w-full" : "inline-flex"} gap-0.5 rounded-full border border-chrome-neutral-800 bg-surface-container-low p-[3px]`}
     >
       {options.map((option) => {
         const selected = option.value === value;

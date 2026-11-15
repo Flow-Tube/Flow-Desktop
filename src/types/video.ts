@@ -188,6 +188,8 @@ export interface StreamInfo {
   sabr?: SabrStreamInfo | null;
   /** Seek-bar preview sheets, one entry per resolution, smallest first. */
   storyboard?: StoryboardLevel[];
+  /** How a 360 video maps onto its sphere; absent for a flat video. */
+  projection?: "equirectangular" | "equirectangular_top_bottom";
   /** How many dB louder than the site's target the video plays. */
   loudnessDb?: number | null;
 }

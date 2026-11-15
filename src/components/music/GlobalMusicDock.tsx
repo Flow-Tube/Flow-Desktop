@@ -14,7 +14,7 @@ import { EqPanel } from "./EqPanel";
 import { useEqActive } from "../../lib/audio/eq/useEqualizer";
 import { VolumePopover } from "./VolumePopover";
 import { useArtworkSwatches } from "../../lib/useArtworkSwatches";
-import { useDockToggleColors } from "../../lib/usePlayerColors";
+import { useDockControlColors, useDockToggleColors } from "../../lib/usePlayerColors";
 import { useMusicWheelVolume } from "../../lib/useMusicWheelVolume";
 import { useVolumeFeedback } from "../../lib/useVolumeFeedback";
 import { VolumeFeedbackPill } from "../ui/VolumeFeedbackPill";
@@ -66,6 +66,7 @@ export function GlobalMusicDock() {
   const accentSrc = useProxiedImageUrl(upgradeMusicImageUrl(currentTrack?.thumbnail));
   const swatches = useArtworkSwatches(accentSrc);
   const accentActive = useDockToggleColors(swatches);
+  const controlColors = useDockControlColors(swatches);
   const surface = useMiniBarSurface(look.background, swatches);
   const cover = useLyricsCover(accentSrc, surface.coverColors);
 
@@ -154,7 +155,8 @@ export function GlobalMusicDock() {
                 }
                 openOverlay("full");
               }}
-              style={surface.style}
+              // Vivid paints its own controls, so the bar's surface wins over the control colours.
+              style={{ ...controlColors, ...surface.style }}
               className={`relative isolate flex h-full touch-none select-none items-center overflow-hidden bg-surface-container-high ${
                 pill ? "gap-3 rounded-full ps-1.5 pe-3 shadow-[0_8px_24px_rgb(0_0_0/0.35)]" : "rounded-2xl ps-3 pe-4"
               } ${surface.bordered ? "border border-chrome-neutral-800" : ""} ${away ? "" : "cursor-pointer"}`}

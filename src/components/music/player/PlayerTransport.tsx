@@ -1,19 +1,11 @@
-import { useState, type CSSProperties, type KeyboardEvent } from "react";
-import { motion } from "framer-motion";
 import { Loader2, Pause, Play, Repeat, Repeat1, Shuffle, SkipBack, SkipForward } from "lucide-react";
 
 import { getString } from "../../../lib/i18n/index";
 import { useBoolPref } from "../../../lib/usePreference";
 import { SETTINGS } from "../../../lib/settings/schema";
-import {
-  SPLIT_GAP,
-  playCornerRadius,
-  splitSideRadius,
-  splitWeights,
-  type TransportPart,
-} from "../../../lib/music/splitTransport";
 import { useMusicPlayerStore } from "../../../store/useMusicPlayerStore";
 import { HapticButton } from "../HapticButton";
+import { SplitTransport } from "./SplitTransport";
 import { upcomingIndex } from "../../../lib/musicQueueOrder";
 
 const SIDE = "grid h-11 w-11 place-items-center rounded-full transition-colors duration-200 ease-out";
@@ -26,20 +18,6 @@ const SIZES = {
   md: { skip: "h-11 w-11", skipIcon: "h-6 w-6", play: "h-14 w-14", playIcon: "h-6 w-6", gap: "gap-8" },
   sm: { skip: "h-9 w-9", skipIcon: "h-5 w-5", play: "h-11 w-11", playIcon: "h-6 w-6", gap: "gap-4" },
 } as const;
-
-/** Android's elastic spec: damping ratio 0.62 at stiffness 720, as the top bar's button group. */
-const ELASTIC = { type: "spring", stiffness: 720, damping: 2 * 0.62 * Math.sqrt(720), mass: 1 } as const;
-const SPLIT_SIZES = {
-  lg: { height: 68, width: "min(360px, 100%)", skipIcon: "h-7 w-7", playIcon: "h-8 w-8" },
-  md: { height: 56, width: "min(300px, 100%)", skipIcon: "h-6 w-6", playIcon: "h-7 w-7" },
-  sm: { height: 44, width: "min(220px, 100%)", skipIcon: "h-5 w-5", playIcon: "h-6 w-6" },
-} as const;
-/** The sides sit on the player's tonal accent; outside the player (the Play on card) on the theme's surfaces. */
-const SIDE_STYLE: CSSProperties = {
-  background: "var(--player-primary-container, var(--color-surface-container-highest))",
-  color: "var(--player-on-primary-container, var(--color-on-surface))",
-};
-const PLAY_STYLE: CSSProperties = { background: "var(--color-primary)", color: "var(--color-on-primary)" };
 
 /** Whether the transport draws as Android's split button; on by default. */
 export function useSplitTransport(): boolean {
@@ -59,78 +37,9 @@ interface TransportButtonsProps {
   split?: boolean;
 }
 
-function SplitTransportButtons({ size, playing, loading, onPrevious, onTogglePlay, onNext, nextTitle }: TransportButtonsProps) {
-  const sizes = SPLIT_SIZES[size];
-  const [pressed, setPressed] = useState<TransportPart | null>(null);
-  const weights = splitWeights(pressed);
-  const press = (part: TransportPart) => ({
-    onPointerDown: () => setPressed(part),
-    onPointerUp: () => setPressed(null),
-    onPointerLeave: () => setPressed((current) => (current === part ? null : current)),
-    onPointerCancel: () => setPressed(null),
-    onKeyDown: (event: KeyboardEvent) => {
-      if (event.key === " " || event.key === "Enter") setPressed(part);
-    },
-    onKeyUp: () => setPressed(null),
-    onBlur: () => setPressed((current) => (current === part ? null : current)),
-  });
-  const part = "grid min-w-0 basis-0 place-items-center outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]";
-  // Media controls run left to right in every language, as the timeline above them does.
-  return (
-    <div dir="ltr" className="flex items-stretch" style={{ gap: SPLIT_GAP, height: sizes.height, width: sizes.width }}>
-      <motion.button
-        type="button"
-        onClick={onPrevious}
-        aria-label={getString("music_previous")}
-        initial={false}
-        animate={{ flexGrow: weights.previous, borderRadius: splitSideRadius(true, sizes.height, pressed === "previous" ? 1 : 0) }}
-        transition={ELASTIC}
-        className={part}
-        style={SIDE_STYLE}
-        {...press("previous")}
-      >
-        <SkipBack className={sizes.skipIcon} fill="currentColor" />
-      </motion.button>
-      <motion.button
-        type="button"
-        onClick={onTogglePlay}
-        aria-label={getString(playing ? "music_pause" : "music_play")}
-        initial={false}
-        animate={{ flexGrow: weights.play, borderRadius: playCornerRadius(sizes.height, playing) }}
-        transition={ELASTIC}
-        className={part}
-        style={PLAY_STYLE}
-        {...press("play")}
-      >
-        {loading ? (
-          <Loader2 className={`${sizes.playIcon} animate-spin`} />
-        ) : playing ? (
-          <Pause className={sizes.playIcon} fill="currentColor" />
-        ) : (
-          <Play className={`${sizes.playIcon} translate-x-px`} fill="currentColor" />
-        )}
-      </motion.button>
-      <motion.button
-        type="button"
-        onClick={onNext}
-        aria-label={getString("music_next")}
-        title={nextTitle ? `${getString("music_up_next")}: ${nextTitle}` : undefined}
-        initial={false}
-        animate={{ flexGrow: weights.next, borderRadius: splitSideRadius(false, sizes.height, pressed === "next" ? 1 : 0) }}
-        transition={ELASTIC}
-        className={part}
-        style={SIDE_STYLE}
-        {...press("next")}
-      >
-        <SkipForward className={sizes.skipIcon} fill="currentColor" />
-      </motion.button>
-    </div>
-  );
-}
-
 /** Previous, play/pause and next, for whichever player they drive. */
 export function TransportButtons(props: TransportButtonsProps) {
-  if (props.split) return <SplitTransportButtons {...props} />;
+  if (props.split) return <SplitTransport {...props} />;
   const { size, playing, loading, onPrevious, onTogglePlay, onNext, nextTitle } = props;
   const sizes = SIZES[size];
   const skipClass = `grid ${sizes.skip} place-items-center rounded-full text-chrome-neutral-100 transition-transform duration-200 ease-out hover:scale-110`;

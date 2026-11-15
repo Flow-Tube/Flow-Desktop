@@ -7,7 +7,7 @@ const OTHER_ID = "UCoooooooooooooooooooooo";
 const lists = toAiLists({ handles: ["drew", "slopmaker"], ids: [LISTED_ID] }, { handles: ["maybeslop"], ids: [] });
 
 function rules(overrides: Partial<AiListRules> = {}): AiListRules {
-  return { blockEnabled: true, warnEnabled: true, exemptIds: new Set(), exemptHandles: new Set(), ...overrides };
+  return { blockEnabled: true, warnEnabled: true, musicEnabled: false, exemptIds: new Set(), exemptHandles: new Set(), ...overrides };
 }
 
 describe("createAiListMatcher", () => {
@@ -84,5 +84,55 @@ describe("AiHandleIndex", () => {
     index.learn("a", "one");
     index.learn("a", "two");
     expect(onLearn).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("music verdicts", () => {
+  const AI_ARTIST = "UCaaaaaaaaaaaaaaaaaaaaaa";
+  const REAL_ARTIST = "UCrrrrrrrrrrrrrrrrrrrrrr";
+  const WARN_ID = "UCwwwwwwwwwwwwwwwwwwwwww";
+  const musicLists = toAiLists({ handles: [], ids: [LISTED_ID] }, { handles: [], ids: [WARN_ID] }, { handles: [], ids: [AI_ARTIST] });
+  const musicOnly = (overrides: Partial<AiListRules> = {}) =>
+    rules({ blockEnabled: false, warnEnabled: false, musicEnabled: true, ...overrides });
+
+  it("hides a listed artist, also in a collaboration, and leaves a real artist alone", () => {
+    const matcher = createAiListMatcher(musicLists, musicOnly(), null);
+    expect(matcher.musicVerdict([AI_ARTIST])).toBe("block");
+    expect(matcher.musicVerdict([REAL_ARTIST, AI_ARTIST])).toBe("block");
+    expect(matcher.musicVerdict([REAL_ARTIST, null, undefined])).toBe("none");
+  });
+
+  it("does nothing while the music switch is off and never touches video verdicts", () => {
+    expect(createAiListMatcher(musicLists, musicOnly({ musicEnabled: false }), null)).toBe(AI_LIST_MATCHER_NONE);
+    const matcher = createAiListMatcher(musicLists, musicOnly(), null);
+    expect(matcher.isActive).toBe(false);
+    expect(matcher.isMusicActive).toBe(true);
+    expect(matcher.verdict(AI_ARTIST)).toBe("none");
+  });
+
+  it("hides AiSList channels in Music only while hiding is on, and labels them with only labels on", () => {
+    expect(createAiListMatcher(musicLists, rules(), null).musicVerdict([LISTED_ID])).toBe("block");
+    expect(createAiListMatcher(musicLists, rules({ blockEnabled: false }), null).musicVerdict([LISTED_ID])).toBe("warn");
+    expect(createAiListMatcher(musicLists, rules(), null).musicVerdict([WARN_ID])).toBe("warn");
+  });
+
+  it("lets an exempt artist through but still hides a listed co-artist", () => {
+    const matcher = createAiListMatcher(musicLists, musicOnly({ exemptIds: new Set([AI_ARTIST]) }), null);
+    expect(matcher.musicVerdict([AI_ARTIST])).toBe("none");
+    expect(matcher.isOnMusicList(AI_ARTIST)).toBe(false);
+    const second = "UCbbbbbbbbbbbbbbbbbbbbbc";
+    const both = createAiListMatcher(
+      toAiLists({ handles: [], ids: [] }, { handles: [], ids: [] }, { handles: [], ids: [AI_ARTIST, second] }),
+      musicOnly({ exemptIds: new Set([AI_ARTIST]) }),
+      null,
+    );
+    expect(both.musicVerdict([AI_ARTIST, second])).toBe("block");
+  });
+
+  it("says when the music list is the reason, with or without the channel: prefix", () => {
+    const matcher = createAiListMatcher(musicLists, rules({ musicEnabled: true }), null);
+    expect(matcher.isOnMusicList(`channel:${AI_ARTIST}`)).toBe(true);
+    expect(matcher.isOnMusicList(LISTED_ID)).toBe(false);
+    expect(AI_LIST_MATCHER_NONE.musicVerdict([AI_ARTIST])).toBe("none");
   });
 });

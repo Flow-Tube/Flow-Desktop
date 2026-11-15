@@ -21,6 +21,9 @@ export { getAiListMatcher, refreshAiList } from "../../store/useAiListStore";
 export const AI_LIST_DEFAULT_SOURCE_HOST = "ailist.flow-tube.org";
 /** AiSList's homepage, which its CC BY-NC licence asks to credit. */
 export const AISLIST_HOMEPAGE = "https://aisloplist.com";
+/** The AI music list's two sources, credited as their licences ask. */
+export const SOUL_OVER_AI_HOMEPAGE = "https://souloverai.com";
+export const SPOTIFY_AI_BLOCKER_REPO = "https://github.com/CennoxX/spotify-ai-blocker";
 
 /** The matcher every card and feed filter reads; re-renders only when it changes. */
 export function useAiListMatcher(): AiListMatcher {
@@ -47,11 +50,29 @@ export function useAiChannelLabel(channelId: string | null | undefined, handle?:
   return useAiChannelVerdict(channelId, handle) === "warn";
 }
 
-/** The two switches: hide listed channels, label suspected ones. Both off by default. */
+/** A predicate for music items the filter hides, by the channel ids they credit; undefined while it hides nothing. */
+export function useAiHidesMusic(): ((ids: ReadonlyArray<string | null | undefined>) => boolean) | undefined {
+  const matcher = useAiListMatcher();
+  return useMemo(
+    () => (matcher.isMusicActive ? (ids) => matcher.musicVerdict(ids) === "block" : undefined),
+    [matcher],
+  );
+}
+
+/** Which list a music item is on, by the channel ids it credits; `"none"` while the filter is off. */
+export function useAiMusicVerdict(ids: ReadonlyArray<string | null | undefined>): AiVerdict {
+  const matcher = useAiListMatcher();
+  const key = ids.join("|");
+  // The ids arrive as a fresh array each render; their joined value is what matters.
+  return useMemo(() => matcher.musicVerdict(ids), [matcher, key]);
+}
+
+/** The switches: hide listed channels, label suspected ones, hide AI music. All off by default. */
 export function useAiListSwitches() {
   const blockEnabled = useAppSettingsStore((state) => state.values[SETTINGS.AI_LIST_BLOCK_ENABLED] === "true");
   const warnEnabled = useAppSettingsStore((state) => state.values[SETTINGS.AI_LIST_WARN_ENABLED] === "true");
-  return { blockEnabled, warnEnabled, isOn: blockEnabled || warnEnabled };
+  const musicEnabled = useAppSettingsStore((state) => state.values[SETTINGS.AI_MUSIC_BLOCK_ENABLED] === "true");
+  return { blockEnabled, warnEnabled, musicEnabled, isOn: blockEnabled || warnEnabled || musicEnabled };
 }
 
 /** The Settings status row: null status while off or before the first download. */
@@ -88,11 +109,23 @@ export function useAiReportSettings() {
   return { enabled, name };
 }
 
-async function setSwitch(key: typeof SETTINGS.AI_LIST_BLOCK_ENABLED | typeof SETTINGS.AI_LIST_WARN_ENABLED, enabled: boolean) {
-  const wasOn = readAiListSwitches().blockEnabled || readAiListSwitches().warnEnabled;
+type AiListSwitchKey =
+  | typeof SETTINGS.AI_LIST_BLOCK_ENABLED
+  | typeof SETTINGS.AI_LIST_WARN_ENABLED
+  | typeof SETTINGS.AI_MUSIC_BLOCK_ENABLED;
+
+/** Which lists the switches ask for: the channel list for either channel switch, the music list for its own. */
+function listsWanted(): { channels: boolean; music: boolean } {
+  const { blockEnabled, warnEnabled, musicEnabled } = readAiListSwitches();
+  return { channels: blockEnabled || warnEnabled, music: musicEnabled };
+}
+
+async function setSwitch(key: AiListSwitchKey, enabled: boolean) {
+  const before = listsWanted();
   if (!(await setSettingValue(key, String(enabled)))) return false;
-  // Turning the filter on downloads the list at once, as Android schedules an immediate run.
-  if (enabled && !wasOn) void refreshAiList();
+  const after = listsWanted();
+  // A list newly asked for downloads at once, as Android schedules an immediate run.
+  if ((after.channels && !before.channels) || (after.music && !before.music)) void refreshAiList();
   return true;
 }
 
@@ -102,6 +135,10 @@ export function setAiListBlockEnabled(enabled: boolean): Promise<boolean> {
 
 export function setAiListWarnEnabled(enabled: boolean): Promise<boolean> {
   return setSwitch(SETTINGS.AI_LIST_WARN_ENABLED, enabled);
+}
+
+export function setAiMusicBlockEnabled(enabled: boolean): Promise<boolean> {
+  return setSwitch(SETTINGS.AI_MUSIC_BLOCK_ENABLED, enabled);
 }
 
 /** Shows this channel's videos again despite the list; `disallowAiChannel` undoes it. */

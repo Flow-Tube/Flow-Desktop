@@ -21,19 +21,25 @@ export interface AiListSets {
 export interface AiLists {
   block: AiListSets;
   warn: AiListSets;
+  /** The AI music artist list: channel ids only, and no warn tier, so it can only hide. */
+  music: AiListSets;
 }
 
-export function toAiLists(block: AiListEntries, warn: AiListEntries): AiLists {
-  return {
-    block: { handles: new Set(block.handles), ids: new Set(block.ids) },
-    warn: { handles: new Set(warn.handles), ids: new Set(warn.ids) },
-  };
+const toSets = (entries: AiListEntries | null | undefined): AiListSets => ({
+  handles: new Set(entries?.handles ?? []),
+  ids: new Set(entries?.ids ?? []),
+});
+
+export function toAiLists(block: AiListEntries, warn: AiListEntries, music?: AiListEntries | null): AiLists {
+  return { block: toSets(block), warn: toSets(warn), music: toSets(music) };
 }
 
 /** What the viewer switched on and chose to see anyway. */
 export interface AiListRules {
   blockEnabled: boolean;
   warnEnabled: boolean;
+  /** Hide music by artists on the AI music list. */
+  musicEnabled: boolean;
   /** Subscribed and allowed channel ids. */
   exemptIds: ReadonlySet<string>;
   /** Allowed channels' normalized handles. */
@@ -83,16 +89,30 @@ export class AiHandleIndex {
 }
 
 export interface AiListMatcher {
-  /** A switch is on and a list is held, so a lookup can flag something. */
+  /** A channel switch is on and a list is held, so a video lookup can flag something. */
   readonly isActive: boolean;
+  /** A music lookup can flag something: AiSList ids or the AI music artist list. */
+  readonly isMusicActive: boolean;
+  /** A video's channel. Video surfaces never use the AI music list. */
   verdict(channelId: string | null | undefined, handle?: string | null): AiVerdict;
+  /**
+   * A music item by the channel ids it credits: a song's artists, an album's artists, a playlist's
+   * author, an artist's own channel. One listed, non-exempt id is enough, so a collaboration with a
+   * listed artist is flagged too.
+   */
+  musicVerdict(ids: ReadonlyArray<string | null | undefined>): AiVerdict;
+  /** True when the AI music list, rather than AiSList, is why an artist is flagged. */
+  isOnMusicList(channelId: string | null | undefined): boolean;
   /** Records a pair seen outside a card, such as a channel search result or a channel page. */
   learn(channelId: string | null | undefined, handle: string | null | undefined): void;
 }
 
 export const AI_LIST_MATCHER_NONE: AiListMatcher = {
   isActive: false,
+  isMusicActive: false,
   verdict: () => "none",
+  musicVerdict: () => "none",
+  isOnMusicList: () => false,
   learn: () => {},
 };
 
@@ -103,33 +123,57 @@ function isEmpty(sets: AiListSets): boolean {
 /**
  * The answer for every card. A subscribed or allowed channel is never flagged. With hiding off, a
  * block-list channel is still labelled when labels are on: it is the more certain of the two lists.
- * Same rule as `src-tauri/src/ai_list/matcher.rs` and Flow for Android.
+ * Music also checks the AI music artist list. Same rules as Flow for Android's `AiListMatcher`.
  */
 export function createAiListMatcher(
   lists: AiLists | null,
   rules: AiListRules,
   index: AiHandleIndex | null,
 ): AiListMatcher {
-  if (!lists || !(rules.blockEnabled || rules.warnEnabled) || (isEmpty(lists.block) && isEmpty(lists.warn))) {
-    return AI_LIST_MATCHER_NONE;
-  }
+  const isActive =
+    !!lists && (rules.blockEnabled || rules.warnEnabled) && !(isEmpty(lists.block) && isEmpty(lists.warn));
+  const musicIds = lists && rules.musicEnabled ? lists.music.ids : new Set<string>();
+  const isMusicActive = isActive || musicIds.size > 0;
+  if (!lists || !isMusicActive) return AI_LIST_MATCHER_NONE;
+
+  const verdict = (rawChannelId: string | null | undefined, handle?: string | null): AiVerdict => {
+    if (!isActive) return "none";
+    const channelId = cleanId(rawChannelId);
+    if (channelId && rules.exemptIds.has(channelId)) return "none";
+    const id = isChannelId(channelId) ? channelId : null;
+    const named = handle?.trim() ? handle : channelId.startsWith("@") ? channelId : null;
+    const normalized = named ? normalizeAiHandle(named) : null;
+    if (id && normalized) index?.learn(id, normalized);
+    const key = normalized ?? (id ? index?.handleFor(id) : undefined);
+    if (key && rules.exemptHandles.has(key)) return "none";
+    const on = (sets: AiListSets) => (!!key && sets.handles.has(key)) || (!!id && sets.ids.has(id));
+    const onBlock = on(lists.block);
+    if (onBlock && rules.blockEnabled) return "block";
+    return (onBlock || on(lists.warn)) && rules.warnEnabled ? "warn" : "none";
+  };
+
   return {
-    isActive: true,
-    verdict(rawChannelId, handle) {
-      const channelId = cleanId(rawChannelId);
-      if (channelId && rules.exemptIds.has(channelId)) return "none";
-      const id = isChannelId(channelId) ? channelId : null;
-      const named = handle?.trim() ? handle : channelId.startsWith("@") ? channelId : null;
-      const normalized = named ? normalizeAiHandle(named) : null;
-      if (id && normalized) index?.learn(id, normalized);
-      const key = normalized ?? (id ? index?.handleFor(id) : undefined);
-      if (key && rules.exemptHandles.has(key)) return "none";
-      const on = (sets: AiListSets) => (!!key && sets.handles.has(key)) || (!!id && sets.ids.has(id));
-      const onBlock = on(lists.block);
-      if (onBlock && rules.blockEnabled) return "block";
-      return (onBlock || on(lists.warn)) && rules.warnEnabled ? "warn" : "none";
+    isActive,
+    isMusicActive,
+    verdict,
+    musicVerdict(ids) {
+      let result: AiVerdict = "none";
+      for (const raw of ids) {
+        const id = cleanId(raw);
+        if (!isChannelId(id) || rules.exemptIds.has(id)) continue;
+        if (musicIds.has(id)) return "block";
+        const listed = verdict(id, null);
+        if (listed === "block") return "block";
+        if (listed === "warn") result = "warn";
+      }
+      return result;
+    },
+    isOnMusicList(rawChannelId) {
+      const id = cleanId(rawChannelId);
+      return musicIds.has(id) && !rules.exemptIds.has(id);
     },
     learn(rawChannelId, handle) {
+      if (!isActive) return;
       const channelId = cleanId(rawChannelId);
       if (!isChannelId(channelId)) return;
       const normalized = normalizeAiHandle(handle);

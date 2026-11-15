@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type React from "react";
+import { SQUIGGLY_SEEK, SquigglyCanvas } from "./SquigglyCanvas";
 
 import { getString } from "../../lib/i18n/index";
 import { formatTime } from "../../lib/musicFormat";
@@ -187,7 +188,23 @@ export function MediaScrubber({
     onWheel,
   };
 
-  const bar = isExpressive ? (
+  const squiggly = isExpressive && barStyle === "wavy";
+  const bar = squiggly ? (
+    <div
+      {...sliderProps}
+      className="relative flex h-6 flex-1 cursor-pointer touch-none items-center outline-none"
+      data-pressed={dragging}
+    >
+      <SquigglyCanvas
+        className="h-6 w-full"
+        ratio={ratio}
+        readRatio={following && clock ? () => clock() / duration : undefined}
+        playing={playing}
+        pressed={dragging}
+        look={SQUIGGLY_SEEK}
+      />
+    </div>
+  ) : isExpressive ? (
     <div
       {...sliderProps}
       className="m3-slider flex-1 cursor-pointer outline-none"

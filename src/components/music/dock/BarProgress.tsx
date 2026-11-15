@@ -1,13 +1,11 @@
 import { useLayoutEffect, useRef, useState, type PointerEvent } from "react";
 
-import { IS_LINUX_RUNTIME } from "../../../lib/platform";
 import type { MiniBarProgress } from "../../../lib/music/miniPlayerLook";
 import { useMusicPlayerStore } from "../../../store/useMusicPlayerStore";
 import { MusicScrubber } from "../MusicScrubber";
+import { SQUIGGLY_MINI, SquigglyCanvas } from "../../ui/SquigglyCanvas";
 
 const EDGE_STROKE = 3;
-const WAVE_LENGTH = 18;
-const WAVE_HEIGHT = 3;
 
 function useShare(): number {
   const progress = useMusicPlayerStore((s) => s.progress);
@@ -70,40 +68,49 @@ function EdgeProgress() {
   );
 }
 
-/** A wave along the bottom that moves while playing (still on Linux), seekable like the Line. */
-function WavyProgress() {
+/** Android's Squiggly along the bottom, seekable like the Line; its thumb shows on hover. */
+function SquigglyProgress() {
   const share = useShare();
   const playing = useMusicPlayerStore((s) => s.isPlaying);
   const duration = useMusicPlayerStore((s) => s.duration);
   const seek = useMusicPlayerStore((s) => s.seek);
-  const seekAt = (event: PointerEvent<HTMLDivElement>) => {
+  const [hovered, setHovered] = useState(false);
+  const [dragShare, setDragShare] = useState<number | null>(null);
+  const shareAt = (event: PointerEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
-    if (duration > 0 && rect.width > 0) seek(Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)) * duration);
+    return rect.width > 0 ? Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)) : 0;
   };
-  const moving = playing && !IS_LINUX_RUNTIME;
-  const wave = `M0 ${WAVE_HEIGHT + 1} ${Array.from({ length: 2 }, () => `q ${WAVE_LENGTH / 4} ${-WAVE_HEIGHT} ${WAVE_LENGTH / 2} 0 t ${WAVE_LENGTH / 2} 0`).join(" ")}`;
-  const pattern = `url("data:image/svg+xml,${encodeURIComponent(
-    `<svg xmlns='http://www.w3.org/2000/svg' width='${WAVE_LENGTH * 2}' height='${WAVE_HEIGHT * 2 + 2}'><path d='${wave}' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round'/></svg>`,
-  )}")`;
-  const mask = { maskImage: pattern, WebkitMaskImage: pattern, maskRepeat: "repeat-x", WebkitMaskRepeat: "repeat-x" } as const;
   return (
     <div
       data-sheet-drag-ignore
       role="presentation"
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
       onPointerDown={(event) => {
-        event.currentTarget.setPointerCapture(event.pointerId);
-        seekAt(event);
+        if (duration <= 0) return;
+        event.currentTarget.setPointerCapture?.(event.pointerId);
+        setDragShare(shareAt(event));
       }}
       onPointerMove={(event) => {
-        if (event.currentTarget.hasPointerCapture(event.pointerId)) seekAt(event);
+        if (dragShare !== null) setDragShare(shareAt(event));
       }}
+      onPointerUp={(event) => {
+        if (dragShare === null) return;
+        // One seek on release, as the full player's bar does: each seek refetches the audio.
+        seek(shareAt(event) * duration);
+        setDragShare(null);
+      }}
+      onPointerCancel={() => setDragShare(null)}
       dir="ltr"
-      className="group/wave absolute inset-x-7 bottom-0.5 h-3 cursor-pointer"
+      className="absolute inset-x-6 bottom-0 h-3 cursor-pointer"
     >
-      <span className={`absolute inset-0 bg-chrome-neutral-700/60 ${moving ? "animate-[mini-wave_1.2s_linear_infinite]" : ""}`} style={mask} />
-      <span
-        className={`absolute inset-y-0 start-0 bg-[var(--color-primary)] ${moving ? "animate-[mini-wave_1.2s_linear_infinite]" : ""}`}
-        style={{ ...mask, width: `${share * 100}%` }}
+      <SquigglyCanvas
+        className="h-3 w-full"
+        ratio={dragShare ?? share}
+        playing={playing}
+        pressed={hovered || dragShare !== null}
+        still={dragShare !== null}
+        look={SQUIGGLY_MINI}
       />
     </div>
   );
@@ -123,7 +130,7 @@ export function BarProgress({ style }: { style: MiniBarProgress }) {
         </div>
       );
     case "wavy_line":
-      return <WavyProgress />;
+      return <SquigglyProgress />;
     case "none":
       return null;
   }

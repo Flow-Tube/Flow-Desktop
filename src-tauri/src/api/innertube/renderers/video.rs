@@ -8,7 +8,7 @@ use super::collaborators::collaborators_in;
 use crate::api::innertube::json::age::relative_age;
 use crate::api::innertube::json::count::parse_count;
 use crate::api::innertube::json::duration::parse_duration;
-use crate::api::innertube::json::text::{browse_id_in_runs, text_of};
+use crate::api::innertube::json::text::{browse_handle_in_runs, browse_id_in_runs, text_of};
 use crate::api::innertube::json::thumbnail::{
     best_video_thumbnail_url, largest_url, normalize_youtube_image_url,
 };
@@ -52,6 +52,11 @@ pub fn video_from_renderer(video: &Value) -> Option<VideoSummary> {
         .unwrap_or_default();
     let channel_id =
         channel_id_of(video).or_else(|| collaborators.first().map(|c| c.channel_id.clone()));
+    let channel_handle = channel_id.as_deref().and_then(|id| {
+        BYLINES
+            .iter()
+            .find_map(|field| browse_handle_in_runs(video, field, id))
+    });
     let is_upcoming = is_upcoming(video);
     let (info_views, info_published) = video_info(video);
     let view_count_text = text_of(&video["viewCountText"])
@@ -96,6 +101,7 @@ pub fn video_from_renderer(video: &Value) -> Option<VideoSummary> {
                 .get(0)
                 .and_then(|snippet| text_of(&snippet["snippetText"]))
                 .or_else(|| text_of(&video["descriptionSnippet"])),
+            channel_handle,
             id,
         },
     )
@@ -262,6 +268,20 @@ mod tests {
             Some("https://yt3.ggpht.com/a=s512")
         );
         assert!(!video.is_upcoming && !video.is_short && !video.is_live);
+        assert_eq!(video.channel_handle, None);
+    }
+
+    #[test]
+    fn the_bylines_handle_link_is_the_channel_handle() {
+        let mut item = search_video();
+        item["videoRenderer"]["ownerText"]["runs"][0]["navigationEndpoint"]["browseEndpoint"]["canonicalBaseUrl"] =
+            json!("/@Owner");
+        let video = video_from_item(&item).unwrap();
+        assert_eq!(video.channel_handle.as_deref(), Some("/@Owner"));
+
+        item["videoRenderer"]["ownerText"]["runs"][0]["navigationEndpoint"]["browseEndpoint"]["canonicalBaseUrl"] =
+            json!("/channel/UCowner");
+        assert_eq!(video_from_item(&item).unwrap().channel_handle, None);
     }
 
     #[test]

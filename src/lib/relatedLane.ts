@@ -27,6 +27,7 @@ export function relatedItemToVideoSummary(item: RelatedContentItem): VideoSummar
     isShort: item.isShort,
     badges: item.badges,
     collaborators: item.collaborators,
+    channelHandle: item.channelHandle,
   };
 }
 

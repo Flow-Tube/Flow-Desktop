@@ -33,6 +33,26 @@ pub fn browse_id_in_runs(container: &Value, field: &str) -> Option<String> {
     })
 }
 
+/// A browse endpoint's `/@handle` path, when it opens a channel by its handle.
+#[must_use]
+pub fn browse_handle(endpoint: &Value) -> Option<String> {
+    endpoint["browseEndpoint"]["canonicalBaseUrl"]
+        .as_str()
+        .filter(|path| path.starts_with("/@"))
+        .map(ToOwned::to_owned)
+}
+
+/// The `/@handle` of the run in `container[field]` that links to `channel_id`.
+#[must_use]
+pub fn browse_handle_in_runs(container: &Value, field: &str, channel_id: &str) -> Option<String> {
+    container[field]["runs"].as_array()?.iter().find_map(|run| {
+        let endpoint = &run["navigationEndpoint"];
+        (endpoint["browseEndpoint"]["browseId"] == channel_id)
+            .then(|| browse_handle(endpoint))
+            .flatten()
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

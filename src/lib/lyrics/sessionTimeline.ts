@@ -1,5 +1,5 @@
 import type { LyricsEntry } from "./types";
-import { segmenter } from "./display/textLayout";
+import { graphemeStarts } from "./display/textLayout";
 
 /**
  * Port of Android's SessionLyricTimeline: which lyric text belongs at a playback position, for the
@@ -94,24 +94,12 @@ function repeatCount(lines: LyricsEntry[], index: number): number {
   return index - first + 1;
 }
 
-function codePointStarts(text: string): number[] {
-  const starts: number[] = [];
-  let at = 0;
-  for (const character of text) {
-    starts.push(at);
-    at += character.length;
-  }
-  return starts;
-}
-
 /** Where to cut for two parts of about equal width: at a space when there is one, else between characters. */
 function balancedBreak(text: string): number | null {
   let cuts: number[] = [];
   for (let i = 1; i < text.length; i++) if (/\s/.test(text[i]!)) cuts.push(i);
   if (cuts.length === 0) {
-    const graphemes = segmenter("grapheme");
-    const starts = graphemes ? [...graphemes.segment(text)].map((g) => g.index) : codePointStarts(text);
-    cuts = starts.filter((at) => at > 0 && at < text.length);
+    cuts = graphemeStarts(text).filter((at) => at > 0 && at < text.length);
   }
   let best: number | null = null;
   let bestGap = Number.POSITIVE_INFINITY;

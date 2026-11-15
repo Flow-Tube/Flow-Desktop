@@ -1055,3 +1055,18 @@
 :root[data-app-font="system"] body {
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, Cantarell, "Noto Sans Arabic", "Noto Naskh Arabic", sans-serif;
 }
+
+/* Each system's narrow sans: Android's sans-serif-condensed is Roboto Condensed. */
+:root[data-app-font="condensed"] body {
+  font-family: "Roboto Condensed", "Arial Narrow", "Helvetica Neue", "Ubuntu Condensed", "DejaVu Sans Condensed", system-ui, "Noto Sans Arabic", "Noto Naskh Arabic", sans-serif;
+  font-stretch: condensed;
+}
+
+:root[data-app-font="serif"] body {
+  font-family: ui-serif, "New York", Georgia, "Noto Serif", "DejaVu Serif", "Times New Roman", "Noto Naskh Arabic", serif;
+}
+
+/* Letters the custom font lacks come from the system font. */
+:root[data-app-font="custom"] body {
+  font-family: "FlowCustomFont", system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, Cantarell, "Noto Sans Arabic", "Noto Naskh Arabic", sans-serif;
+}

@@ -861,6 +861,8 @@ pub fn run() {
             updates_supported,
             set_player_fullscreen,
             commands::window::set_window_background,
+            commands::app_font::save_custom_font,
+            commands::app_font::read_custom_font,
             commands::theme::theme_file_state,
             commands::theme::create_theme_file,
             commands::theme::reveal_theme_file,

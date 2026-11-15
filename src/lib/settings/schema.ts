@@ -43,6 +43,7 @@ export const SETTINGS = {
   THEME_DARK_ID: "theme_dark_id",
   THEME_DARK_STYLE: "theme_dark_style",
   APP_FONT: "app_font",
+  APP_FONT_CUSTOM_NAME: "app_font_custom_name",
   EXPRESSIVE_SLIDERS_ENABLED: "expressive_sliders_enabled",
   CUSTOM_THEMES: "custom_themes",
 
@@ -305,6 +306,7 @@ export const SETTING_SCOPES = {
   [SETTINGS.THEME_DARK_ID]: "profile",
   [SETTINGS.THEME_DARK_STYLE]: "profile",
   [SETTINGS.APP_FONT]: "profile",
+  [SETTINGS.APP_FONT_CUSTOM_NAME]: "profile",
   [SETTINGS.EXPRESSIVE_SLIDERS_ENABLED]: "profile",
   [SETTINGS.CUSTOM_THEMES]: "profile",
   [SETTINGS.AUTOPLAY_ENABLED]: "profile",
@@ -640,7 +642,8 @@ export const SETTING_DEFINITIONS = [
   str(SETTINGS.THEME_LIGHT_ID, "appearance", "default", "wired"),
   str(SETTINGS.THEME_DARK_ID, "appearance", "default", "wired"),
   str(SETTINGS.THEME_DARK_STYLE, "appearance", "dark", "wired", ["dark", "amoled"]),
-  str(SETTINGS.APP_FONT, "appearance", "inter", "wired", ["inter", "system"]),
+  str(SETTINGS.APP_FONT, "appearance", "inter", "wired", ["inter", "system", "condensed", "serif", "custom"]),
+  str(SETTINGS.APP_FONT_CUSTOM_NAME, "appearance", "", "wired"),
   bool(SETTINGS.EXPRESSIVE_SLIDERS_ENABLED, "appearance", true, "wired"),
   json(SETTINGS.CUSTOM_THEMES, "appearance", "[]", "wired"),
 

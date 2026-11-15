@@ -1,3 +1,4 @@
+pub mod app_font;
 pub mod app_window;
 pub mod backup;
 pub mod backup_files;

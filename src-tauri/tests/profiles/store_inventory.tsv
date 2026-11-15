@@ -155,3 +155,4 @@ dir_site	src/commands/local_media.rs	CACHE	-	local_covers, disposable covers rea
 dir_site	src/commands/cache.rs	CACHE	-	Reports and clears the disposable caches
 file	profiles_local.json	DEVICE	-	Desktop-only profile state: keychain deletes to retry
 file	profile_avatars	DEVICE	-	Profile photos, <id>.webp
+dir_site	src/commands/app_font.rs	DEVICE	-	fonts/custom.ttf or .otf, the custom app font, never backed up

@@ -20,6 +20,7 @@ import { THEME_FILE_ID } from "./themeFile";
 import { useSystemDarkMode } from "./useSystemDarkMode";
 import { useThemeFileSync } from "./useThemeFile";
 import { saveBootTheme } from "./profiles/bootTheme";
+import { useAppFont } from "./appFont";
 
 export function useTheme() {
   const pickedThemeId = useAppSettingsStore((state) => state.values[SETTINGS.THEME_ID] ?? "default");
@@ -73,7 +74,6 @@ export function useTheme() {
 
 export function ThemeController() {
   const { theme, themeId, variant, followSystem } = useTheme();
-  const appFont = useAppSettingsStore((state) => state.values[SETTINGS.APP_FONT] ?? "inter");
   const settingsLoaded = useAppSettingsStore((state) => state.loaded);
   useThemeFileSync(themeId === THEME_FILE_ID);
 
@@ -106,9 +106,7 @@ export function ThemeController() {
     return () => { disposed = true; };
   }, [followSystem, theme, variant]);
 
-  useEffect(() => {
-    document.documentElement.dataset.appFont = appFont;
-  }, [appFont]);
+  useAppFont();
 
   return null;
 }

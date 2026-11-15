@@ -27,7 +27,7 @@ import { getString } from "../../../lib/i18n/index";
 import { MESH_SIZE } from "../../../lib/lyrics/display/coverMesh";
 import type { CardAlign, CardAspect, CardFrame, CardLayout } from "../../../lib/lyrics/lyricCardRenderer";
 import { backdropColor, CARD_STYLE_LABELS, type CardStyle, type CardStyleId } from "../../../lib/lyrics/palette";
-import { MAX_SHARE_LINES, shareLineIndexAt, shareLines, toggleShareLine } from "../../../lib/lyrics/shareSelection";
+import { autoSelectLyricIndices, MAX_SHARE_LINES, shareLineIndexAt, shareLines, toggleShareLine } from "../../../lib/lyrics/shareSelection";
 import { useLyricCardArtwork, useLyricCardImage } from "../../../lib/lyrics/useLyricCard";
 import { upgradeMusicImageUrl } from "../../../lib/thumbnails";
 import { useLyricsStore } from "../../../store/useLyricsStore";
@@ -127,7 +127,7 @@ export function LyricsShareDialog({ track, initialAlign, onClose }: { track: Son
   const lines = useMemo(() => shareLines(entries, plain ?? ""), [entries, plain]);
   // Read once: the picker opens at the line being sung and doesn't follow playback.
   const [playingIndex] = useState(() => shareLineIndexAt(lines, musicAudioEngine.getCurrentTime() * 1000 + syncOffsetMs));
-  const [selected, setSelected] = useState<number[]>([]);
+  const [selected, setSelected] = useState<number[]>(() => autoSelectLyricIndices(lines.length, playingIndex, 4));
   const [step, setStep] = useState<"select" | "style">("select");
   // Held here so going back to change the lines keeps the look already picked.
   const [styleId, setStyleId] = useState<CardStyleId>("artwork");

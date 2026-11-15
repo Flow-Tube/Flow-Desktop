@@ -67,22 +67,21 @@ const pick = (...texts: string[]) => {
 const lastLook = () => imageArgs.mock.calls[imageArgs.mock.calls.length - 1]![1];
 
 describe("LyricsShareDialog", () => {
-  it("starts with nothing picked, as on Android", () => {
-    expect(lineButtons().filter((b) => b.getAttribute("aria-pressed") === "true")).toHaveLength(0);
-    expect(document.body.textContent).toContain("0 of 5 lines selected");
-    expect(button("Next")!.disabled).toBe(true);
+  it("starts with the current playing lines auto-selected", () => {
+    expect(lineButtons().filter((b) => b.getAttribute("aria-pressed") === "true")).toHaveLength(4);
+    expect(document.body.textContent).toContain("4 of 5 lines selected");
+    expect(button("Next")!.disabled).toBe(false);
   });
 
   it("stops at five lines", () => {
-    pick("Line 1", "Line 2", "Line 3", "Line 4", "Line 5");
-    expect(lineButtons().find((b) => b.textContent === "Line 6")!.disabled).toBe(true);
+    pick("Line 1");
+    expect(lineButtons().find((b) => b.textContent === "Line 7")!.disabled).toBe(true);
   });
 
   it("draws the picked lines in Android's default look, and copies inside the click", () => {
-    pick("Line 4", "Line 2");
     click(button("Next"));
     const [data] = imageArgs.mock.calls[imageArgs.mock.calls.length - 1]!;
-    expect(data).toEqual({ lines: ["Line 2", "Line 4"], title: "Test Song", artist: "Test Artist" });
+    expect(data).toEqual({ lines: ["Line 3", "Line 4", "Line 5", "Line 6"], title: "Test Song", artist: "Test Artist" });
     expect(lastLook()).toMatchObject({ style: { id: "artwork" }, align: "center", layout: "classic", aspect: "fit", frame: "square" });
     expect(document.querySelector("img")?.getAttribute("src")).toBe("blob:card");
 
@@ -93,7 +92,6 @@ describe("LyricsShareDialog", () => {
   });
 
   it("changes the colour, layout, size, edges and alignment, and keeps them when going back", () => {
-    pick("Line 1");
     click(button("Next"));
     click(document.querySelector('[aria-label="Surface"]')!);
     click(button("Poster"));

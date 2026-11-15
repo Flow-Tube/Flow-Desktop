@@ -162,6 +162,8 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   ...rows("lyrics", [
     { title: "lyrics_alignment" },
     { title: "lyrics_background", summary: "lyrics_background_summary", keywords: ["colorful", "moving", "cover", "wallpaper"] },
+    { title: "lyrics_animation", summary: "lyrics_animation_summary", keywords: ["cadence", "classic", "calm", "karaoke", "motion"] },
+    { title: "lyrics_glow", summary: "lyrics_glow_summary", keywords: ["karaoke", "held note", "bright"] },
     { title: "lyrics_show_translation", summary: "lyrics_show_translation_summary" },
     { title: "lyrics_show_romanization", summary: "lyrics_show_romanization_summary" },
     { title: "lyrics_auto_romanize", summary: "lyrics_auto_romanize_summary", keywords: ["transliterate", "latin"] },

@@ -106,6 +106,8 @@ export interface FlowPlayerControlsProps {
   speedOptions?: PlaybackRate[];
   speedSliderEnabled?: boolean;
   onSelectPlaybackRate?: (playbackRate: PlaybackRate) => void;
+  /** The 360 view switch in the settings menu; null where it can't show. */
+  spherical?: { shown: boolean; onToggle: (shown: boolean) => void } | null;
 
   settingsOpen: boolean;
   setSettingsOpen: React.Dispatch<React.SetStateAction<boolean>>;
@@ -177,6 +179,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
   speedOptions = defaultSpeedOptions,
   speedSliderEnabled = false,
   onSelectPlaybackRate,
+  spherical = null,
   settingsOpen,
   setSettingsOpen,
   isScrubbing,
@@ -1012,6 +1015,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
         speedSliderEnabled={speedSliderEnabled}
         playbackRate={playbackRate}
         onSelectPlaybackRate={selectPlaybackRate}
+        spherical={spherical}
       />
 
       {submitDialogOpen && currentVideo && (

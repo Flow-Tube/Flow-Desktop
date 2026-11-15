@@ -68,6 +68,10 @@ export interface EqWorkingCopy {
   curve: EqCurve;
 }
 
+/** How strongly stereo is widened, as Android stores it. Desktop doesn't play it yet but keeps it. */
+export type EqSpatialSound = "OFF" | "LOW" | "MEDIUM" | "HIGH";
+export const EQ_SPATIAL_SOUNDS: readonly EqSpatialSound[] = ["OFF", "LOW", "MEDIUM", "HIGH"];
+
 export interface EqState {
   version: number;
   enabled: boolean;
@@ -76,6 +80,7 @@ export interface EqState {
   graphic: EqWorkingCopy;
   autoPreamp: boolean;
   bassBoost: number;
+  spatialSound: EqSpatialSound;
   userPresets: EqPreset[];
 }
 

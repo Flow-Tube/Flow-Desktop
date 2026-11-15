@@ -112,6 +112,26 @@ describe("drawLyricCard", () => {
     drawLyricCard(ctx, arabic, { ...look, align: "right" }, plan({ align: "right" }, arabic), null);
     expect(texts.find((entry) => entry.text === "أحبك يا قمر")).toMatchObject({ direction: "rtl", align: "right" });
   });
+
+  it("crops the background mesh with cover aspect ratio without distortion", () => {
+    const { ctx } = fakeContext();
+    const mesh = new Uint8ClampedArray(64 * 64 * 4);
+    const storyPlan = plan({ aspect: "story" });
+    drawLyricCard(ctx, data, { ...look, aspect: "story", style: { ...look.style, mesh } }, storyPlan, null);
+
+    // Verify drawImage was called for the mesh with cropped source coordinates
+    const meshCall = vi.mocked(ctx.drawImage).mock.calls.find((call) => call.length === 9);
+    expect(meshCall).toBeDefined();
+    if (meshCall) {
+      const [, sx, sy, sw, sh, , , dw, dh] = meshCall;
+      // In a 9:16 card, source width is cropped (sx > 0, sy === 0)
+      expect(sx).toBeGreaterThan(0);
+      expect(sy).toBe(0);
+      expect(sh).toBe(64);
+      // Source aspect ratio matches destination aspect ratio exactly
+      expect((sw as number) / (sh as number)).toBeCloseTo((dw as number) / (dh as number), 2);
+    }
+  });
 });
 
 describe("lyricsCopyText", () => {

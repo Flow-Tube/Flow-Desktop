@@ -250,7 +250,12 @@ function drawMesh(ctx: CanvasRenderingContext2D, mesh: Uint8ClampedArray, x: num
   field.getContext("2d")?.putImageData(new ImageData(new Uint8ClampedArray(mesh), MESH_SIZE, MESH_SIZE), 0, 0);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(field, x, y, width, height);
+  const aspect = width / height;
+  const sourceWidth = aspect <= 1 ? MESH_SIZE * aspect : MESH_SIZE;
+  const sourceHeight = aspect <= 1 ? MESH_SIZE : MESH_SIZE / aspect;
+  const sx = (MESH_SIZE - sourceWidth) / 2;
+  const sy = (MESH_SIZE - sourceHeight) / 2;
+  ctx.drawImage(field, sx, sy, sourceWidth, sourceHeight, x, y, width, height);
 }
 
 /** The cover cropped to a square, as Android's ContentScale.Crop does. */

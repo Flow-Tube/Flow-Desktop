@@ -54,6 +54,7 @@ SYNC
 - Linked devices: while another device is reachable, your changes go out about 10 seconds after you make them, at most once a minute. Watch history goes out when a video pauses, stops or changes, and changed app settings wait for the next sync.
 - Linked devices reach a Flow server or WebDAV folder on your local network directly, even when a system proxy is set.
 - Linked devices only ever touch files inside the group's own WebDAV folder.
+- Linked devices: choose what this computer syncs. Watch history, playlists, likes, subscriptions, notes, recommendations and settings can each be left out here while your other devices keep syncing them. Turning one back on reads it again from your group.
 - One device's unreadable change no longer keeps other devices' changes from arriving, however many are waiting.
 - When the store refuses something this computer wrote, Linked devices keep receiving changes, retry it in order and show the error, instead of stopping the sync.
 - On the local network, a connection that stays silent is dropped after a few seconds, and it no longer stops this computer from meeting your other devices or answering them.

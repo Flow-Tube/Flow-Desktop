@@ -33,6 +33,7 @@ pub mod lan_link;
 pub mod lan_peers;
 pub mod lan_runtime;
 pub mod lan_sync;
+pub mod left_out;
 pub mod link_read;
 pub mod link_task;
 pub mod linking;

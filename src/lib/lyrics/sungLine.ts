@@ -7,44 +7,32 @@ const MAX_LINE_MS = 8000;
 /** A line that ends this long before the next one gives way to the artist once it is over. */
 const BREAK_MS = 6000;
 
-export interface SungLine {
-  index: number;
-  text: string;
-  /** How much of the line has been sung, 0 to 1. */
-  fill: number;
-}
+/** Whether an entry is a timed main line the mini player can sing. */
+export const isSungLine = (entry: LyricsEntry): boolean =>
+  !entry.isBackground && entry.time > 0 && entry.time < PLAIN_PLACEHOLDER_MS && entry.text.trim().length > 0;
 
 /**
- * The line being sung at `atMs`, for the mini player: filled word by word when the lyrics carry
- * word times, otherwise evenly up to the next line. Null before the first line, during a long
- * instrumental break, and for unsynced lyrics, so the mini player shows the artist then.
+ * The index of the line being sung at `atMs`, for the mini player. Null before the first line,
+ * during a long instrumental break, and for unsynced lyrics, so the mini player shows the artist.
  */
-export function sungLineAt(entries: readonly LyricsEntry[], atMs: number): SungLine | null {
+export function sungLineIndexAt(entries: readonly LyricsEntry[], atMs: number): number | null {
   let index = -1;
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i]!;
-    if (entry.isBackground || entry.time <= 0 || entry.time >= PLAIN_PLACEHOLDER_MS) continue;
+    if (!isSungLine(entry)) continue;
     if (entry.time > atMs) break;
     index = i;
   }
   if (index < 0) return null;
   const line = entries[index]!;
-  const text = line.text.trim();
-  if (!text) return null;
-  const next = entries.slice(index + 1).find((entry) => !entry.isBackground && entry.time > line.time);
-  const words = line.words ?? [];
-  const lastWord = words[words.length - 1];
+  const next = entries.slice(index + 1).find((entry) => isSungLine(entry) && entry.time > line.time);
+  const lastWord = line.words?.[line.words.length - 1];
   const end = lastWord ? lastWord.endTime : Math.min(next?.time ?? Infinity, line.time + MAX_LINE_MS);
   if (atMs > end && (!next || next.time - end > BREAK_MS)) return null;
-  if (words.length > 0) {
-    const sung = words.filter((word) => word.startTime <= atMs).length;
-    const current = words[Math.max(0, sung - 1)];
-    const within =
-      current && current.endTime > current.startTime
-        ? Math.min(1, Math.max(0, (atMs - current.startTime) / (current.endTime - current.startTime)))
-        : 1;
-    return { index, text, fill: Math.min(1, (Math.max(0, sung - 1) + within) / words.length) };
-  }
-  const span = Math.max(1, end - line.time);
-  return { index, text, fill: Math.min(1, Math.max(0, (atMs - line.time) / span)) };
+  return index;
+}
+
+/** When each entry's next timed line starts, for spreading word timings over a line that has none. */
+export function nextLineTimes(entries: readonly LyricsEntry[]): Array<number | null> {
+  return entries.map((entry, i) => entries.slice(i + 1).find((other) => isSungLine(other) && other.time > entry.time)?.time ?? null);
 }

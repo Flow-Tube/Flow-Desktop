@@ -169,7 +169,10 @@ export function Watch() {
       relatedLane.items.filter((item) => {
         if (item.itemType && item.itemType !== "video") return true; // keep playlists / mixes
         const id = item.videoId || item.id;
-        return unseen.isShown(id) && !isHidden({ id, channelId: item.channelId } as VideoSummary);
+        return (
+          unseen.isShown(id) &&
+          !isHidden({ id, channelId: item.channelId, channelHandle: item.channelHandle, collaborators: item.collaborators } as VideoSummary)
+        );
       }),
     [relatedLane.items, isHidden, unseen],
   );

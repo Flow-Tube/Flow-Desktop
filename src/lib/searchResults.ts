@@ -48,26 +48,30 @@ export interface CombinedSearchResults {
 export interface SearchExclusions {
   videoIds: ReadonlySet<string>;
   channelIds: ReadonlySet<string>;
+  /** The AiSList filter: true for a channel it hides. Search is asked on its own, as on Android. */
+  hidesAsAi?: (channelId: string, handle?: string | null) => boolean;
 }
 
 const cleanChannelId = (id?: string | null) => (id ?? '').replace('channel:', '');
 
 export function withoutHidden(results: CombinedSearchResults, hidden: SearchExclusions): CombinedSearchResults {
-  if (hidden.videoIds.size === 0 && hidden.channelIds.size === 0) return results;
-  const hidesChannel = (id?: string | null) => hidden.channelIds.has(cleanChannelId(id));
-  const visible = <T extends { id: string; channelId?: string | null }>(videos: T[]) =>
-    videos.filter((video) => !hidden.videoIds.has(video.id) && !hidesChannel(video.channelId));
+  const asAi = hidden.hidesAsAi;
+  if (hidden.videoIds.size === 0 && hidden.channelIds.size === 0 && !asAi) return results;
+  const hidesChannel = (id?: string | null, handle?: string | null) =>
+    hidden.channelIds.has(cleanChannelId(id)) || (!!asAi && asAi(cleanChannelId(id), handle));
+  const visible = <T extends { id: string; channelId?: string | null; channelHandle?: string | null }>(videos: T[]) =>
+    videos.filter((video) => !hidden.videoIds.has(video.id) && !hidesChannel(video.channelId, video.channelHandle));
   const top = results.topResult;
   const topHidden =
     (top?.kind === 'video' && visible([top.item]).length === 0) ||
-    (top?.kind === 'channel' && hidesChannel(top.item.channelId));
+    (top?.kind === 'channel' && hidesChannel(top.item.channelId, top.item.handle));
   return {
     ...results,
     topResult: topHidden ? null : top,
     videos: visible(results.videos),
     live: visible(results.live),
     shorts: visible(results.shorts),
-    channels: results.channels.filter((channel) => !hidesChannel(channel.channelId)),
+    channels: results.channels.filter((channel) => !hidesChannel(channel.channelId, channel.handle)),
     shelves: results.shelves
       .map((shelf) => ({ ...shelf, videos: visible(shelf.videos) }))
       .filter((shelf) => shelf.videos.length > 0),

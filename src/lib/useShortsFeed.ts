@@ -5,6 +5,7 @@ import { getShortsFeed, loadMoreShorts, resetShortsFeed } from "./api/shorts";
 import { SETTINGS } from "./settings/schema";
 import { loadFinishedShortIds } from "./useWatchedFilter";
 import { useAppSettingsStore } from "../store/useAppSettingsStore";
+import { getAiListMatcher } from "../store/useAiListStore";
 import type { ShortItem, ShortsFeed } from "../types/shorts";
 
 
@@ -73,6 +74,8 @@ export function visibleFetchedShorts<T extends Pick<ShortItem, "id"> & { channel
   const hideWatched = useAppSettingsStore.getState().values[SETTINGS.HIDE_WATCHED_SHORTS] !== "false";
   const suppressedCutoff = Date.now() - 14 * 24 * 60 * 60 * 1000;
 
+  const aiMatcher = getAiListMatcher();
+
   return items.filter((short) => {
     if (dismissedVideoIds.has(short.id)) return false;
     if (hideWatched && (watchedVideoIds.has(short.id) || finished.has(short.id))) return false;
@@ -80,7 +83,8 @@ export function visibleFetchedShorts<T extends Pick<ShortItem, "id"> & { channel
     if (!channelId) return true;
     return (
       !blockedChannelIds.has(channelId) &&
-      (suppressedChannelIds.get(channelId) ?? 0) < suppressedCutoff
+      (suppressedChannelIds.get(channelId) ?? 0) < suppressedCutoff &&
+      aiMatcher.verdict(channelId) !== "block"
     );
   });
 }

@@ -8,7 +8,7 @@ vi.mock("./refreshAfterRestore", () => ({ refreshAfterRestore: () => refreshAfte
 import { importFailureMessage, importReportSummary, runOtherAppImport } from "./otherAppImport";
 import { IMPORT_SOURCES } from "./importSources";
 
-const EMPTY = { subscriptions: 0, history: 0, playlists: 0, playlistVideos: 0, musicPlaylists: 0, musicLibrary: 0, likes: 0 };
+const EMPTY = { subscriptions: 0, history: 0, playlists: 0, playlistVideos: 0, musicPlaylists: 0, musicLibrary: 0, likes: 0, adsRemoved: 0 };
 
 describe("imports from other apps", () => {
   beforeEach(() => {
@@ -19,6 +19,11 @@ describe("imports from other apps", () => {
   it("says what was added, in the singular where it fits", () => {
     expect(importReportSummary({ ...EMPTY, subscriptions: 1, history: 2, playlists: 1, playlistVideos: 3, likes: 5 }))
       .toBe("1 subscription, 2 history entries, 1 playlist (3 videos), 5 likes");
+  });
+
+  it("says how many ads left the history", () => {
+    expect(importReportSummary({ ...EMPTY, history: 2, adsRemoved: 1 })).toBe("2 history entries, 1 ad removed from history");
+    expect(importReportSummary({ ...EMPTY, adsRemoved: 3 })).toBe("3 ads removed from history");
   });
 
   it("says so when nothing was new", () => {

@@ -27,6 +27,7 @@ export function importReportSummary(report: ImportReport): string {
   if (report.musicPlaylists > 0) parts.push(getPlural("import_part_music_playlists", report.musicPlaylists));
   if (report.musicLibrary > 0) parts.push(getPlural("import_part_library", report.musicLibrary));
   if (report.likes > 0) parts.push(getPlural("import_part_likes", report.likes));
+  if (report.adsRemoved > 0) parts.push(getPlural("import_part_ads_removed", report.adsRemoved));
   return parts.length > 0 ? parts.join(", ") : getString("import_done_nothing_new");
 }
 

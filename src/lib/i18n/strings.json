@@ -1923,6 +1923,8 @@
   "import_part_library_other": "%s YouTube Music library songs",
   "import_part_likes_one": "%s like",
   "import_part_likes_other": "%s likes",
+  "import_part_ads_removed_one": "%s ad removed from history",
+  "import_part_ads_removed_other": "%s ads removed from history",
   "import_flowneuro_card_title": "Your taste",
   "import_flowneuro_card_body": "When watch history or subscriptions are imported, the local recommendation engine automatically seeds interest profiles from titles, keywords, and creators.",
   "sidebar_flowneuron": "Your taste",

@@ -540,6 +540,39 @@ fn collect_stream_variants(
     (variants, last_error)
 }
 
+fn is_speech_track(track: &Value) -> bool {
+    track["kind"]
+        .as_str()
+        .is_some_and(|kind| kind.eq_ignore_ascii_case("asr"))
+        || track["vssId"]
+            .as_str()
+            .is_some_and(|id| id.starts_with("a."))
+}
+
+// The speech track, as the official apps ask for a translation: timedtext
+// refuses translations of an authored track more often. An auto-dub's speech
+// track is passed over, since translating it would translate the dub.
+fn translation_source(tracks: &[Value]) -> Option<&Value> {
+    let translatable: Vec<&Value> = tracks
+        .iter()
+        .filter(|track| {
+            track["isTranslatable"].as_bool().unwrap_or(false)
+                && track["baseUrl"].as_str().is_some()
+        })
+        .collect();
+    let is_dub_transcript = |track: &Value| {
+        track["baseUrl"]
+            .as_str()
+            .is_some_and(|url| url.contains("variant=timing-optimized"))
+    };
+    translatable
+        .iter()
+        .find(|track| is_speech_track(track) && !is_dub_transcript(track))
+        .or_else(|| translatable.iter().find(|track| !is_speech_track(track)))
+        .or_else(|| translatable.first())
+        .copied()
+}
+
 fn collect_caption_tracks(response: &Value) -> Vec<CaptionTrack> {
     let renderer = &response["captions"]["playerCaptionsTracklistRenderer"];
     let Some(tracks) = renderer["captionTracks"].as_array() else {
@@ -556,12 +589,7 @@ fn collect_caption_tracks(response: &Value) -> Vec<CaptionTrack> {
         let language_code = track["languageCode"].as_str().unwrap_or("und").to_string();
         native_language_codes.insert(language_code.clone());
         let label = text_of(&track["name"]).unwrap_or_else(|| language_code.clone());
-        let vss_id = track["vssId"].as_str().unwrap_or_default();
-        let is_auto_generated = vss_id.starts_with("a.")
-            || track["kind"]
-                .as_str()
-                .map(|kind| kind.eq_ignore_ascii_case("asr"))
-                .unwrap_or(false);
+        let is_auto_generated = is_speech_track(track);
         let Some(url) = caption_url(base_url, None) else {
             continue;
         };
@@ -576,22 +604,7 @@ fn collect_caption_tracks(response: &Value) -> Vec<CaptionTrack> {
         });
     }
 
-    // Translate from an authored track when there is one: a translation of the
-    // speech-recognition track carries every recognition error into the target.
-    let translatable_track = tracks
-        .iter()
-        .filter(|track| {
-            track["isTranslatable"].as_bool().unwrap_or(false)
-                && track["baseUrl"].as_str().is_some()
-        })
-        .min_by_key(|track| {
-            track["kind"].as_str() == Some("asr")
-                || track["vssId"]
-                    .as_str()
-                    .is_some_and(|id| id.starts_with("a."))
-        });
-
-    if let Some(track) = translatable_track {
+    if let Some(track) = translation_source(tracks) {
         let base_url = track["baseUrl"].as_str().unwrap_or_default();
         if let Some(translation_languages) = renderer["translationLanguages"].as_array() {
             let mut seen_translations = HashSet::new();
@@ -3083,5 +3096,84 @@ mod projection_tests {
         assert_eq!(stream_projection(&flat), None);
         assert_eq!(stream_projection(&mesh), None);
         assert_eq!(stream_projection(&json!({})), None);
+    }
+}
+
+#[cfg(test)]
+mod caption_translation_tests {
+    use super::*;
+    use serde_json::json;
+
+    const BASE_URL: &str = "https://www.youtube.com/api/timedtext?v=x&lang=en";
+
+    fn track(language: &str, kind: Option<&str>, url: &str) -> Value {
+        let mut track = json!({
+            "baseUrl": url,
+            "languageCode": language,
+            "isTranslatable": true,
+        });
+        if let Some(kind) = kind {
+            track["kind"] = json!(kind);
+        }
+        track
+    }
+
+    fn translated_url(tracks: &[Value]) -> String {
+        let response = json!({ "captions": { "playerCaptionsTracklistRenderer": {
+            "captionTracks": tracks,
+            "translationLanguages": [{ "languageCode": "ar", "languageName": { "simpleText": "Arabic" } }],
+        } } });
+        let translated = collect_caption_tracks(&response)
+            .into_iter()
+            .find(|caption| caption.is_translation)
+            .expect("an Arabic translation is offered");
+        assert!(translated.url.contains("tlang=ar"));
+        translated.url
+    }
+
+    #[test]
+    fn the_speech_track_is_translated_before_an_authored_one_as_youtubes_apps_do() {
+        let url = translated_url(&[
+            track("en", None, BASE_URL),
+            track("en", Some("asr"), &format!("{BASE_URL}&kind=asr")),
+        ]);
+        assert!(
+            url.contains("kind=asr"),
+            "the asr track should be the source: {url}"
+        );
+        assert!(url.contains("fmt=vtt"));
+    }
+
+    #[test]
+    fn an_auto_dub_transcript_is_not_the_translation_source() {
+        let url = translated_url(&[
+            track(
+                "de",
+                Some("asr"),
+                &format!("{BASE_URL}&kind=asr&variant=timing-optimized"),
+            ),
+            track("en", Some("asr"), &format!("{BASE_URL}&kind=asr")),
+        ]);
+        assert!(!url.contains("variant=timing-optimized"), "{url}");
+    }
+
+    #[test]
+    fn an_authored_track_is_the_source_when_only_a_dub_transcript_speaks() {
+        let url = translated_url(&[
+            track(
+                "de",
+                Some("asr"),
+                &format!("{BASE_URL}&kind=asr&variant=timing-optimized"),
+            ),
+            track("en", None, &format!("{BASE_URL}&name=authored")),
+        ]);
+        assert!(url.contains("name=authored"), "{url}");
+    }
+
+    #[test]
+    fn an_authored_only_source_is_still_asked_for_as_vtt() {
+        let url = translated_url(&[track("en", None, BASE_URL)]);
+        assert!(url.contains("fmt=vtt"));
+        assert!(!url.contains("fmt=srv3"));
     }
 }

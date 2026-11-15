@@ -5,7 +5,7 @@
 use serde_json::Value;
 
 use super::collaborators::collaborators_in;
-use crate::api::innertube::json::age::relative_age;
+use crate::api::innertube::json::age::{published_at_ms, relative_age};
 use crate::api::innertube::json::count::parse_count;
 use crate::api::innertube::json::duration::parse_duration;
 use crate::api::innertube::json::text::{browse_id_in_runs, text_of};
@@ -58,6 +58,7 @@ pub fn video_from_renderer(video: &Value) -> Option<VideoSummary> {
         .or_else(|| text_of(&video["shortViewCountText"]))
         .or(info_views);
     let badges = badge_labels(video);
+    let published_text = text_of(&video["publishedTimeText"]).or(info_published);
     Some(
         VideoSummary {
             title: text_of(&video["title"]).unwrap_or_default(),
@@ -68,7 +69,8 @@ pub fn video_from_renderer(video: &Value) -> Option<VideoSummary> {
             channel_id,
             thumbnail_url: best_video_thumbnail_url(&id, Some(&video["thumbnail"]["thumbnails"])),
             duration_seconds: duration_of(video),
-            published_text: text_of(&video["publishedTimeText"]).or(info_published),
+            published_at_ms: published_text.as_deref().and_then(published_at_ms),
+            published_text,
             view_count: (!is_upcoming)
                 .then(|| view_count_text.as_deref().and_then(parse_count))
                 .flatten(),
@@ -256,6 +258,7 @@ mod tests {
         assert_eq!(video.view_count, Some(1_234_567));
         assert!(video.is_verified);
         assert_eq!(video.badges, ["4K", "New"]);
+        assert!(video.published_at_ms.is_some_and(|at| at > 0));
         assert_eq!(video.snippet.as_deref(), Some("about gpus"));
         assert_eq!(
             video.channel_avatar_url.as_deref(),

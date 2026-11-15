@@ -8,6 +8,8 @@ export interface VideoSummary {
   publishedText?: string | null;
   /** Epoch ms a stored track's relative `publishedText` is pinned to. */
   publishedAt?: number | null;
+  /** Epoch ms the backend read `publishedText` as when it fetched the card, in any language. */
+  publishedAtMs?: number | null;
   /** Epoch ms a stored track was added to its playlist; missing for tracks saved before it was kept. */
   addedAtInPlaylist?: number | null;
   viewCountText?: string | null;
@@ -50,6 +52,7 @@ export interface RelatedContentItem {
   thumbnailUrl?: string | null;
   durationSeconds?: number | null;
   publishedText?: string | null;
+  publishedAtMs?: number | null;
   viewCountText?: string | null;
   videoId?: string | null;
   playlistId?: string | null;

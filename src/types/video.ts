@@ -30,6 +30,8 @@ export interface VideoSummary {
   collaborators?: Collaborator[];
   /** The description excerpt search results show. */
   snippet?: string | null;
+  /** The channel's `/@handle` path when the card links to it, which the AI channel list matches. */
+  channelHandle?: string | null;
 }
 
 /** One channel of a collaboration. */
@@ -63,6 +65,8 @@ export interface RelatedContentItem {
   isShort?: boolean;
   badges?: string[];
   collaborators?: Collaborator[];
+  /** The channel's `/@handle` path when the card links to it. */
+  channelHandle?: string | null;
 }
 
 export interface VideoChapter {

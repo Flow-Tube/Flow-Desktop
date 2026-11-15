@@ -29,6 +29,7 @@ import { episodeAsSong, pairCreator, withWatchState, withoutHidden, withoutShort
 import { useShortsEnabled } from '../../lib/useShortsContent';
 import { useWatchedVideoIds } from '../../lib/useWatchedFilter';
 import { useFeedActionsStore } from '../../store/useFeedActionsStore';
+import { useAiHidesChannel } from '../../lib/aiList/useAiList';
 import type { PlaylistSummary, SearchChannel, SearchShelf, VideoSummary } from '../../types/video';
 import { useOriginalTitle } from '../../lib/useOriginalTitle';
 import { joinIsolated } from '../../lib/direction';
@@ -76,11 +77,12 @@ export function SearchResults({ search, onPlayVideo, onAddToQueue }: SearchResul
   const watchFilterApplies = search.filterType === 'videos' || search.filterType === 'shorts' || search.filterType === 'live';
   const effectiveWatchState = watchFilterApplies ? watchState : 'any';
   const watchedIds = useWatchedVideoIds(effectiveWatchState !== 'any');
+  const hidesAsAi = useAiHidesChannel();
   const { creator, results: r } = useMemo(() => {
-    const visible = withoutHidden(search.results, { videoIds: dismissedVideoIds, channelIds: blockedChannelIds });
+    const visible = withoutHidden(search.results, { videoIds: dismissedVideoIds, channelIds: blockedChannelIds, hidesAsAi });
     const allowed = shortsEnabled ? visible : withoutShorts(visible);
     return pairCreator(withWatchState(allowed, effectiveWatchState, watchedIds));
-  }, [search.results, dismissedVideoIds, blockedChannelIds, shortsEnabled, effectiveWatchState, watchedIds]);
+  }, [search.results, dismissedVideoIds, blockedChannelIds, hidesAsAi, shortsEnabled, effectiveWatchState, watchedIds]);
 
   const {
     filterType,

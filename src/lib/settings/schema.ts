@@ -293,6 +293,14 @@ export const SETTINGS = {
   SPONSORBLOCK_SAVED_MINUTES: "sponsorblock_saved_minutes",
   SPONSORBLOCK_SAVED_SECONDS: "sponsorblock_saved_seconds",
   SPONSORBLOCK_SKIPPED_SEGMENTS: "sponsorblock_skipped_segments",
+
+  AI_LIST_BLOCK_ENABLED: "ai_list_block_enabled",
+  AI_LIST_WARN_ENABLED: "ai_list_warn_enabled",
+  AI_LIST_ALLOWED: "ai_list_allowed",
+  AI_LIST_REPORT_ENABLED: "ai_list_report_enabled",
+  AI_LIST_REPORT_NAME: "ai_list_report_name",
+  AI_LIST_SOURCE_URL: "ai_list_source_url",
+  AI_LIST_SOURCE_KEY: "ai_list_source_key",
 } as const;
 
 export type SettingKey = (typeof SETTINGS)[keyof typeof SETTINGS];
@@ -550,6 +558,14 @@ export const SETTING_SCOPES = {
   [SETTINGS.SPONSORBLOCK_SAVED_MINUTES]: "profile",
   [SETTINGS.SPONSORBLOCK_SAVED_SECONDS]: "profile",
   [SETTINGS.SPONSORBLOCK_SKIPPED_SEGMENTS]: "profile",
+  [SETTINGS.AI_LIST_BLOCK_ENABLED]: "profile",
+  [SETTINGS.AI_LIST_WARN_ENABLED]: "profile",
+  [SETTINGS.AI_LIST_ALLOWED]: "profile",
+  [SETTINGS.AI_LIST_REPORT_ENABLED]: "profile",
+  [SETTINGS.AI_LIST_REPORT_NAME]: "profile",
+  // The list itself is one per computer, so where it comes from is too (Android keeps these per device).
+  [SETTINGS.AI_LIST_SOURCE_URL]: "device",
+  [SETTINGS.AI_LIST_SOURCE_KEY]: "device",
 } as const satisfies Record<SettingKey, SettingScope>;
 
 const bool = (
@@ -909,6 +925,16 @@ export const SETTING_DEFINITIONS = [
   num(SETTINGS.SPONSORBLOCK_SAVED_MINUTES, "extensions", 0, "wired", 0, undefined, "internal"),
   num(SETTINGS.SPONSORBLOCK_SAVED_SECONDS, "extensions", 0, "wired", 0, undefined, "internal"),
   num(SETTINGS.SPONSORBLOCK_SKIPPED_SEGMENTS, "extensions", 0, "wired", 0, undefined, "internal"),
+
+  // AiSList channel filter, off by default. The list file lives outside the database and is never
+  // backed up or synced; these switches and the allow list back up like any profile setting.
+  bool(SETTINGS.AI_LIST_BLOCK_ENABLED, "extensions", false, "wired"),
+  bool(SETTINGS.AI_LIST_WARN_ENABLED, "extensions", false, "wired"),
+  json(SETTINGS.AI_LIST_ALLOWED, "extensions", "[]", "wired"),
+  bool(SETTINGS.AI_LIST_REPORT_ENABLED, "extensions", false, "wired"),
+  str(SETTINGS.AI_LIST_REPORT_NAME, "extensions", "", "wired"),
+  str(SETTINGS.AI_LIST_SOURCE_URL, "extensions", "", "wired"),
+  str(SETTINGS.AI_LIST_SOURCE_KEY, "extensions", "", "wired"),
 ] as const satisfies readonly SettingDefinition[];
 
 export const SETTING_DEFINITIONS_BY_KEY: ReadonlyMap<SettingKey, SettingDefinition> = new Map(

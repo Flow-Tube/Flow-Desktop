@@ -9,6 +9,7 @@ use super::collaborators::collaborators_in;
 use crate::api::innertube::json::age::relative_age;
 use crate::api::innertube::json::count::parse_count;
 use crate::api::innertube::json::duration::parse_duration;
+use crate::api::innertube::json::text::browse_handle;
 use crate::api::innertube::json::thumbnail::{
     largest_url, normalize_youtube_image_url, thumbnail_url_from_array,
 };
@@ -271,11 +272,15 @@ pub fn lockup_item(lockup: &Value) -> Option<RelatedContentItem> {
         .map(|part| part.text.to_string());
     let image = &metadata(lockup)["image"];
     let collaborators = collaborators_in(&image["avatarStackViewModel"]);
-    let channel_id = image["decoratedAvatarViewModel"]["rendererContext"]["commandContext"]["onTap"]
-        ["innertubeCommand"]["browseEndpoint"]["browseId"]
+    let avatar_command = &image["decoratedAvatarViewModel"]["rendererContext"]["commandContext"]["onTap"]
+        ["innertubeCommand"];
+    let channel_id = avatar_command["browseEndpoint"]["browseId"]
         .as_str()
         .map(ToOwned::to_owned)
         .or_else(|| collaborators.first().map(|c| c.channel_id.clone()));
+    let channel_handle = channel_id
+        .as_deref()
+        .and_then(|id| channel_handle(lockup, avatar_command, id));
 
     Some(RelatedContentItem {
         id,
@@ -312,6 +317,26 @@ pub fn lockup_item(lockup: &Value) -> Option<RelatedContentItem> {
             .map(ToOwned::to_owned)
             .collect(),
         collaborators,
+        channel_handle,
+    })
+}
+
+/// The channel's `/@handle`, from the avatar's tap target or a byline link, when it is the
+/// channel's own.
+fn channel_handle(lockup: &Value, avatar_command: &Value, channel_id: &str) -> Option<String> {
+    let own = |command: &Value| {
+        (command["browseEndpoint"]["browseId"] == channel_id)
+            .then(|| browse_handle(command))
+            .flatten()
+    };
+    own(avatar_command).or_else(|| {
+        rows(lockup)
+            .iter()
+            .filter_map(|row| row["metadataParts"].as_array())
+            .flatten()
+            .filter_map(|part| part["text"]["commandRuns"].as_array())
+            .flatten()
+            .find_map(|run| own(&run["onTap"]["innertubeCommand"]))
     })
 }
 
@@ -339,6 +364,7 @@ pub fn related_to_video(item: RelatedContentItem) -> VideoSummary {
         is_short: item.is_short,
         badges: item.badges,
         collaborators: item.collaborators,
+        channel_handle: item.channel_handle,
         ..Default::default()
     }
 }
@@ -371,6 +397,38 @@ mod tests {
                 "metadata": { "contentMetadataViewModel": { "metadataRows": rows } }
             } }
         })
+    }
+
+    #[test]
+    fn the_channel_handle_comes_from_the_owners_avatar_or_byline_link() {
+        let mut lockup = video_lockup(&json!([]));
+        assert_eq!(lockup_item(&lockup).unwrap().channel_handle, None);
+
+        let avatar = "/metadata/lockupMetadataViewModel/image/decoratedAvatarViewModel/rendererContext/commandContext/onTap/innertubeCommand/browseEndpoint";
+        lockup.pointer_mut(avatar).unwrap()["canonicalBaseUrl"] = json!("/@Owner");
+        let item = lockup_item(&lockup).unwrap();
+        assert_eq!(item.channel_handle.as_deref(), Some("/@Owner"));
+        assert_eq!(
+            related_to_video(item).channel_handle.as_deref(),
+            Some("/@Owner")
+        );
+
+        let byline = video_lockup(&json!([{ "metadataParts": [{ "text": {
+            "content": "Owner",
+            "commandRuns": [{ "onTap": { "innertubeCommand": {
+                "browseEndpoint": { "browseId": "UCowner", "canonicalBaseUrl": "/@Byline" } } } }]
+        } }] }]));
+        assert_eq!(
+            lockup_item(&byline).unwrap().channel_handle.as_deref(),
+            Some("/@Byline")
+        );
+
+        let other = video_lockup(&json!([{ "metadataParts": [{ "text": {
+            "content": "Someone else",
+            "commandRuns": [{ "onTap": { "innertubeCommand": {
+                "browseEndpoint": { "browseId": "UCother", "canonicalBaseUrl": "/@Other" } } } }]
+        } }] }]));
+        assert_eq!(lockup_item(&other).unwrap().channel_handle, None);
     }
 
     #[test]

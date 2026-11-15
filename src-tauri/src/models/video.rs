@@ -44,6 +44,9 @@ pub struct VideoSummary {
     /// The description excerpt search results show.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub snippet: Option<String>,
+    /// The channel's `/@handle` path when the card links to it, which the AI channel list matches.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub channel_handle: Option<String>,
 }
 
 /// One channel of a collaboration.
@@ -91,6 +94,9 @@ pub struct RelatedContentItem {
     pub badges: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub collaborators: Vec<Collaborator>,
+    /// The channel's `/@handle` path when the card links to it, which the AI channel list matches.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub channel_handle: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

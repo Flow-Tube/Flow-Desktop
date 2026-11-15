@@ -13,6 +13,7 @@ import { Button } from "../components/ui/Button";
 import { TextInput } from "../components/ui/TextInput";
 import { SponsorBlockCategoryRow } from "../components/extensions/SponsorBlockCategoryRow";
 import { SponsorBlockStatsDashboard } from "../components/extensions/SponsorBlockStatsDashboard";
+import { AiListSettings } from "../components/extensions/AiListSettings";
 import { SB_CATEGORY_META } from "../lib/sponsorBlockCategories";
 import { useSponsorBlockCategoryStats } from "../lib/useSponsorBlockCategoryStats";
 import { SETTINGS } from "../lib/settings/schema";
@@ -258,6 +259,10 @@ export const ExtensionsPage: React.FC = () => {
               </div>
             )}
           </div>
+        </section>
+
+        <section className="col-span-12 lg:col-span-6">
+          <AiListSettings />
         </section>
 
         {sponsorBlockEnabled && (

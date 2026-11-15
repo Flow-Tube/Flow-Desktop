@@ -5,11 +5,16 @@ import { invokeBackend } from "./errors";
 /** Which AiSList list a channel is on, after the viewer's switches and exemptions. */
 export type AiVerdict = "none" | "warn" | "block";
 
-/** How much of the list this computer holds, for the Settings status row. */
+/**
+ * How much of each list this computer holds, for the Settings status row. A count is null while
+ * its switch is off or until that list was downloaded here.
+ */
 export interface AiListStatus {
-  channelCount: number;
-  /** Epoch ms the list last changed here. */
+  channelCount: number | null;
+  artistCount: number | null;
+  /** Epoch ms a counted list last changed here, the latest of them. */
   updatedAtMs: number;
+  /** The channel list's version, or the music list's when only that one is counted. */
   version: number;
 }
 
@@ -23,7 +28,7 @@ export type AiListOutcome =
   | "retry";
 
 export interface AiListRefresh {
-  /** Null when both switches are off, so nothing was asked. */
+  /** Null when every switch is off, so nothing was asked. */
   outcome: AiListOutcome | null;
   status: AiListStatus | null;
 }
@@ -34,11 +39,18 @@ export interface AiListEntries {
   ids: string[];
 }
 
-/** The list and the channel handles learned so far, for the cards' own matcher. */
+/**
+ * The lists and the channel handles learned so far, for the cards' own matcher. A list whose switch
+ * is off, or that was never downloaded, comes empty with version 0.
+ */
 export interface AiListMatcherData {
+  /** The channel list's version. */
   version: number;
   block: AiListEntries;
   warn: AiListEntries;
+  /** The AI music list's artist ids; it can only hide. */
+  music: AiListEntries;
+  musicVersion: number;
   /** `[channelId, normalizedHandle]`, least recently used first. */
   index: [string, string][];
 }

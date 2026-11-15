@@ -8,7 +8,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 use super::envelope;
-use super::formats::{AI_LIST_ID, AI_LIST_SCHEMA, DeltaFile, Manifest, SnapshotFile, StoredAiList};
+use super::formats::{AI_LIST_SCHEMA, AiListKind, DeltaFile, Manifest, SnapshotFile, StoredAiList};
 use super::source::AiListSource;
 use super::store::AiListStorage;
 
@@ -85,14 +85,16 @@ pub async fn run<F: AiListFetcher, S: AiListStorage>(
     fetcher: &F,
     storage: &S,
     source: &AiListSource,
+    kind: AiListKind,
     now_ms: i64,
 ) -> AiListUpdate {
+    let list_id = kind.id();
     let source_id = source.id();
     let default_id = AiListSource::default().id();
     let stored = storage
         .load()
         .filter(|list| list.source.as_deref().unwrap_or(&default_id) == source_id);
-    let base = format!("v1/{AI_LIST_ID}/");
+    let base = format!("v1/{list_id}/");
     let response = match fetcher
         .get(
             &format!("{base}manifest.json"),
@@ -124,7 +126,7 @@ pub async fn run<F: AiListFetcher, S: AiListStorage>(
     if manifest.schema > AI_LIST_SCHEMA {
         return refused(stored, format!("schema {}", manifest.schema));
     }
-    if manifest.list != AI_LIST_ID {
+    if manifest.list != list_id {
         return refused(stored, format!("list {}", manifest.list));
     }
     if let Some(stored) = stored.as_ref() {
@@ -139,7 +141,7 @@ pub async fn run<F: AiListFetcher, S: AiListStorage>(
     let mut outcome = AiListOutcome::Snapshot;
     let mut next = None;
     if let Some(current) = stored.as_ref().filter(|s| uses_deltas(s, &manifest)) {
-        match apply_deltas(fetcher, &base, current.clone(), &manifest).await {
+        match apply_deltas(fetcher, &base, list_id, current.clone(), &manifest).await {
             Ok(list) => {
                 next = Some(list);
                 outcome = AiListOutcome::Deltas;
@@ -152,7 +154,7 @@ pub async fn run<F: AiListFetcher, S: AiListStorage>(
     }
     let next = match next {
         Some(list) => list,
-        None => match take_snapshot(fetcher, &base, &manifest).await {
+        None => match take_snapshot(fetcher, &base, list_id, &manifest).await {
             Ok(list) => list,
             Err(FileError::Network(error)) => {
                 return update(AiListOutcome::Retry, stored, Some(error));
@@ -188,6 +190,7 @@ fn uses_deltas(stored: &StoredAiList, manifest: &Manifest) -> bool {
 async fn apply_deltas<F: AiListFetcher>(
     fetcher: &F,
     base: &str,
+    list_id: &str,
     stored: StoredAiList,
     manifest: &Manifest,
 ) -> Result<StoredAiList, FileError> {
@@ -203,7 +206,7 @@ async fn apply_deltas<F: AiListFetcher>(
             .ok_or_else(|| FileError::Rejected(Rejected::new(format!("no delta {version}"))))?;
         let bytes = fetch_verified(fetcher, base, &reference.path, &reference.sha256).await?;
         let delta: DeltaFile = parse(&bytes)?;
-        if delta.list != AI_LIST_ID || delta.from != version - 1 || delta.to != version {
+        if delta.list != list_id || delta.from != version - 1 || delta.to != version {
             return Err(FileError::Rejected(Rejected::new(format!(
                 "delta {version} has the wrong range"
             ))));
@@ -216,6 +219,7 @@ async fn apply_deltas<F: AiListFetcher>(
 async fn take_snapshot<F: AiListFetcher>(
     fetcher: &F,
     base: &str,
+    list_id: &str,
     manifest: &Manifest,
 ) -> Result<StoredAiList, FileError> {
     let bytes = fetch_verified(
@@ -226,7 +230,7 @@ async fn take_snapshot<F: AiListFetcher>(
     )
     .await?;
     let snapshot: SnapshotFile = parse(&bytes)?;
-    if snapshot.list != AI_LIST_ID || snapshot.version != manifest.version {
+    if snapshot.list != list_id || snapshot.version != manifest.version {
         return Err(FileError::Rejected(Rejected::new(
             "snapshot does not match the manifest",
         )));
@@ -466,7 +470,11 @@ mod tests {
     }
 
     fn run_now(server: &FakeServer, store: &MemoryStore) -> AiListUpdate {
-        tauri::async_runtime::block_on(run(server, store, &own_source(), 99))
+        run_list(server, store, AiListKind::Channels)
+    }
+
+    fn run_list(server: &FakeServer, store: &MemoryStore, kind: AiListKind) -> AiListUpdate {
+        tauri::async_runtime::block_on(run(server, store, &own_source(), kind, 99))
     }
 
     #[test]
@@ -574,6 +582,34 @@ mod tests {
             assert_eq!(run_now(&server, &store).outcome, AiListOutcome::Refused);
             assert_eq!(store.load().unwrap().version, 2);
         }
+    }
+
+    #[test]
+    fn the_music_list_is_read_from_its_own_folder_and_another_lists_manifest_is_refused_there() {
+        let server = server(1, &["alpha"], &[]);
+        let store = MemoryStore::default();
+        assert_eq!(
+            run_list(&server, &store, AiListKind::Music).outcome,
+            AiListOutcome::Refused
+        );
+        assert_eq!(
+            server.requested(),
+            vec!["v1/aimusic/manifest.json".to_string()]
+        );
+
+        let copies: Vec<_> = server
+            .files
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(path, file)| (path.replace("v1/aislist/", "v1/aimusic/"), file.clone()))
+            .collect();
+        server.files.lock().unwrap().extend(copies);
+        let update = run_list(&server, &store, AiListKind::Music);
+        assert_eq!(update.outcome, AiListOutcome::Refused);
+        assert_eq!(update.reason.as_deref(), Some("list aislist"));
+        assert_eq!(*store.commits.borrow(), 0);
+        assert_eq!(store.load(), None);
     }
 
     #[test]

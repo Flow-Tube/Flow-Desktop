@@ -163,7 +163,10 @@ export function SquigglyCanvas({ ratio, readRatio, playing, pressed, still = pre
 
   useEffect(
     () => () => {
+      // Cleared as well as cancelled: StrictMode mounts twice, and a stale handle would keep
+      // `wake` from ever starting the loop again, leaving the wave frozen.
       if (raf.current !== null) cancelAnimationFrame(raf.current);
+      raf.current = null;
     },
     [],
   );

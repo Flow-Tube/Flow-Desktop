@@ -75,6 +75,7 @@ export function MusicLyrics({ track, variant, accent, backdrop, active, classNam
   const [blurOtherLines] = useBoolPref(SETTINGS.LYRICS_BLUR_OTHER_LINES);
   const [keepScreenOn] = useBoolPref(SETTINGS.LYRICS_KEEP_SCREEN_ON);
   useKeepScreenOn(keepScreenOn && active && isPlaying);
+  const covered = useLyricsStore((s) => s.covered);
   const { theme, variant: themeVariant } = useTheme();
   const textColor = useMemo(() => hexToRgb(theme.variants[themeVariant].onSurface), [theme, themeVariant]);
   const lyricAccent = backdrop && accent ? accent : textColor;
@@ -103,7 +104,7 @@ export function MusicLyrics({ track, variant, accent, backdrop, active, classNam
         romanizationOnly={romanizationOnly}
         blurOtherLines={blurOtherLines}
         syncOffsetMs={syncOffsetMs}
-        active={active}
+        active={active && !covered}
         isPlaying={isPlaying}
         onSeekTo={onSeekTo}
         resyncBottom={RESYNC_BOTTOM[variant]}

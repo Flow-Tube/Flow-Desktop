@@ -5,9 +5,9 @@ import { act } from "react";
 
 import type { LyricsEntry } from "../../../lib/lyrics/types";
 
-const audio = { time: 0, duration: 200 };
+const audio = { time: 0, duration: 200, speed: 1 };
 vi.mock("../../../lib/audio/musicAudioEngine", () => ({
-  musicAudioEngine: { getCurrentTime: () => audio.time, getDuration: () => audio.duration },
+  musicAudioEngine: { getCurrentTime: () => audio.time, getDuration: () => audio.duration, getSpeed: () => audio.speed },
 }));
 vi.mock("../../../lib/platform", () => ({ IS_LINUX_RUNTIME: false }));
 

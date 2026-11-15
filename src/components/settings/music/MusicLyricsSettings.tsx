@@ -3,7 +3,7 @@ import { SettingItem } from '../SettingItem';
 import { ToggleSwitch } from '../../ui/ToggleSwitch';
 import { Select } from '../../ui/Select';
 import { Button } from '../../ui/Button';
-import { LyricsProviderList } from '../LyricsProviderList';
+import { SortableToggleList } from '../SortableToggleList';
 import { useBoolPref, useNumberPref, usePreference } from '../../../lib/usePreference';
 import { getString } from '../../../lib/i18n/index';
 import { SETTINGS } from '../../../lib/settings/schema';
@@ -16,6 +16,7 @@ import {
   serializeProviderEnabledStates,
 } from '../../../lib/lyrics/registry';
 import { serializeProviderOrder } from '../../../lib/lyrics/providerOrder';
+import { lyricsSourceLabel } from '../../../lib/lyrics/offline';
 import { formatCacheSize, useLyricsCache } from '../../../lib/lyrics/useLyricsCache';
 import { lyricsBackgroundOptions } from '../../../lib/lyrics/useLyricsCover';
 import { CAN_CHOOSE_GLOW, lyricsAnimationOptions, lyricsGlowOptions, useLyricsAnimation, useLyricsGlow } from '../../../lib/lyrics/useLyricsLook';
@@ -131,8 +132,11 @@ export function MusicLyricsSettings() {
           {getString('settings_lyrics_ordered')}
         </span>
       </SettingItem>
-      <LyricsProviderList
+      <SortableToggleList
         order={providers.map((provider) => provider.name)}
+        label={getString('settings_lyrics_providers')}
+        labelOf={lyricsSourceLabel}
+        statusOf={(_, enabled) => getString(enabled ? 'settings_lyrics_provider_enabled' : 'settings_lyrics_provider_disabled')}
         isEnabled={(name) => isProviderEnabled(enabledStates, name)}
         onReorder={(order) => setProviderOrder(serializeProviderOrder(order))}
         onToggle={setProviderEnabled}

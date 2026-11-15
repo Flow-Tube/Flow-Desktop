@@ -142,6 +142,9 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     { title: "settings_animated_artwork", summary: "settings_animated_artwork_desc", keywords: ["motion", "video", "cover"] },
     { title: "settings_hide_music_artwork", summary: "settings_hide_music_artwork_desc", keywords: ["cover"] },
     { title: "settings_music_seek_bar", keywords: ["slider", "seek", "progress", "wavy"] },
+    { title: "mini_player_style", summary: "mini_player_style_summary", keywords: ["dock", "pill", "classic", "bar"] },
+    { title: "mini_bar_background", summary: "mini_bar_background_summary", keywords: ["dock", "colors", "black", "outlined"] },
+    { title: "mini_bar_buttons", summary: "mini_bar_buttons_summary", keywords: ["dock", "order", "controls"] },
     { title: "settings_music_artwork_size", summary: "settings_music_artwork_size_desc", keywords: ["cards", "cover"] },
     { title: "settings_music_artwork_control_colors", summary: "settings_music_artwork_control_colors_desc" },
     { title: "settings_music_plain_control_colors", summary: "settings_music_plain_control_colors_desc" },
@@ -162,6 +165,8 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   ...rows("lyrics", [
     { title: "lyrics_alignment" },
     { title: "lyrics_background", summary: "lyrics_background_summary", keywords: ["colorful", "moving", "cover", "wallpaper"] },
+    { title: "lyrics_animation", summary: "lyrics_animation_summary", keywords: ["cadence", "classic", "calm", "karaoke", "motion"] },
+    { title: "lyrics_glow", summary: "lyrics_glow_summary", keywords: ["karaoke", "held note", "bright"] },
     { title: "lyrics_show_translation", summary: "lyrics_show_translation_summary" },
     { title: "lyrics_show_romanization", summary: "lyrics_show_romanization_summary" },
     { title: "lyrics_auto_romanize", summary: "lyrics_auto_romanize_summary", keywords: ["transliterate", "latin"] },

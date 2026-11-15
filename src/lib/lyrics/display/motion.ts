@@ -106,12 +106,10 @@ export class Spring {
   }
 }
 
-/** Compose's FastOutSlowInEasing, cubic-bezier(0.4, 0, 0.2, 1), the default easing of a tween. */
-export function fastOutSlowIn(t: number): number {
+/** A cubic-bezier(x1, 0, x2, 1) easing, the shape of Compose's standard easings. */
+function standardEasing(t: number, x1: number, x2: number): number {
   if (t <= 0) return 0;
   if (t >= 1) return 1;
-  const x1 = 0.4;
-  const x2 = 0.2;
   const curve = (s: number, a: number, b: number) => 3 * a * s * (1 - s) * (1 - s) + 3 * b * s * s * (1 - s) + s * s * s;
   let lo = 0;
   let hi = 1;
@@ -125,6 +123,12 @@ export function fastOutSlowIn(t: number): number {
   }
   return curve(s, 0, 1);
 }
+
+/** Compose's FastOutSlowInEasing, cubic-bezier(0.4, 0, 0.2, 1), the default easing of a tween. */
+export const fastOutSlowIn = (t: number): number => standardEasing(t, 0.4, 0.2);
+
+/** Compose's LinearOutSlowInEasing, cubic-bezier(0, 0, 0.2, 1). */
+export const linearOutSlowIn = (t: number): number => standardEasing(t, 0, 0.2);
 
 /** A tween(duration, delay) toward a target, eased like Compose's default. */
 export class Tween {

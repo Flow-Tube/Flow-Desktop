@@ -1,25 +1,21 @@
 import type { Rgb } from "../../useDominantColor";
-import {
-  FEATHER_EM,
-  GLOW_RADIUS_PX,
-  GLOW_LEVELS,
-  GLOW_PEAK_ALPHA,
-  WORD_LIFT_PX,
-  drawKaraoke,
-  type KaraokeFrame,
-  type KaraokeGeometry,
-  type KaraokePaint,
-} from "./karaoke";
+import { glowLook, type LyricsAnimation, type LyricsGlow } from "../useLyricsLook";
+import { CADENCE_EXIT_MS, CADENCE_PEAK_EM, drawCadence, reflowAnchor, type CadenceFrame } from "./cadence";
+import { FEATHER_EM, GLOW_LEVELS, WORD_LIFT_PX, drawKaraoke, type KaraokeFrame, type KaraokeGeometry, type KaraokePaint } from "./karaoke";
 import { LOW_BOUNCY_LOW, Spring } from "./motion";
+import type { LyricsAlign } from "./presentation";
 import { cssBlurOf } from "./rowMotion";
 
 const rgba = (c: Rgb, a: number): string => `rgba(${c.r},${c.g},${c.b},${a})`;
 
-/** How far the canvas reaches past the text: room for lifted words, the glow and italic overhang. */
-export const karaokePadding = (textSize: number): { x: number; y: number } => ({
-  x: Math.ceil(textSize * 0.25 + GLOW_RADIUS_PX),
-  y: Math.ceil(WORD_LIFT_PX + GLOW_RADIUS_PX + textSize * 0.1),
-});
+/**
+ * How far the canvas reaches past the text: room for lifted words, the glow, italic overhang and,
+ * on a Cadence line, letters at their crest and words grown wider than their row.
+ */
+export const karaokePadding = (textSize: number, glow: LyricsGlow): { x: number; y: number } => {
+  const glowRadius = glowLook(glow).radius;
+  return { x: Math.ceil(textSize * 0.5 + glowRadius), y: Math.ceil(WORD_LIFT_PX + glowRadius + textSize * 0.4) };
+};
 
 export interface KaraokeSurfaceOptions {
   geometry: KaraokeGeometry;
@@ -29,7 +25,10 @@ export interface KaraokeSurfaceOptions {
   accent: Rgb;
   /** The unsung part's alpha while the line is sung: 0.45, or 0.6 for a background vocal. */
   unsungAlpha: number;
-  glow: boolean;
+  align: LyricsAlign;
+  animation: LyricsAnimation;
+  glow: LyricsGlow;
+  /** False when the system asks for reduced motion: every style then fills only, as Calm does. */
   motion: boolean;
 }
 
@@ -42,11 +41,16 @@ export class KaraokeSurface {
   private readonly lineLift = new Spring(0, LOW_BOUNCY_LOW);
   private readonly sungPaint: KaraokePaint;
   private readonly idlePaint: KaraokePaint;
+  private readonly moving: boolean;
+  private readonly cadence: boolean;
   private lastSungPosition: number | null = null;
   private current = false;
+  /** How long a Cadence line has been letting go, in ms, or -1 when it isn't. */
+  private exitMs = -1;
   private dirty = true;
   // Reused every frame, so drawing allocates nothing.
   private readonly frame: KaraokeFrame;
+  private readonly cadenceFrame: CadenceFrame;
   readonly padX: number;
   readonly padY: number;
 
@@ -55,26 +59,39 @@ export class KaraokeSurface {
     private readonly options: KaraokeSurfaceOptions,
   ) {
     this.ctx = canvas.getContext("2d");
-    const pad = karaokePadding(options.textSize);
+    const pad = karaokePadding(options.textSize, options.glow);
     this.padX = pad.x;
     this.padY = pad.y;
+    this.moving = options.motion && options.animation !== "calm";
+    this.cadence = options.motion && options.animation === "cadence";
+    const glow = this.moving && options.glow !== "off";
+    const feather = options.textSize * FEATHER_EM;
     this.frame = {
       position: null,
       liftClock: null,
       lift: 0,
-      glow: options.glow && options.motion,
+      glow,
+      overscan: this.padY,
+      height: options.height,
+    };
+    this.cadenceFrame = {
+      position: null,
+      exit: -1,
+      lineLift: 0,
+      peakPx: options.textSize * CADENCE_PEAK_EM,
+      featherPx: feather,
+      anchor: reflowAnchor(options.align),
+      glow,
       overscan: this.padY,
       height: options.height,
     };
     this.resize();
-    const feather = options.textSize * FEATHER_EM;
     const sung = rgba(options.accent, 1);
     const unsung = rgba(options.accent, options.unsungAlpha);
-    const glowColors = Array.from({ length: GLOW_LEVELS }, (_, level) =>
-      rgba(options.accent, (GLOW_PEAK_ALPHA * (level + 1)) / GLOW_LEVELS),
-    );
+    const look = glowLook(options.glow);
+    const glowColors = Array.from({ length: GLOW_LEVELS }, (_, level) => rgba(options.accent, (look.alpha * (level + 1)) / GLOW_LEVELS));
     // Canvas shadowBlur is twice the Gaussian sigma.
-    const glowBlur = 2 * cssBlurOf(GLOW_RADIUS_PX);
+    const glowBlur = 2 * cssBlurOf(look.radius);
     const front = (from: string, to: string): CanvasGradient | string => {
       if (!this.ctx) return from;
       const gradient = this.ctx.createLinearGradient(-feather / 2, 0, feather / 2, 0);
@@ -111,8 +128,10 @@ export class KaraokeSurface {
 
   setCurrent(current: boolean): void {
     if (current === this.current) return;
+    // A Cadence line that was being sung lets go: its fill completes and grown words settle.
+    this.exitMs = !current && this.cadence && this.lastSungPosition !== null ? 0 : -1;
     this.current = current;
-    this.lineLift.animateTo(current && this.options.motion ? 1 : 0);
+    this.lineLift.animateTo(current && this.moving ? 1 : 0);
     this.dirty = true;
   }
 
@@ -122,18 +141,32 @@ export class KaraokeSurface {
    */
   step(dtMs: number, position: number | null, playing: boolean): boolean {
     const lifting = this.lineLift.step(dtMs);
+    const exiting = this.exitMs >= 0;
+    if (exiting) {
+      this.exitMs += dtMs;
+      if (this.exitMs >= CADENCE_EXIT_MS) this.exitMs = -1;
+    }
     const singing = this.current && position !== null;
-    if (!singing && !lifting && !this.dirty) return false;
+    if (!singing && !lifting && !exiting && !this.dirty) return false;
     this.dirty = false;
     if (singing) this.lastSungPosition = position;
     this.draw(singing ? position : null);
-    return lifting || (singing && playing);
+    return lifting || exiting || (singing && playing);
   }
 
   private draw(position: number | null): void {
     const ctx = this.ctx;
     if (!ctx) return;
     ctx.clearRect(-this.padX, -this.padY, this.options.width + this.padX * 2, this.options.height + this.padY * 2);
+    const lift = this.lineLift.value;
+    if (this.cadence && (position !== null || lift !== 0 || this.exitMs >= 0)) {
+      const frame = this.cadenceFrame;
+      frame.position = position ?? this.lastSungPosition;
+      frame.exit = position !== null ? -1 : this.exitMs >= 0 ? this.exitMs / CADENCE_EXIT_MS : 1;
+      frame.lineLift = lift;
+      drawCadence(ctx, this.options.geometry, this.sungPaint, frame);
+      return;
+    }
     this.frame.position = position;
     // Words keep their lift while an ended line settles back, but their fill turns unsung.
     this.frame.liftClock = position ?? this.lastSungPosition;

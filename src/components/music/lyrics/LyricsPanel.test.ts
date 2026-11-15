@@ -49,6 +49,7 @@ beforeAll(() => {
       rect() {},
       clip() {},
       translate() {},
+      scale() {},
       fillText: (text: string) => drawn.push(text),
     } as unknown as CanvasRenderingContext2D;
   } as unknown as typeof HTMLCanvasElement.prototype.getContext;
@@ -83,6 +84,8 @@ function render(props: Partial<Parameters<typeof LyricsPanel>[0]> = {}) {
         showTranslation: true,
         showRomanization: true,
         blurOtherLines: true,
+        animation: "classic",
+        glow: "normal",
         syncOffsetMs: 0,
         active: true,
         isPlaying: true,
@@ -247,6 +250,22 @@ describe("lyrics panel", () => {
     advance(300);
     expect(drawn.length).toBeGreaterThan(5);
     expect(new Set(drawn)).toEqual(new Set(["third line"]));
+    render({ isPlaying: false });
+    act(() => vi.advanceTimersByTime(1500));
+    drawn.length = 0;
+    act(() => vi.advanceTimersByTime(1000));
+    expect(drawn).toEqual([]);
+  });
+
+  it("raises a Cadence line letter by letter while it is sung, then stops drawing once paused", () => {
+    render({ animation: "cadence" });
+    audio.time = 3.2;
+    advance(400);
+    drawn.length = 0;
+    advance(100);
+    // "second" is being sung, so its letters are drawn one by one.
+    expect(drawn).toEqual(expect.arrayContaining(["s", "e", "c", "o", "n", "d"]));
+    expect(drawn).not.toContain("third line");
     render({ isPlaying: false });
     act(() => vi.advanceTimersByTime(1500));
     drawn.length = 0;

@@ -1,7 +1,7 @@
 import type { WordTimestamp } from "../types";
 import type { CharRange } from "./timing";
 import type { LaidOutRow, TextBlock, TextMeasurer } from "./textLayout";
-import { rowX } from "./textLayout";
+import { graphemeStarts, rowX } from "./textLayout";
 import { wordLiftProgress } from "./motion";
 
 /** Port of Android's KaraokeLine.kt geometry and drawing, for a 2D canvas. */
@@ -9,11 +9,9 @@ import { wordLiftProgress } from "./motion";
 export const HELD_NOTE_MS = 1100;
 /** Glow strengths prepared per colour: steps this small never show. */
 export const GLOW_LEVELS = 64;
-export const GLOW_PEAK_ALPHA = 0.5;
-// The glow is the shadow of a copy drawn this far to the left, so only the blur lands on the word.
-const GLOW_SHADOW_SHIFT_PX = 10_000;
+/** The glow is the shadow of a copy drawn this far to the left, so only the blur lands on the word. */
+export const GLOW_SHADOW_SHIFT_PX = 10_000;
 export const WORD_LIFT_PX = 3;
-export const GLOW_RADIUS_PX = 10;
 export const FEATHER_EM = 0.9;
 
 export interface KaraokeRow {
@@ -40,13 +38,50 @@ export interface KaraokeCell {
   glowText: string | null;
   clipLeft: number;
   clipRight: number;
+  /** The word's letters, for a Cadence line whose letters rise one by one; null keeps it whole. */
+  letters: KaraokeLetter[] | null;
 }
 
+/**
+ * One letter of a cell. `from` and `to` are where its ink starts and ends in the word's reading
+ * order, as shares of the word, like the fill front's progress. While letters rise at different
+ * heights each is drawn alone at `x`: a cut through the row would leave a kerned neighbour's
+ * overhang behind.
+ */
+export interface KaraokeLetter {
+  text: string;
+  x: number;
+  from: number;
+  to: number;
+}
+
+/**
+ * A timed word. A syllable of a hyphenated run sung apart ("so-o-o") knows its place `group` in the
+ * run, the run's `groupSize` and when the run ends; any other word has a `group` of -1.
+ */
+export interface KaraokeWord {
+  startMs: number;
+  endMs: number;
+  group: number;
+  groupSize: number;
+  groupEndMs: number;
+  inkWidth: number;
+}
+
+/**
+ * Where every word of a laid-out line sits; built once per layout, read every frame. `rowOrder`
+ * lists each row's cells from left to right. `cellDx`, `cellScale` and `wordScale` are scratch
+ * space a Cadence frame fills in, so drawing a frame allocates nothing.
+ */
 export interface KaraokeGeometry {
   rows: KaraokeRow[];
-  words: Array<{ startMs: number; endMs: number }>;
+  words: KaraokeWord[];
   cells: KaraokeCell[];
   font: string;
+  rowOrder: number[][];
+  cellDx: Float64Array;
+  cellScale: Float64Array;
+  wordScale: Float64Array;
 }
 
 function inkOf(row: KaraokeRow, first: number, last: number, font: string, measurer: TextMeasurer): [number, number] {
@@ -79,6 +114,7 @@ export function buildKaraokeGeometry(
   words: WordTimestamp[],
   ranges: Array<CharRange | null>,
   measurer: TextMeasurer,
+  splitLetters = false,
 ): KaraokeGeometry {
   const font = block.font;
   const rows: KaraokeRow[] = block.rows.map((row, i) => ({
@@ -88,7 +124,14 @@ export function buildKaraokeGeometry(
   }));
 
   const placed = words.map((_, i) => i).filter((i) => ranges[i]);
-  const placedWords = placed.map((i) => ({ startMs: words[i]!.startTime, endMs: words[i]!.endTime }));
+  const placedWords: KaraokeWord[] = placed.map((i) => ({
+    startMs: words[i]!.startTime,
+    endMs: words[i]!.endTime,
+    group: -1,
+    groupSize: 0,
+    groupEndMs: 0,
+    inkWidth: 1,
+  }));
   const cells: KaraokeCell[] = [];
 
   placed.forEach((original, wordIndex) => {
@@ -102,9 +145,15 @@ export function buildKaraokeGeometry(
     });
     const inks = parts.map(([rowIndex, first, last]) => inkOf(rows[rowIndex]!, first, last, font, measurer));
     const total = Math.max(1, inks.reduce((sum, [l, r]) => sum + (r - l), 0));
+    placedWords[wordIndex]!.inkWidth = total;
     let cursor = 0;
     parts.forEach(([rowIndex, first, last], i) => {
       const fraction = (inks[i]![1] - inks[i]![0]) / total;
+      const row = rows[rowIndex]!;
+      const letters =
+        splitLetters && isLetterSplittable(row.row.text.slice(first, last + 1))
+          ? buildLetters(row, first, last, inks[i]![0], inks[i]![1], cursor, fraction, font, measurer)
+          : null;
       cells.push({
         row: rowIndex,
         word: wordIndex,
@@ -117,6 +166,7 @@ export function buildKaraokeGeometry(
         glowText: held ? rows[rowIndex]!.row.text.slice(first, last + 1) : null,
         clipLeft: 0,
         clipRight: 0,
+        letters,
       });
       cursor += fraction;
     });
@@ -151,6 +201,7 @@ export function buildKaraokeGeometry(
         glowText: null,
         clipLeft: 0,
         clipRight: 0,
+        letters: null,
       });
       i = end + 1;
     }
@@ -168,7 +219,107 @@ export function buildKaraokeGeometry(
       cell.clipRight = bounds[i * 2 + 1]!;
     });
   });
-  return { rows, words: placedWords, cells, font };
+  markHyphenRuns(
+    placed.map((i) => words[i]!.text.trim()),
+    placed.map((i) => ranges[i]!),
+    placedWords,
+  );
+  const rowOrder = rows.map((_, rowIndex) =>
+    cells
+      .map((cell, index) => [cell, index] as const)
+      .filter(([cell]) => cell.row === rowIndex)
+      .sort(([a], [b]) => a.inkLeft - b.inkLeft)
+      .map(([, index]) => index),
+  );
+  return {
+    rows,
+    words: placedWords,
+    cells,
+    font,
+    rowOrder,
+    cellDx: new Float64Array(cells.length),
+    cellScale: new Float64Array(cells.length).fill(1),
+    wordScale: new Float64Array(placedWords.length).fill(1),
+  };
+}
+
+/**
+ * Syllables of one hyphenated word sung apart ("so-", "o-", "o" written "so-o-o") follow each other
+ * with no space between them; each learns its place in the run so it can grow a step on the last.
+ */
+export function markHyphenRuns(texts: string[], ranges: CharRange[], words: KaraokeWord[]): void {
+  let start = 0;
+  while (start < words.length) {
+    let end = start;
+    while (end + 1 < words.length && texts[end]!.endsWith("-") && ranges[end + 1]![0] === ranges[end]![1] + 1) end++;
+    if (end > start) {
+      for (let k = start; k <= end; k++) {
+        words[k]!.group = k - start;
+        words[k]!.groupSize = end - start + 1;
+        words[k]!.groupEndMs = words[end]!.endMs;
+      }
+    }
+    start = end + 1;
+  }
+}
+
+/**
+ * Scripts whose letters can be lifted one at a time: each one is a glyph of its own. Joined and
+ * shaped scripts (Arabic, the Indic family, Thai and the like) are left out, because a cut between
+ * two of their letters would show as a break in the line that joins them.
+ */
+const LETTER_SCRIPTS =
+  /^[\p{Script=Latin}\p{Script=Greek}\p{Script=Cyrillic}\p{Script=Armenian}\p{Script=Georgian}\p{Script=Hebrew}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Bopomofo}\p{Script=Common}\p{Script=Inherited}]*$/u;
+
+/** Whether `word` can rise letter by letter: more than one letter, all in scripts that don't join. */
+export function isLetterSplittable(word: string): boolean {
+  return LETTER_SCRIPTS.test(word) && letterStarts(word).length > 1;
+}
+
+/** Ligatures fonts draw for an "f" and what follows it, which a cut between the two would tear. */
+const F_LIGATURE_FOLLOWERS = "fijlt";
+
+/**
+ * Where each letter of `word` starts: whole grapheme clusters, so an accent stays with its letter,
+ * with an "f" kept together with a letter it may form a ligature with.
+ */
+export function letterStarts(word: string): number[] {
+  const starts: number[] = [];
+  for (const index of graphemeStarts(word)) {
+    const joinsLigature = starts.length > 0 && word[index - 1] === "f" && F_LIGATURE_FOLLOWERS.includes(word[index]!);
+    if (!joinsLigature) starts.push(index);
+  }
+  return starts;
+}
+
+function buildLetters(
+  row: KaraokeRow,
+  first: number,
+  last: number,
+  inkLeft: number,
+  inkRight: number,
+  startFraction: number,
+  widthFraction: number,
+  font: string,
+  measurer: TextMeasurer,
+): KaraokeLetter[] {
+  const starts = letterStarts(row.row.text.slice(first, last + 1));
+  const width = Math.max(1, inkRight - inkLeft);
+  const rtl = row.row.rtl;
+  const letters = starts.map((start, k) => {
+    const from = first + start;
+    const to = k === starts.length - 1 ? last : first + starts[k + 1]! - 1;
+    const [left, right] = inkOf(row, from, to, font, measurer);
+    const near = rtl ? (inkRight - right) / width : (left - inkLeft) / width;
+    const far = rtl ? (inkRight - left) / width : (right - inkLeft) / width;
+    return {
+      text: row.row.text.slice(from, to + 1),
+      x: left,
+      from: startFraction + widthFraction * near,
+      to: startFraction + widthFraction * far,
+    };
+  });
+  return letters.sort((a, b) => a.x - b.x);
 }
 
 /** Colours and the gradient fronts a line draws with, made once per colour change. */

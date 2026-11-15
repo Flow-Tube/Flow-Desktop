@@ -30,6 +30,8 @@ vi.mock("../../lib/live/usePlayOn", () => ({
 
 import type { SongItem } from "../../types/music";
 import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
+import { useAppSettingsStore } from "../../store/useAppSettingsStore";
+import { SETTINGS } from "../../lib/settings/schema";
 import { GlobalMusicDock } from "./GlobalMusicDock";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -77,7 +79,11 @@ describe("GlobalMusicDock background click expansion", () => {
     });
   });
 
+  const setLook = (values: Record<string, string>) =>
+    useAppSettingsStore.setState((state) => ({ values: { ...state.values, ...values } }));
+
   afterEach(() => {
+    setLook({ [SETTINGS.MUSIC_MINI_PLAYER_STYLE]: "pill", [SETTINGS.MINI_BAR_BUTTONS]: "" });
     act(() => root.unmount());
     host.remove();
     vi.clearAllMocks();
@@ -91,7 +97,7 @@ describe("GlobalMusicDock background click expansion", () => {
       root.render(createElement(GlobalMusicDock));
     });
 
-    const pill = host.querySelector<HTMLDivElement>(".bg-surface-container-high");
+    const pill = host.querySelector<HTMLDivElement>("[data-music-dock-bar]");
     expect(pill).not.toBeNull();
     expect(pill?.className).toContain("cursor-pointer");
 
@@ -143,9 +149,10 @@ describe("GlobalMusicDock background click expansion", () => {
     expect(openOverlay).not.toHaveBeenCalled();
   });
 
-  it("does not expand full player via background handler when clicking scrubber", () => {
+  it("does not expand full player via background handler when clicking the Classic scrubber", () => {
     const openOverlay = vi.fn();
     useMusicPlayerStore.setState({ openOverlay });
+    setLook({ [SETTINGS.MUSIC_MINI_PLAYER_STYLE]: "classic" });
 
     act(() => {
       root.render(createElement(GlobalMusicDock));
@@ -159,6 +166,29 @@ describe("GlobalMusicDock background click expansion", () => {
     });
 
     expect(openOverlay).not.toHaveBeenCalled();
+  });
+
+  it("shows the Pill's chosen buttons in their order", () => {
+    setLook({ [SETTINGS.MINI_BAR_BUTTONS]: "next,play_pause,queue,close" });
+    act(() => {
+      root.render(createElement(GlobalMusicDock));
+    });
+
+    const labels = [...host.querySelectorAll<HTMLButtonElement>('[data-music-dock-bar] [dir="ltr"] button')].map((b) => b.getAttribute("aria-label"));
+    expect(labels).toEqual(["Next", "Play", "Queue", "Close player"]);
+    // Close is in the bar, so the corner's dismiss button stays away.
+    expect(host.querySelectorAll('button[aria-label="Close player"]').length).toBe(1);
+  });
+
+  it("keeps the Classic bar's fixed transport and actions", () => {
+    setLook({ [SETTINGS.MUSIC_MINI_PLAYER_STYLE]: "classic", [SETTINGS.MINI_BAR_BUTTONS]: "next" });
+    act(() => {
+      root.render(createElement(GlobalMusicDock));
+    });
+
+    for (const label of ["Shuffle", "Previous", "Play", "Next", "Repeat", "Volume", "Queue", "Lyrics", "Equalizer"]) {
+      expect(host.querySelector(`button[aria-label="${label}"]`), label).not.toBeNull();
+    }
   });
 
   const pressAndRelease = (pill: HTMLElement, dx: number, dy: number) => {
@@ -178,7 +208,7 @@ describe("GlobalMusicDock background click expansion", () => {
       root.render(createElement(GlobalMusicDock));
     });
 
-    pressAndRelease(host.querySelector<HTMLDivElement>(".bg-surface-container-high")!, 3, 2);
+    pressAndRelease(host.querySelector<HTMLDivElement>("[data-music-dock-bar]")!, 3, 2);
 
     expect(openOverlay).toHaveBeenCalledTimes(1);
   });
@@ -193,7 +223,7 @@ describe("GlobalMusicDock background click expansion", () => {
       root.render(createElement(GlobalMusicDock));
     });
 
-    pressAndRelease(host.querySelector<HTMLDivElement>(".bg-surface-container-high")!, dx, dy);
+    pressAndRelease(host.querySelector<HTMLDivElement>("[data-music-dock-bar]")!, dx, dy);
 
     expect(openOverlay).not.toHaveBeenCalled();
   });
@@ -223,7 +253,7 @@ describe("GlobalMusicDock background click expansion", () => {
       root.render(createElement(GlobalMusicDock));
     });
 
-    const pill = host.querySelector<HTMLDivElement>(".bg-surface-container-high");
+    const pill = host.querySelector<HTMLDivElement>("[data-music-dock-bar]");
     expect(pill).not.toBeNull();
     expect(pill?.className).not.toContain("cursor-pointer");
 

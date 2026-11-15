@@ -17,8 +17,8 @@ use crate::models::video::{
     VideoMetadata, VideoSummary,
 };
 use crate::security::validation::{
-    validate_browse_id, validate_channel_id, validate_page_token, validate_search_query,
-    validate_video_id,
+    validate_browse_id, validate_channel_id, validate_page_token, validate_playlist_id,
+    validate_search_query, validate_video_id,
 };
 use crate::services::recommendation_service::RecommendationService;
 use crate::services::subscription_feed::{self, SubscriptionRssFeed};
@@ -774,6 +774,25 @@ pub async fn get_playlist_details(
 
     youtube_service
         .get_playlist_details(&playlist_id, page_token)
+        .await
+        .map_err(ErrorResponse::from)
+}
+
+/// A Mix (`RD…`, not `RDCLAK…`) as a playlist, read from its watch queue because
+/// the playlist browse refuses Mixes. `video_id` seeds a Mix whose id names no video.
+#[tauri::command]
+pub async fn get_mix_playlist(
+    playlist_id: String,
+    video_id: Option<String>,
+    youtube_service: State<'_, YoutubeService>,
+) -> Result<PlaylistDetailsResponse, ErrorResponse> {
+    validate_playlist_id(&playlist_id).map_err(ErrorResponse::from)?;
+    if let Some(id) = video_id.as_deref() {
+        validate_video_id(id).map_err(ErrorResponse::from)?;
+    }
+
+    youtube_service
+        .get_mix_playlist(playlist_id.trim(), video_id.as_deref().map(str::trim))
         .await
         .map_err(ErrorResponse::from)
 }

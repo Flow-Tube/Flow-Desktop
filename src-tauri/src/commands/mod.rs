@@ -1,3 +1,4 @@
+pub mod ai_list;
 pub mod app_window;
 pub mod backup;
 pub mod backup_files;

@@ -147,6 +147,7 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     { title: "mini_bar_buttons", summary: "mini_bar_buttons_summary", keywords: ["dock", "order", "controls"] },
     { title: "settings_music_artwork_size", summary: "settings_music_artwork_size_desc", keywords: ["cards", "cover"] },
     { title: "settings_music_artwork_control_colors", summary: "settings_music_artwork_control_colors_desc" },
+    { title: "settings_music_split_transport", summary: "settings_music_split_transport_desc", keywords: ["previous", "next", "skip", "play", "pause", "buttons"] },
     { title: "settings_music_plain_control_colors", summary: "settings_music_plain_control_colors_desc" },
     { title: "settings_music_player_follow_light_theme", summary: "settings_music_player_follow_light_theme_desc" },
     { title: "settings_music_audio_quality", summary: "settings_music_audio_quality_desc" },

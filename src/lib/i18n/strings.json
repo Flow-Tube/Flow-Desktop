@@ -1429,6 +1429,8 @@
   "settings_music_player_background_default": "Default Surface",
   "settings_music_artwork_control_colors": "Artwork colors on controls",
   "settings_music_artwork_control_colors_desc": "Tint the buttons and seek bar from the cover",
+  "settings_music_split_transport": "Split buttons",
+  "settings_music_split_transport_desc": "Previous and next sit flat against play/pause",
   "settings_music_plain_control_colors": "Control colors",
   "settings_music_plain_control_colors_desc": "What the buttons and seek bar use instead of the cover's colors",
   "settings_music_plain_control_colors_monochrome": "Black and white",

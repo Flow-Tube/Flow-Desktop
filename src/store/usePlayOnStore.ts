@@ -14,6 +14,7 @@ import {
   type Now,
 } from "../lib/api/live";
 import { getString } from "../lib/i18n/index";
+import { withClosedHint, type ClosedHints } from "../lib/live/elsewhere";
 import { nowOf, queueWindow } from "../lib/live/now";
 import { overrideFor, stillControlled, withOverrides, type Override } from "../lib/live/optimistic";
 import { applyCommand, pauseHere, playing, startSession } from "../lib/live/players";
@@ -54,6 +55,8 @@ interface PlayOnState {
   linked: LinkedDevice[];
   /** Requests waiting until the user allows their sender, oldest first. */
   asking: LiveRequest[];
+  /** The devices whose "Playing on" hint the user closed, with the video each played then. */
+  closedHints: ClosedHints;
   /** Listens to the live channel; `watch` opens a video's page. Resolves to a function that stops. */
   init: (watch: (videoId: string) => void) => Promise<() => void>;
   /**
@@ -70,6 +73,8 @@ interface PlayOnState {
   moveTo: (did: string) => Promise<void>;
   /** Controls `did`, which plays already, from the remote dock. */
   control: (did: string) => void;
+  /** Hides the "Playing on" hint for `did` until it plays something other than `video`. */
+  closeHint: (did: string, video: string) => void;
   /** Drives the player here, or on `did`; resolves to false when the command didn't take. */
   drive: (did: string | null, cmd: Command, value?: { pos?: number; vol?: number; queue?: string[] }) => Promise<boolean>;
   /** Answers the oldest question in `asking`. */
@@ -215,6 +220,7 @@ export const usePlayOnStore = create<PlayOnState>((set, get) => {
     failed: null,
     linked: [],
     asking: [],
+    closedHints: {},
 
     init: async (open) => {
       watch = open;
@@ -280,6 +286,8 @@ export const usePlayOnStore = create<PlayOnState>((set, get) => {
     },
 
     control: (did) => set({ controlling: did }),
+
+    closeHint: (did, video) => set({ closedHints: withClosedHint(get().closedHints, did, video) }),
 
     drive: async (did, cmd, value = {}) => {
       if (!did) return applyCommand({ type: "cmd", to: "", cmd, ...value });

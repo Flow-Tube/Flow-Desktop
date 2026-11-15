@@ -1,6 +1,7 @@
 import { Maximize2, Play, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { getString } from "../../lib/i18n/index";
+import { usePlayingElsewhere } from "../../lib/live/usePlayingElsewhere";
 import { useContinueWatchingOnLaunch } from "../../lib/useContinueWatchingOnLaunch";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 import { usePlayerStore } from "../../store/usePlayerStore";
@@ -13,7 +14,9 @@ export function ContinueWatchingMini() {
   const navigate = useNavigate();
   const { video, dismiss } = useContinueWatchingOnLaunch();
   const thumbnail = useProxiedImageUrl(video?.thumbnailUrl ?? null);
-  if (!video) return null;
+  // The "Playing on" bar takes this corner while another device plays; the card comes back once it closes.
+  const elsewhere = usePlayingElsewhere();
+  if (!video || elsewhere) return null;
 
   const playInMiniPlayer = () => {
     const player = usePlayerStore.getState();

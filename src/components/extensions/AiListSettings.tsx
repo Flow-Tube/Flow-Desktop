@@ -8,11 +8,14 @@ import { TextInput } from "../ui/TextInput";
 import { ToggleSwitch } from "../ui/ToggleSwitch";
 import {
   AISLIST_HOMEPAGE,
+  SOUL_OVER_AI_HOMEPAGE,
+  SPOTIFY_AI_BLOCKER_REPO,
   disallowAiChannel,
   refreshAiList,
   saveAiListSource,
   setAiListBlockEnabled,
   setAiListWarnEnabled,
+  setAiMusicBlockEnabled,
   setAiReportEnabled,
   setAiReportName,
   useAiListSource,
@@ -28,12 +31,23 @@ import { formatYouTubeRelativeTime } from "../../lib/publishedDate";
 
 const UPDATED_JUST_NOW_MS = 60_000;
 
-/** "60,669 channels, updated 3 hours ago", or the not-yet line. */
+/** "60,669 channels and 1,204 artists, updated 3 hours ago", naming only the lists switched on. */
 function statusText(status: AiListStatus | null): string {
-  if (!status) return getString("ai_list_status_pending");
-  const count = status.channelCount.toLocaleString();
-  if (Date.now() - status.updatedAtMs < UPDATED_JUST_NOW_MS) return getString("ai_list_status_count_now", count);
-  return getString("ai_list_status_count", count, formatYouTubeRelativeTime(status.updatedAtMs));
+  const channels = status?.channelCount;
+  const artists = status?.artistCount;
+  if (!status || (channels == null && artists == null)) return getString("ai_list_status_pending");
+  const when = formatYouTubeRelativeTime(status.updatedAtMs);
+  const now = Date.now() - status.updatedAtMs < UPDATED_JUST_NOW_MS;
+  if (channels != null && artists != null) {
+    const [c, a] = [channels.toLocaleString(), artists.toLocaleString()];
+    return now ? getString("ai_lists_status_count_now", c, a) : getString("ai_lists_status_count", c, a, when);
+  }
+  if (artists != null) {
+    const a = artists.toLocaleString();
+    return now ? getString("ai_music_status_count_now", a) : getString("ai_music_status_count", a, when);
+  }
+  const c = (channels ?? 0).toLocaleString();
+  return now ? getString("ai_list_status_count_now", c) : getString("ai_list_status_count", c, when);
 }
 
 function SourceEditor({ onDone }: { onDone: () => void }) {
@@ -83,11 +97,11 @@ function SourceEditor({ onDone }: { onDone: () => void }) {
 }
 
 /**
- * The AiSList channel filter and reporting, as on Android: hide listed channels, label suspected
- * ones, the list's state and source, channels let back in, and the submitter name for reports.
+ * The AI lists and reporting, as on Android: hide listed channels, label suspected ones, hide AI
+ * music, the lists' state and source, channels and artists let back in, and the submitter name.
  */
 export function AiListSettings() {
-  const { blockEnabled, warnEnabled, isOn } = useAiListSwitches();
+  const { blockEnabled, warnEnabled, musicEnabled, isOn } = useAiListSwitches();
   const { status, refreshing } = useAiListStatus();
   const source = useAiListSource();
   const allowed = useAllowedAiChannels();
@@ -105,6 +119,9 @@ export function AiListSettings() {
           </SettingItem>
           <SettingItem title={getString("ai_list_warn_title")} description={getString("ai_list_warn_summary")}>
             <ToggleSwitch checked={warnEnabled} onChange={(on) => void setAiListWarnEnabled(on)} />
+          </SettingItem>
+          <SettingItem title={getString("ai_music_block_title")} description={getString("ai_music_block_summary")}>
+            <ToggleSwitch checked={musicEnabled} onChange={(on) => void setAiMusicBlockEnabled(on)} />
           </SettingItem>
           {isOn && (
             <SettingItem title={getString("ai_list_status_title")} description={statusText(status)}>
@@ -127,6 +144,20 @@ export function AiListSettings() {
               <ExternalLink size={16} />
             </Button>
           </SettingItem>
+          {musicEnabled && (
+            <>
+              <SettingItem title={getString("ai_music_attribution_soul_title")} description={getString("ai_music_attribution_soul_summary")}>
+                <Button variant="ghost" onClick={() => void openExternal(SOUL_OVER_AI_HOMEPAGE)} aria-label={getString("ai_music_attribution_soul_title")}>
+                  <ExternalLink size={16} />
+                </Button>
+              </SettingItem>
+              <SettingItem title={getString("ai_music_attribution_blocker_title")} description={getString("ai_music_attribution_blocker_summary")}>
+                <Button variant="ghost" onClick={() => void openExternal(SPOTIFY_AI_BLOCKER_REPO)} aria-label={getString("ai_music_attribution_blocker_title")}>
+                  <ExternalLink size={16} />
+                </Button>
+              </SettingItem>
+            </>
+          )}
         </SettingsGroup>
         {editingSource && <SourceEditor onDone={() => setEditingSource(false)} />}
         <p className="px-1 text-xs text-chrome-neutral-500">{getString("ai_list_footer")}</p>

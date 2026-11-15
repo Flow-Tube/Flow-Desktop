@@ -145,6 +145,8 @@ MUSIC
 - Lyrics in media controls, in Settings > Lyrics, shows the current line as the song title in your system's media controls and lock screen, with long lines in parts, repeats counted and notes during breaks. It is off by default and has its own timing slider.
 - The Podcasts category chip on Music Home now loads podcast shelves and episodes instead of showing an empty result.
 - Share lyrics as an image, as on Flow for Android: pick up to five lines in Music mode, then choose the card's colors from the cover, a Classic, Poster or Shape layout, a Fit, 1:1 or Story size, and square, framed or clear edges. Copy the card, save it as a PNG, or copy the lines as text with the song credit. Lines in any language wrap inside the card.
+- Lyrics animation, in Settings > Lyrics and the lyrics menu, chooses how synced lines move: Cadence, the new default as on Android, raises letters as they are sung, swells long notes and lets a line go smoothly. Classic lifts whole words as before, and Calm only fills.
+- Held-note glow sets how brightly long notes glow: Off, Soft, Normal or Bright. Linux never draws the glow, so it doesn't show there.
 
 PLAYER
 - Live chat and chat replay beside a video can be closed. Show chat brings it back, as does the chat button on the player, which now works outside fullscreen too.

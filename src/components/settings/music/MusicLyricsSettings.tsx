@@ -18,6 +18,7 @@ import {
 import { serializeProviderOrder } from '../../../lib/lyrics/providerOrder';
 import { formatCacheSize, useLyricsCache } from '../../../lib/lyrics/useLyricsCache';
 import { lyricsBackgroundOptions } from '../../../lib/lyrics/useLyricsCover';
+import { CAN_CHOOSE_GLOW, lyricsAnimationOptions, lyricsGlowOptions, useLyricsAnimation, useLyricsGlow } from '../../../lib/lyrics/useLyricsLook';
 import { MEDIA_LYRICS_DELAY } from '../../../lib/lyrics/sessionTimeline';
 import { Slider } from '../../ui/Slider';
 
@@ -37,6 +38,8 @@ export function MusicLyricsSettings() {
   const [romanizationOnly, setRomanizationOnly] = useBoolPref(SETTINGS.LYRICS_ROMANIZATION_ONLY);
   const [keepScreenOn, setKeepScreenOn] = useBoolPref(SETTINGS.LYRICS_KEEP_SCREEN_ON);
   const [blurOtherLines, setBlurOtherLines] = useBoolPref(SETTINGS.LYRICS_BLUR_OTHER_LINES);
+  const [animation, setAnimation] = useLyricsAnimation();
+  const [glow, setGlow] = useLyricsGlow();
   const [videoTiming, setVideoTiming] = useBoolPref(SETTINGS.LYRICS_SPONSORBLOCK_TIMING);
   const [inMediaControls, setInMediaControls] = useBoolPref(SETTINGS.LYRICS_IN_MEDIA_CONTROLS);
   const [mediaDelayMs, setMediaDelayMs] = useNumberPref(SETTINGS.LYRICS_IN_MEDIA_CONTROLS_DELAY_MS);
@@ -61,6 +64,15 @@ export function MusicLyricsSettings() {
       <SettingItem title={getString('lyrics_background')} description={getString('lyrics_background_summary')}>
         <Select value={IS_LINUX_RUNTIME && background === 'moving' ? 'colorful' : background} onChange={setBackground} options={lyricsBackgroundOptions()} />
       </SettingItem>
+      <SettingItem title={getString('lyrics_animation')} description={getString(`lyrics_animation_${animation}_detail`)}>
+        <Select value={animation} onChange={setAnimation} options={lyricsAnimationOptions()} />
+      </SettingItem>
+      {/* Linux never draws the glow, because the engine would blur it on the CPU. */}
+      {CAN_CHOOSE_GLOW && (
+        <SettingItem title={getString('lyrics_glow')} description={getString('lyrics_glow_summary')}>
+          <Select value={glow} onChange={setGlow} options={lyricsGlowOptions()} />
+        </SettingItem>
+      )}
       <SettingItem title={getString('lyrics_show_translation')} description={getString('lyrics_show_translation_summary')}>
         <ToggleSwitch checked={showTranslation} onChange={setShowTranslation} />
       </SettingItem>

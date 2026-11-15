@@ -1,4 +1,5 @@
 import { BadgeCheck, Music2 } from "lucide-react";
+import { useAiChannelLabel } from "../../lib/aiList/useAiList";
 import { getString } from "../../lib/i18n/index";
 import { upgradeAvatarUrl } from "../../lib/thumbnails";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
@@ -47,7 +48,9 @@ export function UpcomingBadge({ className }: { className?: string }) {
 
 /** The card's own badges: members-only first, then YouTube's labels ("4K", "CC", "New"). */
 export function CardPills({ video }: { video: VideoSummary }) {
+  const suspectedAi = useAiChannelLabel(video.channelId, video.channelHandle);
   const labels = [
+    ...(suspectedAi ? [getString("ai_list_label")] : []),
     ...(video.isMembersOnly ? [getString("card_members_only")] : []),
     ...(video.badges ?? []),
   ];

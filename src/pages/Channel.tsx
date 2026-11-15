@@ -7,6 +7,7 @@ import { ChannelFilters } from "../components/channel/ChannelFilters";
 import { ChannelHome } from "../components/channel/ChannelHome";
 import { ChannelAboutDialog } from "../components/channel/ChannelAboutDialog";
 import { ChannelShortsGrid, ChannelPlaylistsGrid, ChannelPostsFeed } from "../components/channel/ChannelGrids";
+import { AiChannelNotice } from "../components/channel/AiChannelNotice";
 import {
   ChannelPageSkeleton,
   PlaylistsGridSkeleton,
@@ -205,6 +206,7 @@ export const Channel: React.FC<ChannelProps> = ({ onPlay, onAddToQueue }) => {
   return (
     <div className="relative flex-grow bg-background pb-24">
       <ChannelHero channelInfo={details} onOpenAbout={details.aboutToken ? () => setAboutOpen(true) : undefined} />
+      <AiChannelNotice channel={details} />
 
       <ChannelTabs
         tabs={tabs}

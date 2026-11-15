@@ -7,10 +7,10 @@ import { usePreference } from '../../../lib/usePreference';
 import { getString } from '../../../lib/i18n/index';
 import { SETTINGS } from '../../../lib/settings/schema';
 import {
-  MAX_MINI_BAR_BUTTONS,
   MINI_BAR_BUTTONS,
   miniBarBackgroundOptions,
   miniBarButtonLabel,
+  miniBarButtonLimit,
   miniBarProgressOptions,
   miniBarTimeOptions,
   miniBarWidthOptions,
@@ -34,6 +34,7 @@ export function MusicMiniPlayerSettings() {
   const [, setSungLine] = usePreference(SETTINGS.LYRICS_IN_MINI_PLAYER);
   const [, setCoverTap] = usePreference(SETTINGS.MINI_COVER_TAP);
   const chosen = look.buttons;
+  const limit = miniBarButtonLimit(look.width);
   // The chosen buttons first, in their order, then the rest to pick from.
   const order: string[] = [...chosen, ...MINI_BAR_BUTTONS.filter((button) => !chosen.includes(button))];
   const isChosen = (id: string) => chosen.includes(id as MiniBarButton);
@@ -69,7 +70,7 @@ export function MusicMiniPlayerSettings() {
           </SettingItem>
           <SettingItem title={getString('mini_bar_buttons')} description={getString('mini_bar_buttons_summary')}>
             <span className="text-xs font-medium text-chrome-neutral-400">
-              {getString('mini_bar_buttons_count', chosen.length, MAX_MINI_BAR_BUTTONS)}
+              {getString('mini_bar_buttons_count', chosen.length, limit)}
             </span>
           </SettingItem>
           <SortableToggleList
@@ -78,7 +79,7 @@ export function MusicMiniPlayerSettings() {
             labelOf={(id) => miniBarButtonLabel(id as MiniBarButton)}
             statusOf={(_, enabled) => getString(enabled ? 'mini_bar_button_shown' : 'mini_bar_button_hidden')}
             isEnabled={isChosen}
-            canEnable={() => chosen.length < MAX_MINI_BAR_BUTTONS}
+            canEnable={() => chosen.length < limit}
             onReorder={(next) => save(next.filter(isChosen))}
             onToggle={(id, on) => save(on ? [...chosen, id] : chosen.filter((button) => button !== id))}
           />

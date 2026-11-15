@@ -46,8 +46,8 @@ export const MINI_BAR_BUTTONS: readonly MiniBarButton[] = [
   "close",
 ];
 
-/** A window has room for more than a phone's three. */
-export const MAX_MINI_BAR_BUTTONS = 6;
+/** The most buttons any width shows; a window has room for more than a phone's three. */
+export const MAX_MINI_BAR_BUTTONS = 10;
 
 export const DEFAULT_MINI_BAR_BUTTONS: readonly MiniBarButton[] = ["previous", "play_pause", "next", "lyrics", "queue"];
 
@@ -74,6 +74,11 @@ export type MiniCoverTap = "open" | "play_pause";
 export type MiniBarTime = "off" | "elapsed" | "remaining";
 /** How wide the Pill floats. Desktop's own. */
 export type MiniBarWidth = "compact" | "regular" | "wide";
+
+/** How many buttons each width has room for. */
+const BUTTON_LIMITS: Record<MiniBarWidth, number> = { compact: 5, regular: 8, wide: 10 };
+
+export const miniBarButtonLimit = (width: MiniBarWidth): number => BUTTON_LIMITS[width];
 
 const PROGRESS: readonly MiniBarProgress[] = ["none", "fill", "edge", "line", "wavy_line"];
 const COVER_TAPS: readonly MiniCoverTap[] = ["open", "play_pause"];
@@ -106,15 +111,16 @@ export function useMiniPlayerLook(): MiniPlayerLook {
   const [time] = usePreference(SETTINGS.MINI_BAR_TIME);
   const [width] = usePreference(SETTINGS.MINI_BAR_WIDTH);
   const [sungLine] = usePreference(SETTINGS.LYRICS_IN_MINI_PLAYER);
+  const pillWidth = oneOf(width, WIDTHS, "regular");
   return {
     style: oneOf(style, STYLES, "pill"),
     background: oneOf(background, BACKGROUNDS, "tinted"),
-    buttons: parseMiniBarButtons(buttons),
+    buttons: parseMiniBarButtons(buttons).slice(0, miniBarButtonLimit(pillWidth)),
     coverRing: coverRing !== "false",
     barProgress: oneOf(barProgress, PROGRESS, "none"),
     coverTap: oneOf(coverTap, COVER_TAPS, "open"),
     time: oneOf(time, TIMES, "off"),
-    width: oneOf(width, WIDTHS, "regular"),
+    width: pillWidth,
     sungLine: sungLine === "true",
   };
 }

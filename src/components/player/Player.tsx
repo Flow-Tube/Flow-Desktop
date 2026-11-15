@@ -72,6 +72,10 @@ import { videoPlayerKeyAction } from "../../lib/videoPlayerKeys";
 import { IS_MAIN_WINDOW } from "../../lib/appWindow";
 import { useAmbientSettings } from "../../lib/ambient/useAmbientSettings";
 import { AmbientGlow } from "./AmbientGlow";
+import { useUiStore } from "../../store/useUiStore";
+import { SphericalView, type LookAround } from "./SphericalView";
+import type { Projection } from "../../lib/spherical/view";
+import { useLookSpeed } from "../../lib/spherical/useLookSpeed";
 import {
   AUDIO_DRIFT_TOLERANCE_SECONDS,
   AUDIO_RESYNC_MIN_INTERVAL_MS,
@@ -152,6 +156,8 @@ type PlayerProps = {
   chapters?: VideoChapter[];
   heatmap?: HeatmapMarker[];
   storyboard?: StoryboardLevel[];
+  /** How a 360 video maps onto its sphere; null for a flat one. */
+  projection?: Projection | null;
   /** How many dB louder than the site's target the video plays. */
   loudnessDb?: number | null;
 };
@@ -327,6 +333,7 @@ export const Player: React.FC<PlayerProps> = ({
   chapters = [],
   heatmap,
   storyboard,
+  projection = null,
   loudnessDb,
 }) => {
   const [activeQualityLabel, setActiveQualityLabel] = useState<string | null>(null);
@@ -597,6 +604,31 @@ export const Player: React.FC<PlayerProps> = ({
   const videoAspect = usePlayerStore((state) => state.videoAspect);
 
   const isPipMode = videoPlayerMode === "pip";
+  // The viewer's own 360 view choice for this video, or null to follow the stream (Android #1967).
+  const [sphericalChoice, setSphericalChoice] = useState<{ videoId: string | undefined; shown: boolean } | null>(null);
+  const [sphericalUnavailable, setSphericalUnavailable] = useState(false);
+  const sphericalPicked = sphericalChoice && sphericalChoice.videoId === currentVideoId ? sphericalChoice.shown : null;
+  // The small player shows the flat picture, as on Android.
+  const showsSpherical = !isPipMode && !sphericalUnavailable && (sphericalPicked ?? projection !== null);
+  const lookAround = useRef<LookAround | null>(null);
+  const [lookSpeed] = useLookSpeed();
+  const onSphericalUnavailable = useCallback(() => {
+    setSphericalUnavailable(true);
+    useUiStore.getState().showToast({ message: getString("player_spherical_unavailable") });
+  }, []);
+  const sphericalMenu = useMemo(
+    () =>
+      isPipMode
+        ? null
+        : {
+            shown: showsSpherical,
+            onToggle: (shown: boolean) => {
+              setSphericalUnavailable(false);
+              setSphericalChoice({ videoId: currentVideoId, shown });
+            },
+          },
+    [isPipMode, showsSpherical, currentVideoId],
+  );
   const isTheaterSurface = isTheaterMode && !isPipMode;
   const shouldShowControls = controlsVisible || !isPlaying || settingsOpen || isScrubbing;
   const setIsPlayerChromeShown = usePlayerStore((state) => state.setIsPlayerChromeShown);
@@ -609,7 +641,7 @@ export const Player: React.FC<PlayerProps> = ({
     glow: ambient.glow,
     theater: isTheaterSurface,
     videoFit,
-    blocked: !IS_MAIN_WINDOW || isPipMode || isFullscreen || Boolean(error),
+    blocked: !IS_MAIN_WINDOW || isPipMode || isFullscreen || Boolean(error) || showsSpherical,
   });
   const ambientSpreadShown = showAmbient && ambient.glow;
   const setIsAmbientSpreadShown = usePlayerStore((state) => state.setIsAmbientSpreadShown);
@@ -2265,6 +2297,9 @@ export const Player: React.FC<PlayerProps> = ({
         case "seek-to-fraction":
           if (!isLive && duration > 0) seekTo(duration * action.fraction);
           break;
+        case "look":
+          lookAround.current?.key(action.key);
+          break;
       }
       revealControls();
     };
@@ -2573,8 +2608,17 @@ export const Player: React.FC<PlayerProps> = ({
             setPlaybackDesired(false);
           }
         }}
-        className={cx("relative z-10 h-full w-full", VIDEO_FIT_CLASS[isPipMode ? "fit" : videoFit])}
+        className={cx("relative z-10 h-full w-full", VIDEO_FIT_CLASS[isPipMode ? "fit" : videoFit], showsSpherical && "opacity-0")}
       />
+      {showsSpherical && (
+        <SphericalView
+          videoRef={videoRef}
+          projection={projection ?? "equirectangular"}
+          speed={lookSpeed}
+          lookAround={lookAround}
+          onUnavailable={onSphericalUnavailable}
+        />
+      )}
 
       {usesExternalAudio && selectedAudioTrack?.localUrl && (
         <audio
@@ -2618,6 +2662,7 @@ export const Player: React.FC<PlayerProps> = ({
         canDragFrame={isPipMode && !isPopOut && !isFullscreen}
         settingsOpen={settingsOpen}
         onCloseSettings={closeSettings}
+        lookAround={showsSpherical ? lookAround : null}
       />
 
       {pendingQualitySwitch && (
@@ -2789,6 +2834,7 @@ export const Player: React.FC<PlayerProps> = ({
         speedOptions={configuredSpeedOptions}
         speedSliderEnabled={speedSliderEnabled}
         onSelectPlaybackRate={selectPlaybackRate}
+        spherical={sphericalMenu}
         settingsOpen={settingsOpen}
         setSettingsOpen={setSettingsOpen}
         isScrubbing={isScrubbing}

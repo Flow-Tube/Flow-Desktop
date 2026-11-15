@@ -19,6 +19,7 @@ import { youtubeWatchUrl } from "../../../lib/youtubeUrl";
 import { LONG_PRESS_MS, shouldStartDrag } from "../../../lib/pointerGesture";
 import { startWindowDrag } from "../../../lib/api/pip";
 import { StatsForNerds } from "../StatsForNerds";
+import type { LookAround } from "../SphericalView";
 import { seekSideAt, type SeekDirection, type SeekFeedback as SeekFeedbackState } from "../../../lib/seekFeedback";
 import { SeekFeedback } from "./SeekFeedback";
 import { PlayerContextMenu, type PlayerContextMenuItem } from "./PlayerContextMenu";
@@ -78,6 +79,8 @@ type PlayerGestureOverlayProps = {
   /** The settings menu, which shares the "one menu at a time" rule with the right-click menu. */
   settingsOpen: boolean;
   onCloseSettings: () => void;
+  /** A 360 video's view: a drag looks around instead of moving anything, and the wheel zooms. */
+  lookAround?: { current: LookAround | null } | null;
 };
 
 function formatTime(seconds: number) {
@@ -121,6 +124,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
   isCompact = false,
   canDragWindow = false,
   canDragFrame = false,
+  lookAround = null,
   settingsOpen,
   onCloseSettings,
 }) => {
@@ -142,6 +146,20 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
   // A press that closed a menu also eats the click after it, so closing never pauses.
   const menuClosingPressRef = useRef(false);
   const layerRef = useRef<HTMLDivElement>(null);
+  const lookFromRef = useRef<{ x: number; y: number } | null>(null);
+
+  // Native and not passive, so a wheel over a 360 video zooms it instead of scrolling the page.
+  useEffect(() => {
+    const layer = layerRef.current;
+    if (!layer || !lookAround) return;
+    const onWheel = (event: WheelEvent) => {
+      if (!lookAround.current) return;
+      event.preventDefault();
+      lookAround.current.zoom(event.deltaY);
+    };
+    layer.addEventListener("wheel", onWheel, { passive: false });
+    return () => layer.removeEventListener("wheel", onWheel);
+  }, [lookAround]);
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // A second click can arrive after the first one's toggle fired, and then has to undo it.
   const toggledByFirstClickRef = useRef(false);
@@ -213,6 +231,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
+    lookFromRef.current = null;
     clearClickTimer();
     onRevealControls();
     menuClosingPressRef.current = Boolean(contextMenu) || settingsOpen;
@@ -238,6 +257,21 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     const start = pressStartRef.current;
     if (!start) return;
+    const view = lookAround?.current;
+    if (view && !canDragFrame && !canDragWindow) {
+      const from = lookFromRef.current;
+      if (!from) {
+        if (!shouldStartDrag({ canDrag: true, boosting: longPressActiveRef.current, dx: event.clientX - start.x, dy: event.clientY - start.y })) return;
+        restorePlaybackRate();
+        // Ending a long press forgets the press; a look-around drag keeps it until the pointer is up.
+        pressStartRef.current = start;
+        draggedRef.current = true;
+      }
+      const last = from ?? start;
+      view.drag(event.clientX - last.x, event.clientY - last.y);
+      lookFromRef.current = { x: event.clientX, y: event.clientY };
+      return;
+    }
     // A press that sped playback up stays a speed-up, so the frame never hears it moved.
     if (canDragFrame && longPressActiveRef.current) {
       event.stopPropagation();

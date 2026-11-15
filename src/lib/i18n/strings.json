@@ -3672,6 +3672,7 @@
   "ai_list_source_key_hint": "Public key (optional)",
   "ai_list_source_key_help": "Only needed when the server signs the list with its own key",
   "ai_list_source_invalid": "Enter an https URL and, if given, a valid Ed25519 public key",
+  "ai_list_source_change": "Change",
   "ai_list_source_reset": "Use Flow's",
   "ai_report_header": "Report AI channels",
   "ai_report_enabled_title": "Report from the video menu",

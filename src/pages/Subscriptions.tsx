@@ -13,6 +13,8 @@ import { getString } from "../lib/i18n/index";
 import { Button } from "../components/ui/Button";
 import { SearchInput } from "../components/ui/SearchInput";
 import { CategoryChips } from "../components/layout/CategoryChips";
+import { Chip } from "../components/ui/Chip";
+import { SubscriptionPostsFeed } from "../components/subscriptions/SubscriptionPostsFeed";
 import { ChannelSwiper } from "../components/subscriptions/ChannelSwiper";
 import { ScanProgressBar } from "../components/subscriptions/ScanProgressBar";
 import { FeedFailedNotice } from "../components/subscriptions/FeedFailedNotice";
@@ -23,7 +25,7 @@ import { LastRefreshedLine } from "../components/subscriptions/LastRefreshedLine
 import { SubscriptionsManage } from "../components/subscriptions/SubscriptionsManage";
 import { channelCountLabel } from "../lib/channelGroupLabels";
 import { useSubscriptionChannelDetails, useSubscriptionFeed } from "../lib/useSubscriptionFeed";
-import { usePreference } from "../lib/usePreference";
+import { useBoolPref, usePreference } from "../lib/usePreference";
 import { useShortsEnabled } from "../lib/useShortsContent";
 import { isVideoOfChannel } from "../lib/subscriptionFeedMerge";
 import { sortSubscriptions, type SubscriptionSortMode } from "../lib/subscriptionSort";
@@ -218,6 +220,10 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
   }, [selectedGroup, visibleChannels]);
 
   const [sortMode, setSortMode] = usePreference(SETTINGS.SUBS_SORT_MODE);
+  // Posts is a view of its own beside the groups, which still pick whose posts show, as on Android.
+  const [showPostsChip] = useBoolPref(SETTINGS.SUBS_POSTS_CHIP);
+  const [showPosts, setShowPosts] = useState(false);
+  const postsShown = showPostsChip && showPosts;
   const sortedFeedChannels = useMemo(
     () => sortSubscriptions(feedChannels, sortMode as SubscriptionSortMode, videos),
     [feedChannels, sortMode, videos],
@@ -358,6 +364,13 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
               <>
                 <div className="flex items-center gap-3 border-y border-chrome-neutral-800">
                   <CategoryChips
+                    leading={
+                      showPostsChip ? (
+                        <Chip active={showPosts} onClick={() => setShowPosts((on) => !on)}>
+                          {getString("channel_tab_posts")}
+                        </Chip>
+                      ) : null
+                    }
                     categories={[
                       getString("subscriptions_group_all"),
                       ...subscriptionGroups.map((group) => group.name),
@@ -378,6 +391,12 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
                   </Button>
                 </div>
 
+                {postsShown ? (
+                  <section className="pt-4">
+                    <SubscriptionPostsFeed channels={feedChannels} feed={videos} />
+                  </section>
+                ) : (
+                <>
                 {scanProgress ? <ScanProgressBar progress={scanProgress} /> : null}
                 {!feedLoading && (
                   <FeedFailedNotice names={failedChannelNames} onRetry={refreshFeed} retrying={scanProgress != null} />
@@ -430,6 +449,8 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
                     </div>
                   )}
                 </section>
+                </>
+                )}
               </>
             ) : (
               <SubscriptionsManage

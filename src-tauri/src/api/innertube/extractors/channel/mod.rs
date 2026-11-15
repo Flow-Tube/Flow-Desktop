@@ -31,6 +31,7 @@ const SEARCH_PARAMS: &str = "EgZzZWFyY2jyBgQKAloA";
 /// needs one tab of many channels without browsing each landing page first.
 pub const VIDEOS_TAB_PARAMS: &str = "EgZ2aWRlb3PyBgQKAjoA";
 pub const SHORTS_TAB_PARAMS: &str = "EgZzaG9ydHPyBgUKA5oBAA==";
+pub const POSTS_TAB_PARAMS: &str = "EgVwb3N0c_IGBAoCSgA=";
 const DETAILS_TTL: Duration = Duration::from_mins(30);
 const DETAILS_CAPACITY: usize = 512;
 /// Avatar lookups browse a whole landing page each; a feed must not open dozens at once.

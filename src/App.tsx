@@ -13,6 +13,7 @@ import { useNotesStore } from "./store/useNotesStore";
 import { useDownloadsLibraryStore } from "./store/useDownloadsLibraryStore";
 import { useDownloadCollectionsLibraryStore } from "./store/useDownloadCollectionsLibraryStore";
 import { useWatchLaterStore } from "./store/useWatchLaterStore";
+import { startAiList } from "./store/useAiListStore";
 import { startWatchProgress } from "./store/useWatchProgressStore";
 import { useSubscriptionStore } from "./store/useSubscriptionStore";
 import { useNotificationStore } from "./store/useNotificationStore";
@@ -170,6 +171,7 @@ function App() {
     // Every subscribe button reads these, so they load once here rather than once per button.
     void useSubscriptionStore.getState().loadSubscriptions();
     void useNotificationStore.getState().loadChannelPreferences();
+    startAiList();
     if (IS_MAIN_WINDOW) void registerAutoBackup(getString("settings_backup_failed_notice")).catch(() => {});
   }, []);
 

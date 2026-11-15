@@ -224,6 +224,12 @@
   background-color: color-mix(in srgb, var(--color-primary) 22%, transparent);
 }
 
+/* The mini player's wavy line drifts one tile (two waves) while a song plays. */
+@keyframes mini-wave {
+  from { mask-position: 0 0; -webkit-mask-position: 0 0; }
+  to { mask-position: 36px 0; -webkit-mask-position: 36px 0; }
+}
+
 @keyframes pane-fade-in {
   from {
     opacity: 0;

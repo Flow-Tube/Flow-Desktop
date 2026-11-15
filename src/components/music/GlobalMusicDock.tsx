@@ -32,6 +32,13 @@ import { ClassicDockBody } from "./dock/ClassicDockBody";
 import { PillDockBody } from "./dock/PillDockBody";
 import type { DockModel } from "./dock/dockModel";
 
+/** The Pill's widths, never wider than 90% of the window. */
+const PILL_WIDTH = {
+  compact: "w-[min(90%,36rem)]",
+  regular: "w-[min(90%,44rem)]",
+  wide: "w-[min(90%,56rem)]",
+} as const;
+
 export function GlobalMusicDock() {
   const currentTrack = useMusicPlayerStore((s) => s.currentTrack);
   const viewState = useMusicPlayerStore((s) => s.viewState);
@@ -94,6 +101,7 @@ export function GlobalMusicDock() {
     menu,
     menuActions,
     buttons: look.buttons,
+    look,
   };
 
   return (
@@ -106,7 +114,7 @@ export function GlobalMusicDock() {
           exit={{ y: 96, opacity: 0 }}
           transition={{ type: "spring", stiffness: 420, damping: 38, mass: 0.9 }}
           inert={!docked}
-          className={`group fixed bottom-6 left-1/2 z-50 -translate-x-1/2 ${pill ? "h-16 w-[min(90%,44rem)]" : "h-[72px] w-[90%] max-w-5xl"}`}
+          className={`group fixed bottom-6 left-1/2 z-50 -translate-x-1/2 ${pill ? `h-16 ${PILL_WIDTH[look.width]}` : "h-[72px] w-[90%] max-w-5xl"}`}
         >
           <motion.div style={{ opacity }} className="h-full">
             {/* Dismiss — appears on hover at the corner, unless the Pill already shows Close. */}
@@ -148,7 +156,7 @@ export function GlobalMusicDock() {
               }}
               style={surface.style}
               className={`relative isolate flex h-full touch-none select-none items-center overflow-hidden bg-surface-container-high ${
-                pill ? "gap-3 rounded-full ps-1.5 pe-3" : "rounded-2xl ps-3 pe-4"
+                pill ? "gap-3 rounded-full ps-1.5 pe-3 shadow-[0_8px_24px_rgb(0_0_0/0.35)]" : "rounded-2xl ps-3 pe-4"
               } ${surface.bordered ? "border border-chrome-neutral-800" : ""} ${away ? "" : "cursor-pointer"}`}
             >
               {surface.coverColors && (

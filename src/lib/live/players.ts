@@ -7,6 +7,7 @@ import { useMusicPlayerStore, warmMusicStream } from "../../store/useMusicPlayer
 import { usePlayerStore } from "../../store/usePlayerStore";
 import type { VideoSummary } from "../../types/video";
 import type { Playing } from "./now";
+import { whenVideoStarts } from "./videoStart";
 
 /** The music player when it has a track and the video player isn't playing; otherwise the video. */
 export function playing(): Playing | null {
@@ -76,8 +77,11 @@ async function startMusic(session: Session): Promise<void> {
     .playQueue(tracks, index, null, { at: session.pos / 1000, autoplay: session.state === "playing" });
 }
 
-/** Opens the watch page on the video at once; the page loads its details as it always does. */
-function startVideo(session: Session, watch: (videoId: string) => void): void {
+/**
+ * Opens the watch page on the video at once, where it loads its details as it always does, and
+ * resolves once the video started, so the sender lets go only when it plays here.
+ */
+function startVideo(session: Session, watch: (videoId: string) => void): Promise<void> {
   prefetchStreamInfo(session.video);
   const ids = session.queue.length > 0 ? session.queue : [session.video];
   const queue = ids.map(
@@ -92,12 +96,13 @@ function startVideo(session: Session, watch: (videoId: string) => void): void {
   player.setQueue(queue, index);
   player.setPipHandoff(session.video, session.pos / 1000, session.state === "playing");
   watch(session.video);
+  return whenVideoStarts(usePlayerStore, session.video, session.state === "playing");
 }
 
 /** Starts a session handed to this device; `watch` opens the video page. */
 export async function startSession(session: Session, watch: (videoId: string) => void): Promise<void> {
   if (session.music) await startMusic(session);
-  else startVideo(session, watch);
+  else await startVideo(session, watch);
 }
 
 /** Applies a remote command to the player in use. Resolves to false when it can't. */

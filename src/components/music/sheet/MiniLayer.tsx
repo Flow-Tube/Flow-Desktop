@@ -20,7 +20,19 @@ import { useVolumeFeedback } from "../../../lib/useVolumeFeedback";
 import { VolumeFeedbackPill } from "../../ui/VolumeFeedbackPill";
 import { upgradeMusicImageUrl } from "../../../lib/thumbnails";
 import { useProxiedImageUrl } from "../../../lib/useProxiedImageUrl";
-import { dockOpacity, registerSheetDock, sheetProgress } from "../../../lib/musicSheet";
+import {
+  dockOpacity,
+  dockRise,
+  pullOpacity,
+  registerSheetDock,
+  sheetBox,
+  sheetDockBox,
+  sheetProgress,
+  sheetPull,
+  sheetStretch,
+  sheetSwipe,
+} from "../../../lib/musicSheet";
+import { BarSwipeReveal } from "./BarSwipeReveal";
 import { useSheetDrag } from "../../../lib/useSheetDrag";
 import { useControlledDevice, useRemoteActive } from "../../../lib/live/usePlayOn";
 import { youtubeThumbnailUrl } from "../../../lib/thumbnails";
@@ -76,7 +88,25 @@ export function MiniLayer() {
   // The dock stays under the full player, so the player can grow out of it and sink back into it.
   const docked = viewState === "dock";
   const sheetDrag = useSheetDrag();
-  const opacity = useTransform(sheetProgress, dockOpacity);
+  // The bar rides the card's top edge as the player grows, and follows a pull down while closing.
+  const dockHeight = () => {
+    const dock = sheetDockBox();
+    return dock ? dock.bottom - dock.top : 64;
+  };
+  const opacity = useTransform([sheetProgress, sheetPull], ([progress, pull]: number[]) =>
+    dockOpacity(progress!) * pullOpacity(pull!, dockHeight()),
+  );
+  const y = useTransform([sheetProgress, sheetPull], ([progress, pull]: number[]) => {
+    const dock = sheetDockBox();
+    return dockRise(progress!, dock ? dock.top - sheetBox().top : 0) + pull!;
+  });
+  // Above the growing player until it has faded, and out of the pointer's way once it has.
+  const zIndex = useTransform(sheetProgress, (progress) => (progress > 0 ? 61 : 50));
+  const pointerEvents = useTransform(sheetProgress, (progress) => (progress < 0.5 ? "auto" : "none"));
+  // Android's 6 dp card shadow, only while the bar rests.
+  const boxShadow = useTransform([sheetProgress, sheetPull, sheetSwipe], ([progress, pull, swipe]: number[]) =>
+    pill && progress === 0 && pull === 0 && swipe === 0 ? "0 8px 24px rgb(0 0 0 / 0.35)" : "none",
+  );
   // While this device controls another, the dock shows that device's music and its buttons drive
   // it (the player's actions go there); a video there gets the remote dock instead.
   const remote = useRemoteActive();
@@ -115,9 +145,15 @@ export function MiniLayer() {
           exit={{ y: 96, opacity: 0 }}
           transition={{ type: "spring", stiffness: 420, damping: 38, mass: 0.9 }}
           inert={!docked}
-          className={`group fixed bottom-6 left-1/2 z-50 -translate-x-1/2 ${pill ? `h-16 ${PILL_WIDTH[look.width]}` : "h-[72px] w-[90%] max-w-5xl"}`}
+          ref={registerSheetDock}
+          style={{ zIndex }}
+          className={`group fixed bottom-6 left-1/2 -translate-x-1/2 ${pill ? `h-16 ${PILL_WIDTH[look.width]}` : "h-[72px] w-[90%] max-w-5xl"}`}
         >
-          <motion.div style={{ opacity }} className="h-full">
+          {!away && <BarSwipeReveal rounded={pill ? "rounded-full" : "rounded-2xl"} />}
+          <motion.div
+            style={{ opacity, y, x: sheetSwipe, scaleY: sheetStretch, originY: 1, pointerEvents }}
+            className="relative h-full"
+          >
             {/* Dismiss — appears on hover at the corner, unless the Pill already shows Close. */}
             {!away && !(pill && look.buttons.includes("close")) && (
               <HapticButton
@@ -143,8 +179,7 @@ export function MiniLayer() {
             )}
 
             {/* The bar (clips the edge progress line and the cover colours to its corners). Drag it up to open the player. */}
-            <div
-              ref={registerSheetDock}
+            <motion.div
               {...sheetDrag}
               data-music-dock-bar
               onClick={(e) => {
@@ -156,9 +191,9 @@ export function MiniLayer() {
                 openOverlay("full");
               }}
               // Vivid paints its own controls, so the bar's surface wins over the control colours.
-              style={{ ...controlColors, ...surface.style }}
+              style={{ ...controlColors, ...surface.style, boxShadow }}
               className={`relative isolate flex h-full touch-none select-none items-center overflow-hidden bg-surface-container-high ${
-                pill ? "gap-3 rounded-full ps-1.5 pe-3 shadow-[0_8px_24px_rgb(0_0_0/0.35)]" : "rounded-2xl ps-3 pe-4"
+                pill ? "gap-3 rounded-full ps-1.5 pe-3" : "rounded-2xl ps-3 pe-4"
               } ${surface.bordered ? "border border-chrome-neutral-800" : ""} ${away ? "" : "cursor-pointer"}`}
             >
               {surface.coverColors && (
@@ -177,7 +212,7 @@ export function MiniLayer() {
               />
 
               {pill ? <PillDockBody model={model} /> : <ClassicDockBody model={model} />}
-            </div>
+            </motion.div>
 
             {/* Popovers — rendered outside the clipped pill so they aren't cut off. */}
             <div className="absolute bottom-full end-2 mb-3">

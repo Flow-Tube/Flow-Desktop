@@ -37,14 +37,16 @@ import { upgradeMusicImageUrl } from "../../../lib/thumbnails";
 import { useProxiedImageUrl } from "../../../lib/useProxiedImageUrl";
 import {
   contentOpacity,
-  contentScale,
+  contentRise,
   settleSheet,
   sheetBox,
   sheetClip,
   sheetDockBox,
   sheetOpacity,
   sheetProgress,
+  sheetStretch,
 } from "../../../lib/musicSheet";
+import { usePlayerDrag } from "../../../lib/useSheetDrag";
 
 const rgbCss = ({ r, g, b }: { r: number; g: number; b: number }) => `rgb(${r} ${g} ${b})`;
 
@@ -107,7 +109,8 @@ export function FullLayer() {
   const clipPath = useTransform(sheetProgress, (progress) => sheetClip(progress, sheetDockBox(), sheetBox()));
   const groundOpacity = useTransform(sheetProgress, sheetOpacity);
   const innerOpacity = useTransform(sheetProgress, contentOpacity);
-  const innerScale = useTransform(sheetProgress, contentScale);
+  const innerRise = useTransform(sheetProgress, contentRise);
+  const drag = usePlayerDrag();
 
   // The page only goes away once the player has finished covering it.
   const [entered, setEntered] = useState(() => sheetProgress.get() >= 1);
@@ -184,7 +187,7 @@ export function FullLayer() {
 
   // Android draws the lyrics in the player's primary, checked against the surface behind them.
   const lyricsView = (variant: "full" | "pane", className: string) => (
-    <div className={className}>
+    <div data-sheet-drag-ignore className={className}>
       <MusicLyrics
         track={currentTrack}
         variant={variant}
@@ -208,10 +211,13 @@ export function FullLayer() {
       aria-hidden={!open}
       // While the dock is dragged or the player sinks, the pointer belongs to the dock.
       className={`fixed inset-x-0 bottom-0 top-[var(--app-titlebar-height)] z-[60] flex flex-col overflow-hidden bg-[var(--player-ground)] outline-none ${open ? "" : "pointer-events-none"}`}
-      style={{ ...playerColors.rootStyle, clipPath, opacity: groundOpacity }}
+      style={{ ...playerColors.rootStyle, clipPath, opacity: groundOpacity, scaleY: sheetStretch, originY: 1 }}
+      {...(open ? drag : {})}
+      // The cover is an image the browser would otherwise start dragging, taking the pointer away.
+      onDragStart={(event) => event.preventDefault()}
     >
       <motion.div
-        style={{ opacity: innerOpacity, scale: innerScale, transformOrigin: "50% 100%" }}
+        style={{ opacity: innerOpacity, y: innerRise }}
         className="relative flex min-h-0 flex-1 flex-col"
       >
         <AmbientBackdrop
@@ -330,7 +336,7 @@ export function FullLayer() {
         {/* Playback failure banner — floats below the top bar across all sub-views. */}
         {musicError.errorInfo && (
           <div className="pointer-events-none absolute left-1/2 top-20 z-30 w-full max-w-xl -translate-x-1/2 px-6">
-            <div className="pointer-events-auto">
+            <div data-sheet-drag-ignore className="pointer-events-auto">
               <PlayerErrorState
                 variant="compact"
                 error={musicError.errorInfo}
@@ -377,6 +383,7 @@ export function FullLayer() {
                 {showPane && (
                   <motion.div
                     key="side-pane"
+                    data-sheet-drag-ignore
                     initial={{ opacity: 0, x: 48 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 48 }}
@@ -405,6 +412,7 @@ export function FullLayer() {
                 {isQueue && (
                   <motion.div
                     key="queue-pane"
+                    data-sheet-drag-ignore
                     initial={{ opacity: 0, x: 48 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 48 }}

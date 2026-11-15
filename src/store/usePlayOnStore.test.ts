@@ -224,7 +224,7 @@ describe("usePlayOnStore", () => {
       expect(shownState()).toBe("paused");
       await flush();
       deliver({ from: "bb", seq: 1, ask: false, message: { type: "result", to: "me", ref: 9, ok: true } });
-      await pausing;
+      await expect(pausing).resolves.toBe(true);
       expect(shownState()).toBe("paused");
       report(phone({ ...NOW, state: "playing" }, Date.now() + 1000));
       expect(shownState()).toBe("playing");
@@ -257,7 +257,7 @@ describe("usePlayOnStore", () => {
       const pausing = usePlayOnStore.getState().drive("bb", "pause");
       await flush();
       deliver({ from: "bb", seq: 1, ask: false, message: { type: "result", to: "me", ref: 9, ok: false, reason: "declined" } });
-      await pausing;
+      await expect(pausing).resolves.toBe(false);
       expect(shownState()).toBe("playing");
       expect(showToast).toHaveBeenCalledOnce();
     });

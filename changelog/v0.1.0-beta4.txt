@@ -145,6 +145,7 @@ PLAYER
 - Live chat and chat replay beside a video can be closed. Show chat brings it back, as does the chat button on the player, which now works outside fullscreen too.
 - The mini player's controls, its move handle and its Expand and Close buttons fade together after a few seconds of playback, as in the full player, instead of staying up while the pointer rests on it.
 - Scroll over any volume control to change the volume: the video player, Shorts, the music bar, the full music player and Play on.
+- Play on: the volume slider follows the device's volume as it changes there, and shows the right volume after you switch devices. It stays where you put it while you drag.
 - Scroll over the ambient mode intensity slider in Settings to adjust it.
 - While muted, scrolling up unmutes to your saved volume and scrolling down leaves it alone.
 - Moving the music volume while muted no longer leaves the song silent.

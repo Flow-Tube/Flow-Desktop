@@ -66,8 +66,8 @@ interface PlayOnState {
   moveTo: (did: string) => Promise<void>;
   /** Controls `did`, which plays already, from the remote dock. */
   control: (did: string) => void;
-  /** Drives the player here, or on `did`. */
-  drive: (did: string | null, cmd: Command, value?: { pos?: number; vol?: number; queue?: string[] }) => Promise<void>;
+  /** Drives the player here, or on `did`; resolves to false when the command didn't take. */
+  drive: (did: string | null, cmd: Command, value?: { pos?: number; vol?: number; queue?: string[] }) => Promise<boolean>;
   /** Answers the oldest question in `asking`. */
   answer: (choice: ConsentChoice) => Promise<void>;
 }
@@ -264,10 +264,7 @@ export const usePlayOnStore = create<PlayOnState>((set, get) => {
     control: (did) => set({ controlling: did }),
 
     drive: async (did, cmd, value = {}) => {
-      if (!did) {
-        await applyCommand({ type: "cmd", to: "", cmd, ...value });
-        return;
-      }
+      if (!did) return applyCommand({ type: "cmd", to: "", cmd, ...value });
       const device = get().reported?.devices[did];
       const override = device ? overrideFor(device, cmd, value, Date.now()) : null;
       if (override) show(get().reported, { ...get().overrides, [did]: override });
@@ -278,12 +275,13 @@ export const usePlayOnStore = create<PlayOnState>((set, get) => {
       // A `now` that arrived meanwhile already replaced what was shown; a command that changed
       // nothing shown is still told about when it failed.
       const shown = get().overrides[did] === override;
-      if (answer.ok || (override && !shown)) return;
+      if (answer.ok || (override && !shown)) return answer.ok;
       if (override) {
         const { [did]: _, ...rest } = get().overrides;
         show(get().reported, rest);
       }
       useUiStore.getState().showToast({ variant: "error", message: getString("play_on_control_failed", deviceName(did)) });
+      return false;
     },
 
     answer: async (choice) => {

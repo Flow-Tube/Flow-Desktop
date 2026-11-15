@@ -330,3 +330,4 @@ FIXES
 - Text you type in search and other fields follows the direction of what you type. On Linux, Flow uses Noto's Arabic fonts when they are installed, so Arabic letters keep their dots and joins.
 - The Subscriptions page no longer jumps while you scroll during a refresh. The feed you are reading stays on screen until the check of every channel finishes, cards keep their thumbnails when new videos arrive, and the video you are looking at stays in place when things above it change.
 - Play on: moving a video that takes a while to start no longer leaves it playing on both devices.
+- Importing YouTube history from a Google Takeout HTML file now skips ads and no longer gives an entry the next entry's channel. Ads an earlier import saved are removed if you never played them in Flow, and the import says how many.

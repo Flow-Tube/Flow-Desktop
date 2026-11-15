@@ -15,6 +15,7 @@ export function MusicNowPlayingSettings() {
   const [animatedArtwork, setAnimatedArtwork] = useBoolPref(SETTINGS.MUSIC_ANIMATED_ARTWORK);
   const [paneCoverColors, setPaneCoverColors] = useBoolPref(SETTINGS.MUSIC_SIDE_PANE_COVER_COLORS);
   const [hideArtwork, setHideArtwork] = useBoolPref(SETTINGS.MUSIC_HIDE_ARTWORK);
+  const [splitTransport, setSplitTransport] = useBoolPref(SETTINGS.MUSIC_SPLIT_TRANSPORT);
   const [seekBarStyle, setSeekBarStyle] = usePreference(SETTINGS.MUSIC_SEEK_BAR_STYLE);
   const expressiveSliders = useExpressiveSliders();
 
@@ -43,6 +44,9 @@ export function MusicNowPlayingSettings() {
           ]} />
         </SettingItem>
       )}
+      <SettingItem title={getString('settings_music_split_transport')} description={getString('settings_music_split_transport_desc')}>
+        <ToggleSwitch checked={splitTransport} onChange={setSplitTransport} />
+      </SettingItem>
       <SettingItem title={getString('settings_music_player_follow_light_theme')} description={getString('settings_music_player_follow_light_theme_desc')}>
         <ToggleSwitch checked={followLightTheme} onChange={setFollowLightTheme} />
       </SettingItem>

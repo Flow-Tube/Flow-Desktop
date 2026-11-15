@@ -9,7 +9,7 @@ use crate::sync::error::SyncError;
 use crate::sync::local_edits;
 use crate::sync2::actions::{leave_if_linked, reset_local_data};
 use crate::sync2::profile_actions::{edits_sync, syncs_link};
-use crate::sync2::service::push_soon;
+use crate::sync2::push::push_soon;
 use sqlx::SqlitePool;
 use tauri::{AppHandle, State};
 
@@ -48,20 +48,31 @@ fn refuse_local_files(records: &[WatchHistoryRecord]) -> Result<(), ErrorRespons
     Ok(())
 }
 
+/// `progress` marks the position a player saves every few seconds while it plays; that goes out
+/// once playback settles ([`watch_history_settled`]), not on every save.
 #[tauri::command]
 pub async fn add_watch_record(
     app: AppHandle,
     record: WatchHistoryRecord,
+    progress: Option<bool>,
     pool: State<'_, SqlitePool>,
 ) -> Result<(), ErrorResponse> {
     refuse_local_files(std::slice::from_ref(&record))?;
     watch_history::upsert_watch_record(&pool, &record)
         .await
         .map_err(ErrorResponse::from)?;
-    if edits_sync(&app).await {
+    if progress != Some(true) && edits_sync(&app).await {
         push_soon(&app);
     }
     Ok(())
+}
+
+/// A player paused, stopped or moved on, so the history it saved while playing can go out.
+#[tauri::command]
+pub async fn watch_history_settled(app: AppHandle) {
+    if edits_sync(&app).await {
+        push_soon(&app);
+    }
 }
 
 /// Undo of a removal, which unlike a new watch must beat the deletion it takes back.
@@ -205,7 +216,7 @@ pub async fn set_setting(
 ) -> Result<(), ErrorResponse> {
     if edits_sync(&app).await {
         note_sync_failure(local_edits::record_blob_write(&pool, &key, &value).await);
-        if local_edits::is_synced_setting(&key) {
+        if local_edits::is_collection_setting(&key) {
             push_soon(&app);
         }
     }

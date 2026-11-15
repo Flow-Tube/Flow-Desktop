@@ -10,6 +10,7 @@ pub mod takeout;
 pub mod takeout_activity;
 pub mod takeout_csv;
 
+use std::collections::HashSet;
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::Path;
@@ -153,6 +154,8 @@ pub struct Found {
     pub likes: Vec<TakenLike>,
     /// Songs saved to the YouTube Music library, kept as one playlist.
     pub library_song_count: usize,
+    /// Videos the history lists only as ads, which an earlier import may have saved as watched.
+    pub ad_video_ids: HashSet<String>,
 }
 
 pub(crate) const MAX_WATCHES: usize = 500_000;

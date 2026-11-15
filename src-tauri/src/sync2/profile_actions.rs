@@ -12,7 +12,7 @@ use super::profile_links::{
     Reading, catching_up, forget_link, link_profile, linked, reading, unlink,
 };
 use super::profile_names::{name_missing, records, set};
-use super::service::{push_soon, sync_now, sync_soon};
+use super::service::{follow_up_soon, sync_now, sync_soon};
 use super::state::{load_group, read_from_snapshot, save_group};
 use crate::services::profile_service::ProfileService;
 use crate::sync::error::SyncError;
@@ -236,7 +236,7 @@ pub async fn renamed(app: &AppHandle, profile: &str, name: &str) -> Result<()> {
         return Ok(());
     };
     set(&local.pool, &local.meta.app, link, name, false).await?;
-    push_soon(app);
+    follow_up_soon(app);
     Ok(())
 }
 

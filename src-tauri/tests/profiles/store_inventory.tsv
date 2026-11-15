@@ -75,9 +75,12 @@ setting	user_music_brain	PROFILE	private	MusicBrain
 setting	music_brain_backfilled	PROFILE	private	Follows user_music_brain
 setting	liked_items	PROFILE	library	Likes
 setting	local_media_reading	DEVICE	-	Files a library scan is reading, so a crash on one is not repeated at every launch
+setting	linked_auto_sync	DEVICE	-	Sync automatically for Linked devices; a device setting that never syncs
 setting	saved_shorts_library	PROFILE	library	Saved Shorts; never copied to another profile
 setting	saved_shorts_peer_keeps_list	PROFILE	sync	A device has sent Saved Shorts, so this profile's may go out
 setting	sync2_notes_missed	DEFAULT_ONLY	sync	The group's state, in Default's file: notes other devices sent before this build kept them are still to be read
+setting	sync2_left_out	DEFAULT_ONLY	sync	The group's state, in Default's file: collections this device leaves out of its links
+setting	sync2_taken_back	DEFAULT_ONLY	sync	The group's state, in Default's file: collections taken back that are still to be read from the links' snapshots
 setting	user_playlists	PROFILE	library	Playlists
 setting	saved_albums	PROFILE	library	Saved albums
 setting	subscription_groups	PROFILE	library	Channel groups
@@ -102,6 +105,13 @@ setting	stable_volume_enabled	PROFILE	settings	Playback preference
 setting	sponsorblock_categories	PROFILE	settings	SponsorBlock preference
 setting	sponsorblock_enabled	PROFILE	settings	SponsorBlock preference
 setting	sponsorblock_server	PROFILE	settings	SponsorBlock preference
+setting	ai_list_block_enabled	PROFILE	settings	Hide AI channels, read by the daily list refresh
+setting	ai_list_warn_enabled	PROFILE	settings	Label suspected AI channels, read by the daily list refresh
+setting	ai_music_block_enabled	PROFILE	settings	Hide AI music artists, read by the daily list refresh
+setting	ai_list_allowed	PROFILE	settings	AI-listed channels the viewer chose to see
+setting	ai_list_report_name	PROFILE	settings	Submitter name sent with an AiSList report
+setting	ai_list_source_url	DEVICE	-	Where the AI channel list is downloaded from; the list is one per install
+setting	ai_list_source_key	DEVICE	-	The public key a custom AI channel list source signs with
 setting	sync_neuro_merged	DEFAULT_ONLY	sync	FlowNeuro CRDT state
 setting	sync_music_merged	DEFAULT_ONLY	sync	MusicBrain CRDT state
 setting	sync_neuro_baseline	DEFAULT_ONLY	sync	FlowNeuro CRDT baseline
@@ -126,6 +136,7 @@ file	custom.css	DEVICE	-	Shared theme library; the chosen theme is per profile
 file	.window-state.json	DEVICE	-	Window size and position
 file	startup_state.json	DEVICE	-	Linux startup tiers, read before any profile is known
 file	toast_logo	DEVICE	-	Windows notification logo
+file	ai_list	DEVICE	-	The AiSList channel list, the AI music artist list, the handle index and refresh schedule; never backed up or synced
 keychain	CREDENTIALS	PROFILE	private	Scrobbling credentials; CREDENTIALS@<id> outside Default
 keychain	LASTFM	DEFAULT_ONLY	private	Legacy entry migrated into Default's CREDENTIALS
 keychain	LIBREFM	DEFAULT_ONLY	private	Legacy entry migrated into Default's CREDENTIALS
@@ -152,3 +163,4 @@ dir_site	src/commands/local_media.rs	CACHE	-	local_covers, disposable covers rea
 dir_site	src/commands/cache.rs	CACHE	-	Reports and clears the disposable caches
 file	profiles_local.json	DEVICE	-	Desktop-only profile state: keychain deletes to retry
 file	profile_avatars	DEVICE	-	Profile photos, <id>.webp
+dir_site	src/commands/app_font.rs	DEVICE	-	fonts/custom.ttf or .otf, the custom app font, never backed up

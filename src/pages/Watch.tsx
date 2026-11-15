@@ -7,7 +7,7 @@ import { useFeedHiddenFilter } from "../store/useFeedActionsStore";
 import { useSubscriptionStore } from "../store/useSubscriptionStore";
 import { useSettingsStore } from "../store/useSettingsStore";
 import { setSettingValue, useAppSettingsStore } from "../store/useAppSettingsStore";
-import { getPlaylistDetails } from "../lib/api/youtube";
+import { firstPlaylistPage } from "../lib/playlistPages";
 import { getReturnYouTubeDislike, getDeArrowOverride } from "../lib/api/foss";
 import { useDownloadedVideoRecord, downloadRecordToVideo } from "../lib/useDownloads";
 import { useWatchVideoDetails } from "../lib/useWatchVideoDetails";
@@ -169,7 +169,10 @@ export function Watch() {
       relatedLane.items.filter((item) => {
         if (item.itemType && item.itemType !== "video") return true; // keep playlists / mixes
         const id = item.videoId || item.id;
-        return unseen.isShown(id) && !isHidden({ id, channelId: item.channelId } as VideoSummary);
+        return (
+          unseen.isShown(id) &&
+          !isHidden({ id, channelId: item.channelId, channelHandle: item.channelHandle, collaborators: item.collaborators } as VideoSummary)
+        );
       }),
     [relatedLane.items, isHidden, unseen],
   );
@@ -183,7 +186,7 @@ export function Watch() {
       if (item.itemType === "playlist" || item.itemType === "mix") {
         if (item.playlistId) {
           try {
-            const playlist = await getPlaylistDetails(item.playlistId);
+            const playlist = await firstPlaylistPage(item.playlistId, item.videoId);
             if (playlist.videos.length > 0) {
               const fallbackVideoId = item.videoId || playlist.videos[0]?.id;
               const startIndex = fallbackVideoId

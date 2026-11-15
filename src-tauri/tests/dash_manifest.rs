@@ -61,6 +61,7 @@ fn stream_info_from(fixture_name: &str) -> StreamInfo {
         is_live: false,
         loudness_db: None,
         storyboard: Vec::new(),
+        projection: None,
         sabr: None,
         sabr_descriptor: None,
     }

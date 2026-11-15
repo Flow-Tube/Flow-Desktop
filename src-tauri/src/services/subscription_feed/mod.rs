@@ -3,6 +3,7 @@
 //! Android's `RssSubscriptionService`.
 
 pub mod collabs;
+pub mod posts;
 pub mod reels;
 pub mod rss;
 

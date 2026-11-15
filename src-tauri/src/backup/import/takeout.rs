@@ -83,6 +83,7 @@ struct Pieces {
     library_songs: Vec<LibrarySong>,
     activity_likes: Option<Vec<super::TakenLike>>,
     watches: Vec<super::Watch>,
+    ad_video_ids: HashSet<String>,
     music_ids: HashSet<String>,
 }
 
@@ -104,9 +105,9 @@ fn read_archive(
         if english_history || is_history_entry(&name, "html") {
             // Each file is stamped below the last, so two history files never share a time.
             let start = now.saturating_sub(pieces.watches.len() as u64);
-            pieces
-                .watches
-                .extend(read_history_html(bounded, start, !english_history)?);
+            let history = read_history_html(bounded, start, !english_history)?;
+            pieces.watches.extend(history.watches);
+            pieces.ad_video_ids.extend(history.ad_video_ids);
         } else if is_history_entry(&name, "json") {
             if let Some(activity) = read_activity_json(bounded, true) {
                 pieces.watches.extend(activity.watches);
@@ -278,11 +279,13 @@ pub fn read_archives(
         playlists,
         likes,
         library_song_count,
+        ad_video_ids: std::mem::take(&mut pieces.ad_video_ids),
     };
     if found.channels.is_empty()
         && found.watches.is_empty()
         && found.playlists.is_empty()
         && found.likes.is_empty()
+        && found.ad_video_ids.is_empty()
     {
         return Err(ImportError::NoContent);
     }

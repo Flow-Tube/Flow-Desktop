@@ -17,6 +17,19 @@ updates:
           - minor
           - patch
 
+  # The Tauri CLI the updater signing jobs install, on its own so each bump is
+  # reviewed apart from the app's dependencies.
+  - package-ecosystem: npm
+    directory: /.github/signing
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:05"
+      timezone: Asia/Beirut
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 2
+
   - package-ecosystem: cargo
     directory: /src-tauri
     schedule:
@@ -40,12 +53,18 @@ updates:
           - patch
 
   - package-ecosystem: github-actions
-    directory: /
+    # "/" covers .github/workflows; local composite actions are listed apart.
+    directories:
+      - /
+      - /.github/actions/*
     schedule:
       interval: weekly
       day: monday
       time: "06:30"
       timezone: Asia/Beirut
+    # A new action release waits a week before it is proposed.
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 10
     groups:
       action-updates:

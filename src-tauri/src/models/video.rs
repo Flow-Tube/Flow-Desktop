@@ -12,6 +12,10 @@ pub struct VideoSummary {
     pub thumbnail_url: Option<String>,
     pub duration_seconds: Option<u64>,
     pub published_text: Option<String>,
+    /// When `published_text` places the upload, in epoch milliseconds, read
+    /// in the content language when the card was fetched.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub published_at_ms: Option<u64>,
     pub view_count_text: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub channel_avatar_url: Option<String>,
@@ -44,6 +48,9 @@ pub struct VideoSummary {
     /// The description excerpt search results show.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub snippet: Option<String>,
+    /// The channel's `/@handle` path when the card links to it, which the AI channel list matches.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub channel_handle: Option<String>,
 }
 
 /// One channel of a collaboration.
@@ -71,6 +78,9 @@ pub struct RelatedContentItem {
     pub thumbnail_url: Option<String>,
     pub duration_seconds: Option<u64>,
     pub published_text: Option<String>,
+    /// [`VideoSummary::published_at_ms`] for a related video.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub published_at_ms: Option<u64>,
     pub view_count_text: Option<String>,
     pub video_id: Option<String>,
     pub playlist_id: Option<String>,
@@ -91,6 +101,9 @@ pub struct RelatedContentItem {
     pub badges: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub collaborators: Vec<Collaborator>,
+    /// The channel's `/@handle` path when the card links to it, which the AI channel list matches.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub channel_handle: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -269,6 +282,12 @@ pub struct StreamInfo {
     /// Seek-bar preview sheets, one entry per resolution, smallest first.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub storyboard: Vec<StoryboardLevel>,
+    /// How a 360 video's frames map onto the sphere around the viewer:
+    /// `equirectangular`, or `equirectangular_top_bottom` for one eye above the
+    /// other. `None` for a flat video, and for the cube-map (`MESH`) layout the
+    /// player can't draw.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub projection: Option<String>,
     // Internal: everything needed to spin up a SABR session. Never serialized;
     // consumed by the command layer to register a session with the proxy.
     #[serde(skip)]

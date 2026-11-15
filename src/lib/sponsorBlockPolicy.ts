@@ -66,12 +66,39 @@ export class SponsorBlockTracker {
   private handled = new Set<string>();
   private dismissed = new Set<string>();
   private skippedOnce = new Set<string>();
+  private counted = new Set<string>();
 
   /** A new video starts clean. */
   reset(): void {
     this.handled.clear();
     this.dismissed.clear();
     this.skippedOnce.clear();
+    this.counted.clear();
+  }
+
+  /**
+   * True the first time a segment is skipped or muted in this video, so stats and Recap count it
+   * once however often a rewind brings it back.
+   */
+  countsOnce(uuid: string): boolean {
+    if (this.counted.has(uuid)) return false;
+    this.counted.add(uuid);
+    return true;
+  }
+
+  /**
+   * The segment a seek to `position` lands in when that segment skips automatically, so the seek
+   * goes to its end instead; null to seek as asked. The tick can't cover this: a segment at the very
+   * start of a video has no position before it to re-arm from, and the tick would show part of it.
+   */
+  skipForSeek(position: number, segments: SponsorBlockSegment[], actions: Actions): SponsorBlockSegment | null {
+    const segment = segments.find(({ segment: [start, end] }) => position >= start && position < end);
+    if (!segment) return null;
+    const action = segmentAction(segment, actions);
+    if (!skipsAutomatically(action, this.skippedOnce.has(segment.UUID))) return null;
+    this.handled.add(segment.UUID);
+    if (action === "skip_once") this.skippedOnce.add(segment.UUID);
+    return segment;
   }
 
   /** The viewer used the button on this segment, so it stays out of the way until they rewind past it. */

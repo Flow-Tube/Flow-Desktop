@@ -20,6 +20,7 @@ import type {
   ExploreGrid,
   ExplorePage,
   ExploreTarget,
+  PostSummary,
 } from "../../types/video";
 import { isTauriEnv } from "./env";
 import {
@@ -387,6 +388,12 @@ export async function getPlaylistDetails(
   });
 }
 
+/** A Mix's queue as a playlist. `videoId` seeds a Mix whose id names no video. */
+export async function getMixPlaylist(playlistId: string, videoId?: string | null): Promise<PlaylistDetailsResponse> {
+  if (!(await isTauriEnv())) throw new Error("Mixes require the desktop app.");
+  return invokeBackend<PlaylistDetailsResponse>("get_mix_playlist", { playlistId, videoId: videoId ?? null });
+}
+
 export async function getComments(
   videoId: string,
   pageToken?: string | null,
@@ -579,6 +586,58 @@ export async function getSubscriptionRssFeed(
 export async function scanSubscriptionCollaborations(channelIds: string[]): Promise<VideoSummary[]> {
   if (!(await isTauriEnv())) return [];
   return invokeBackend<VideoSummary[]>("scan_subscription_collaborations", { channelIds });
+}
+
+export interface SubscriptionPostsChannel {
+  id: string;
+  name?: string | null;
+  avatarUrl?: string | null;
+}
+
+/** A recent community post of a followed channel. */
+export interface SubscriptionPost {
+  post: PostSummary;
+  channelId: string;
+  /** Epoch ms, read from the post's relative age when it was fetched. */
+  publishedAt: number;
+}
+
+export interface SubscriptionPostsPage {
+  posts: SubscriptionPost[];
+  /** The page after this one, or null once every channel was read. */
+  nextPage: number | null;
+}
+
+type WirePostsPage = {
+  posts: Array<Omit<SubscriptionPost, "post"> & { post: Omit<PostSummary, "type"> }>;
+  nextPage?: number | null;
+};
+
+/**
+ * One page of the followed channels' recent posts: eight channels, ranked by `recentUploaderIds`
+ * (channel ids, newest upload first), so the same arguments always give the same page.
+ */
+export async function getSubscriptionPosts(
+  channels: SubscriptionPostsChannel[],
+  recentUploaderIds: string[],
+  page: number,
+): Promise<SubscriptionPostsPage> {
+  if (!(await isTauriEnv())) return { posts: [], nextPage: null };
+  const result = await invokeBackend<WirePostsPage>("get_subscription_posts", {
+    channels,
+    recentUploaderIds,
+    page,
+  });
+  return {
+    posts: result.posts.map((item) => ({ ...item, post: { ...item.post, type: "post" } })),
+    nextPage: result.nextPage ?? null,
+  };
+}
+
+/** Forgets every channel's cached posts, so the next page reads each channel again. */
+export async function forgetSubscriptionPosts(): Promise<void> {
+  if (!(await isTauriEnv())) return;
+  await invokeBackend<void>("forget_subscription_posts");
 }
 
 export async function streamSubscriptionRssFeed(

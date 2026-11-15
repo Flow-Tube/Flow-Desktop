@@ -18,6 +18,8 @@ import type { SongItem } from '../../types/music';
 import { MusicCardMenu, type MusicMenuAction, useMusicContextMenu } from './MusicCardMenu';
 import { ArtistLinks } from './ArtistLinks';
 import { ExplicitBadge } from './ExplicitBadge';
+import { SuspectedAiTag } from './SuspectedAiTag';
+import { useAiMusicVerdict } from '../../lib/aiList/useAiList';
 import { PlayingWave } from './PlayingWave';
 import { useTrackBlockActions } from './useTrackBlockActions';
 import { useTrackNavActions } from './useTrackNavActions';
@@ -120,6 +122,7 @@ export function AlbumTrackRow({
   selection,
 }: AlbumTrackRowProps) {
   const artistLabel = artistsText(track.artists);
+  const suspectedAi = useAiMusicVerdict(track.artists.map((artist) => artist.id)) === 'warn';
   const duration = track.duration == null ? '' : formatTime(track.duration);
   const showEq = isCurrent && isPlaying;
   const [isHovered, setIsHovered] = useState(false);
@@ -279,9 +282,10 @@ export function AlbumTrackRow({
         <span dir="auto" className={`line-clamp-1 font-medium ${isCurrent ? 'text-[var(--color-primary)]' : 'text-chrome-neutral-100'}`}>
           {track.title}
         </span>
-        {((showArtist && artistLabel) || track.explicit) && (
+        {((showArtist && artistLabel) || track.explicit || suspectedAi) && (
           <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-sm text-chrome-neutral-400 transition-colors duration-200 ease-out group-hover:text-chrome-neutral-300">
             {track.explicit ? <ExplicitBadge /> : null}
+            {suspectedAi ? <SuspectedAiTag /> : null}
             {showArtist && artistLabel ? (
               <ArtistLinks artists={track.artists} plain={Boolean(selection)} className="line-clamp-1" />
             ) : null}

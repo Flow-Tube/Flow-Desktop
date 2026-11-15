@@ -1,4 +1,4 @@
-import { FolderKey, HardDrive, KeyRound, LogOut, Plus, RefreshCw, Server, ShieldAlert, ShieldCheck, Wifi } from "lucide-react";
+import { FolderKey, HardDrive, KeyRound, LogOut, Plus, RefreshCw, RefreshCwOff, Server, ShieldAlert, ShieldCheck, Wifi } from "lucide-react";
 
 import type { LinkedStatus } from "../../../lib/api/linked";
 import { formatBytes } from "../../../lib/downloadOptions";
@@ -6,12 +6,15 @@ import { joinIsolated } from "../../../lib/direction";
 import { getString } from "../../../lib/i18n/index";
 import { useGroupDashboard } from "../../../lib/linked/useGroupDashboard";
 import { formatYouTubeRelativeTime } from "../../../lib/publishedDate";
+import { SETTINGS } from "../../../lib/settings/schema";
 import { syncErrorMessage } from "../../../lib/syncErrors";
+import { useBoolPref } from "../../../lib/usePreference";
 import { useLinkedDevicesStore } from "../../../store/useLinkedDevicesStore";
 import { useSyncActivityStore } from "../../../store/useSyncActivityStore";
 import { SettingItem } from "../../settings/SettingItem";
 import { SettingsGroup } from "../../settings/SettingsGroup";
 import { Button } from "../../ui/Button";
+import { ToggleSwitch } from "../../ui/ToggleSwitch";
 import { Spinner } from "../SyncParts";
 import { ConfirmedActionRow } from "./ConfirmedAction";
 import { DeviceList } from "./DeviceList";
@@ -19,6 +22,7 @@ import { JoinRequests } from "./JoinRequests";
 import { LoginChange } from "./LoginChange";
 import { ProfilesGroup } from "./ProfilesGroup";
 import { RecoveryNotices } from "./RecoveryNotices";
+import { SyncChoicesGroup } from "./SyncChoicesGroup";
 
 const ICON = "h-5 w-5";
 const STORE_TITLES = { server: "linked_server", webdav: "linked_webdav", lan: "linked_on_lan" } as const;
@@ -97,6 +101,23 @@ function DevicesGroup() {
   );
 }
 
+/** How this device takes part in the group, whatever the other devices do. It never syncs. */
+function ThisDeviceGroup() {
+  const [autoSync, setAutoSync] = useBoolPref(SETTINGS.LINKED_AUTO_SYNC);
+  const Icon = autoSync ? RefreshCw : RefreshCwOff;
+  return (
+    <SettingsGroup title={getString("linked_this_device")}>
+      <SettingItem
+        icon={<Icon className={ICON} />}
+        title={getString("linked_auto_sync")}
+        description={getString(autoSync ? "linked_auto_sync_on" : "linked_auto_sync_off")}
+      >
+        <ToggleSwitch checked={autoSync} onChange={setAutoSync} />
+      </SettingItem>
+    </SettingsGroup>
+  );
+}
+
 /** The group itself: its recovery words, its storage, recent errors, and leaving it. */
 function GroupSettings({ status }: { status: LinkedStatus }) {
   const devices = useLinkedDevicesStore((state) => state.devices);
@@ -172,6 +193,8 @@ export function LinkedOverview({ status }: { status: LinkedStatus }) {
       </div>
       <DevicesGroup />
       <ProfilesGroup />
+      <ThisDeviceGroup />
+      <SyncChoicesGroup />
       <GroupSettings status={status} />
     </div>
   );

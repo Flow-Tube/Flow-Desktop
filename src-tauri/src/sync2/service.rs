@@ -3,7 +3,7 @@
 //! FLOW-SYNC/1.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
 use serde::Serialize;
@@ -14,11 +14,15 @@ use super::actions::{
     Local, local, login_refused, open_session, set_login_refused, state_pool, stop_if_shut_out,
     stopped, try_pending_login,
 };
+use super::auto_sync::{SyncTrigger, allows};
 use super::batches::{IncomingBatch, apply_batches};
 use super::engine::{EngineError, Result, Session, now_ms};
 use super::error_log;
 use super::group_store::GroupStore;
 use super::kept::{applied as applied_kept, keep, kept, kept_count};
+use super::left_out::{
+    SyncChoice, applies, collections_of, left_out, read_back, sent_collections, taken_back,
+};
 use super::live_hub::forget_keys;
 use super::missed_notes::{notes_caught_up, notes_missed};
 use super::names::device_names;
@@ -59,6 +63,8 @@ pub struct BackgroundSync {
     last: std::sync::Mutex<Option<LastSync>>,
     /// Counts [`sync_after`] calls, so only the latest one runs.
     scheduled: AtomicU64,
+    /// One of the calls waiting runs whether or not this device syncs on its own.
+    forced: AtomicBool,
 }
 
 /// Records applied from one device in one run.
@@ -183,10 +189,16 @@ async fn exchange(
     }
     read_joined_links(app, local, session, &mut applied).await?;
     read_missed_notes(app, local, session, &mut applied).await?;
+    let back = taken_back(pool).await?;
+    let mut held_back = collections_of(&left_out(pool).await?);
+    if !read_taken_back(app, local, session, &back, &mut applied).await? {
+        held_back.extend(collections_of(&back));
+    }
 
     let exported = if reading.active.is_some() {
         flush_brains(app).await;
-        let mut exported = export_collections(data, &local.meta.app, &Collection::ALL).await?;
+        let sent = sent_collections(&held_back);
+        let mut exported = export_collections(data, &local.meta.app, &sent).await?;
         enrich_outgoing_albums(app, &mut exported).await;
         exported
     } else {
@@ -214,7 +226,9 @@ async fn exchange(
     }
     note_refused(session.finish(pool, pulled).await, refused)?;
     let received = applied.received(session).await;
+    // A snapshot holds every collection, so one isn't written while any is held back.
     if let Some(link) = &reading.active
+        && held_back.is_empty()
         && snapshot_due(pool, link).await?
         && kept_count(pool, link).await? == 0
         && !links_to_read(pool).await?.contains(link)
@@ -311,6 +325,45 @@ async fn read_joined_links(
     Ok(())
 }
 
+/// Reads again, from each link's newest snapshot and then its logs, the collections taken back
+/// since they were left out: applied for the running profile, kept for the others. Says whether
+/// every link could be read; one the store can't give in full yet is tried again next run.
+async fn read_taken_back(
+    app: &AppHandle,
+    local: &Local,
+    session: &mut Session<'_, GroupStore>,
+    back: &BTreeSet<SyncChoice>,
+    applied: &mut Applied,
+) -> Result<bool> {
+    if back.is_empty() {
+        return Ok(true);
+    }
+    let pool = &local.pool;
+    let collections = collections_of(back);
+    let links: Vec<String> = session.reading().links().map(str::to_owned).collect();
+    for link in links {
+        let Some(read) = session.read_link(pool, &link).await? else {
+            return Ok(false);
+        };
+        let batches: Vec<_> = read
+            .batches
+            .into_iter()
+            .filter(|k| k.batch.collection.is_some_and(|c| collections.contains(&c)))
+            .collect();
+        if session.reading().active.as_deref() == Some(link.as_str()) {
+            let groups: Vec<_> = batches
+                .iter()
+                .map(|k| (k.sender.as_str(), std::slice::from_ref(&k.batch)))
+                .collect();
+            apply(app, local, &groups, applied).await?;
+        } else {
+            keep(pool, &batches).await?;
+        }
+    }
+    read_back(pool, back).await?;
+    Ok(true)
+}
+
 /// Once after updating from a build that dropped notes: reads them again, for every profile that
 /// syncs, before this run's export and snapshot.
 async fn read_missed_notes(
@@ -350,9 +403,22 @@ async fn apply(
     if groups.is_empty() {
         return Ok(());
     }
+    let left_out = collections_of(&left_out(&local.pool).await?);
     flush_and_hold_brains(app).await;
     let mut result = Ok(());
     for &(sender, batches) in groups {
+        // Dropped batches of a collection left out still count as consumed.
+        let taken: Vec<IncomingBatch>;
+        let batches = if batches.iter().all(|b| applies(b, &left_out)) {
+            batches
+        } else {
+            taken = batches
+                .iter()
+                .filter(|b| applies(b, &left_out))
+                .cloned()
+                .collect();
+            &taken
+        };
         match apply_batches(&local.data, &local.meta.app, sender, batches, now_ms()).await {
             Ok(report) => {
                 let count = report
@@ -384,28 +450,39 @@ pub fn sync_soon(app: &AppHandle) {
     tauri::async_runtime::spawn(async move { log_failure(sync_now(&app).await) });
 }
 
-/// Sends a local edit soon, once edits stop for a few seconds.
-pub fn push_soon(app: &AppHandle) {
-    sync_after(app, LOCAL_EDIT_DELAY);
+/// Syncs once without waiting for `trigger`, when this device syncs on its own or the trigger
+/// runs anyway.
+pub fn sync_soon_for(app: &AppHandle, trigger: SyncTrigger) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        if allows(&app, trigger).await {
+            log_failure(sync_now(&app).await);
+        }
+    });
+}
+
+/// Sends a change the user made to how this device syncs, once such changes stop for a few seconds.
+pub fn follow_up_soon(app: &AppHandle) {
+    sync_after(app, LOCAL_EDIT_DELAY, SyncTrigger::FollowUp);
 }
 
 /// Syncs once `delay` after the last of several calls in a row, such as a burst of edits or of
-/// changes announced by the server. A run already under way is never interrupted.
-pub fn sync_after(app: &AppHandle, delay: Duration) {
-    let mine = app
-        .state::<BackgroundSync>()
-        .scheduled
-        .fetch_add(1, Ordering::SeqCst)
-        + 1;
+/// changes announced by the server. A run already under way is never interrupted. The run is
+/// skipped when this device doesn't sync on its own, unless a call in the burst runs anyway.
+pub fn sync_after(app: &AppHandle, delay: Duration, trigger: SyncTrigger) {
+    let state = app.state::<BackgroundSync>();
+    if trigger.runs(false) {
+        state.forced.store(true, Ordering::SeqCst);
+    }
+    let mine = state.scheduled.fetch_add(1, Ordering::SeqCst) + 1;
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(delay).await;
-        if app
-            .state::<BackgroundSync>()
-            .scheduled
-            .load(Ordering::SeqCst)
-            == mine
-        {
+        let state = app.state::<BackgroundSync>();
+        if state.scheduled.load(Ordering::SeqCst) != mine {
+            return;
+        }
+        if state.forced.swap(false, Ordering::SeqCst) || allows(&app, trigger).await {
             log_failure(sync_now(&app).await);
         }
     });
@@ -418,18 +495,20 @@ fn log_failure<T>(result: Result<T>) {
 }
 
 /// Runs [`sync_now`] shortly after start, unless a catch-up already ran, and then every few
-/// minutes for the app's lifetime.
+/// minutes for the app's lifetime, each while this device syncs on its own.
 pub fn spawn(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(FIRST_RUN_DELAY).await;
         let mut timer = tokio::time::interval(INTERVAL);
         timer.tick().await;
-        if !is_syncing(&app) && last_sync(&app).is_none() {
+        if !is_syncing(&app) && last_sync(&app).is_none() && allows(&app, SyncTrigger::Open).await {
             log_failure(sync_now(&app).await);
         }
         loop {
             timer.tick().await;
-            log_failure(sync_now(&app).await);
+            if allows(&app, SyncTrigger::Interval).await {
+                log_failure(sync_now(&app).await);
+            }
         }
     });
 }

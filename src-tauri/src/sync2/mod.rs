@@ -4,6 +4,7 @@
 #![allow(clippy::must_use_candidate)]
 
 pub mod actions;
+pub mod auto_sync;
 pub mod batches;
 pub mod blob;
 pub mod bootstrap;
@@ -32,6 +33,7 @@ pub mod lan_link;
 pub mod lan_peers;
 pub mod lan_runtime;
 pub mod lan_sync;
+pub mod left_out;
 pub mod link_read;
 pub mod link_task;
 pub mod linking;
@@ -52,6 +54,7 @@ pub mod pipe;
 pub mod profile_actions;
 pub mod profile_links;
 pub mod profile_names;
+pub mod push;
 pub mod read_budget;
 pub mod recovery;
 pub mod recovery_flow;

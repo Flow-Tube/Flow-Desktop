@@ -39,10 +39,15 @@ trap 'rm -rf "$work"' EXIT
 for deb in "${debs[@]}"; do
   echo "::group::$(basename "$deb")"
   dpkg-deb -I "$deb"
-  dpkg-deb --fsys-tarfile "$deb" | tar -xO --wildcards './usr/share/applications/*.desktop' >"$work/entry.desktop"
+  # Tauri stores paths as usr/..., dpkg-built packages as ./usr/...
+  dpkg-deb --fsys-tarfile "$deb" | tar -t >"$work/files"
+  mapfile -t entries < <(grep -E '^(\./)?usr/share/applications/[^/]+\.desktop$' "$work/files")
+  [ "${#entries[@]}" -eq 1 ] \
+    || { echo "$(basename "$deb") must ship one desktop entry, found ${#entries[@]}" >&2; exit 1; }
+  dpkg-deb --fsys-tarfile "$deb" | tar -xO -- "${entries[0]}" >"$work/entry.desktop"
   cat "$work/entry.desktop"
   echo "::endgroup::"
-  dpkg-deb -c "$deb" | grep -q " \./usr/bin/$binary\$" \
+  grep -qxE "(\./)?usr/bin/$binary" "$work/files" \
     || { echo "$(basename "$deb") does not install /usr/bin/$binary" >&2; exit 1; }
   check_entry "$work/entry.desktop"
 done

@@ -8,7 +8,7 @@ use std::sync::Mutex;
 use serde::Serialize;
 use sqlx::SqlitePool;
 use tauri::{AppHandle, Emitter, Manager};
-use tokio::sync::broadcast;
+use tokio::sync::{Notify, broadcast};
 
 use super::actions::{local, open_session, state_pool};
 use super::engine::{EngineError, Result, now_ms};
@@ -69,6 +69,8 @@ pub struct LiveHub {
     server_online: Mutex<Option<BTreeSet<String>>>,
     /// What this device last said it plays, repeated to devices that connect later.
     mine: Mutex<Option<Now>>,
+    /// Woken whenever the status changes.
+    status_changed: Notify,
 }
 
 impl Default for LiveHub {
@@ -79,6 +81,7 @@ impl Default for LiveHub {
             devices: Mutex::new(BTreeMap::new()),
             server_online: Mutex::new(None),
             mine: Mutex::new(None),
+            status_changed: Notify::new(),
         }
     }
 }
@@ -261,7 +264,21 @@ pub fn status(app: &AppHandle) -> LiveStatus {
     }
 }
 
-/// Tells the page the live status changed.
+/// Tells the page, and whoever waits on it, that the live status changed.
 pub fn changed(app: &AppHandle) {
     let _ = app.emit(EVENT_LIVE, status(app));
+    hub(app).status_changed.notify_waiters();
+}
+
+/// Returns once a device other than `me` is connected to the server's live socket or met on the LAN.
+pub async fn until_another_online(app: &AppHandle, me: &str) {
+    loop {
+        let changed = hub(app).status_changed.notified();
+        tokio::pin!(changed);
+        changed.as_mut().enable();
+        if status(app).online.iter().any(|did| did != me) {
+            return;
+        }
+        changed.await;
+    }
 }

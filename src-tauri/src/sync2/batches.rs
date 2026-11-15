@@ -192,6 +192,7 @@ async fn remember(pool: &SqlitePool, records: &[Sent], now_ms: i64) -> Result<()
 }
 
 /// A batch read back: its collection (when this build knows it), link and records.
+#[derive(Clone)]
 pub struct IncomingBatch {
     pub collection: Option<Collection>,
     pub link: Option<String>,

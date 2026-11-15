@@ -1,5 +1,6 @@
 import { routeForYoutubeUrl, type ParsedYoutubeUrl } from "./youtubeUrl";
 import { musicEnabledNow } from "./useMusicContent";
+import { isMix, mixSeedVideoId } from "./mixPlaylist";
 
 /** Where a link opened from outside Flow takes the user, as on Flow for Android. */
 export type LinkDestination =
@@ -17,13 +18,15 @@ const ACCOUNT_LIST_ROUTES: Record<string, string> = {
   WL: "/watch-later",
 };
 
-/** A mix is built around one video and can't be browsed on its own. */
-export function isMix(playlistId: string): boolean {
-  return playlistId.startsWith("RD") && !playlistId.startsWith("RDCLAK");
-}
-
 /** The backend reads playlist ids of this length; a shorter one can't be a queue. */
 const QUEUE_ID = /^[A-Za-z0-9_-]{10,64}$/;
+
+/** A Mix plays as a queue from the video it grew from; one whose id names no video has no page. */
+function mixDestination(playlistId: string, music: boolean): LinkDestination | null {
+  const videoId = mixSeedVideoId(playlistId);
+  if (!videoId) return null;
+  return { kind: music && musicEnabledNow() ? "music" : "video", videoId, playlistId };
+}
 
 /** Null for a link Flow has no page for. */
 export function linkDestination(link: ParsedYoutubeUrl): LinkDestination | null {
@@ -31,13 +34,13 @@ export function linkDestination(link: ParsedYoutubeUrl): LinkDestination | null 
     case "video": {
       const list = link.playlistId && !(link.playlistId in ACCOUNT_LIST_ROUTES) ? link.playlistId : null;
       if (link.music && musicEnabledNow()) return { kind: "music", videoId: link.videoId, playlistId: list };
-      return { kind: "video", videoId: link.videoId, playlistId: list && !isMix(list) && QUEUE_ID.test(list) ? list : null };
+      return { kind: "video", videoId: link.videoId, playlistId: list && QUEUE_ID.test(list) ? list : null };
     }
     case "playlist":
     case "musicPlaylist": {
       const account = ACCOUNT_LIST_ROUTES[link.playlistId];
       if (account) return { kind: "page", route: account };
-      if (isMix(link.playlistId)) return null;
+      if (isMix(link.playlistId)) return mixDestination(link.playlistId, link.kind === "musicPlaylist");
       break;
     }
     case "resolveChannel":

@@ -31,6 +31,7 @@ import { getString } from "../../../lib/i18n/index";
 import { isLocalMediaId } from "../../../lib/localMediaId";
 import { lyricsSourceLabel } from "../../../lib/lyrics/offline";
 import { lyricsBackgroundOptions, useLyricsBackground, type LyricsBackground } from "../../../lib/lyrics/useLyricsCover";
+import { CAN_CHOOSE_GLOW, lyricsAnimationOptions, lyricsGlowOptions, useLyricsAnimation, useLyricsGlow } from "../../../lib/lyrics/useLyricsLook";
 import { ToggleSwitch } from "../../ui/ToggleSwitch";
 import { LyricsSourcesDialog } from "./LyricsSourcesDialog";
 import { LyricsEditDialog } from "./LyricsEditDialog";
@@ -142,7 +143,17 @@ export function LyricsActionsMenu({ track, className }: { track: SongItem | null
   const [blurOtherLines, setBlurOtherLines] = useBoolPref(SETTINGS.LYRICS_BLUR_OTHER_LINES);
   const background = useLyricsBackground();
   const [, setBackground] = usePreference(SETTINGS.LYRICS_BACKGROUND);
+  const [animation, setAnimation] = useLyricsAnimation();
+  const [glow, setGlow] = useLyricsGlow();
   const { copy, save } = useLyricsActions(track);
+
+  // The lyrics hold still under these dialogs, as Android's do under a sheet.
+  const dialogOpen = sourcesOpen || shareOpen || editText !== null;
+  useEffect(() => {
+    if (!dialogOpen) return;
+    useLyricsStore.getState().setCovered(true);
+    return () => useLyricsStore.getState().setCovered(false);
+  }, [dialogOpen]);
 
   useEffect(() => {
     if (!open) return;
@@ -231,6 +242,8 @@ export function LyricsActionsMenu({ track, className }: { track: SongItem | null
               choices={lyricsBackgroundOptions()}
               onChange={setBackground}
             />
+            <ChoiceRow label={getString("lyrics_animation")} value={animation} choices={lyricsAnimationOptions()} onChange={setAnimation} />
+            {CAN_CHOOSE_GLOW && <ChoiceRow label={getString("lyrics_glow")} value={glow} choices={lyricsGlowOptions()} onChange={setGlow} />}
 
             <Separator />
             <SwitchRow

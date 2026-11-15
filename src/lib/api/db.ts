@@ -44,12 +44,19 @@ async function saveMockWatchRecord(record: WatchHistoryRecord): Promise<void> {
   profileStorage.setItem("mock_watch_history", JSON.stringify([record, ...current]));
 }
 
+/** `progress` marks a player's periodic save while it plays, which linked devices get once playback settles. */
 export async function addWatchRecord(
   record: WatchHistoryRecord,
+  options: { progress?: boolean } = {},
 ): Promise<void> {
-  if (await isTauriEnv()) await invokeBackend<void>("add_watch_record", { record });
+  if (await isTauriEnv()) await invokeBackend<void>("add_watch_record", { record, progress: options.progress ?? false });
   else await saveMockWatchRecord(record);
   announceWatchHistoryWrite(recordWrite(record));
+}
+
+/** The video player paused, stopped or moved on: the history it saved while playing can go to linked devices. */
+export async function watchHistorySettled(): Promise<void> {
+  if (await isTauriEnv()) await invokeBackend<void>("watch_history_settled");
 }
 
 /** Puts back a removed row, as newer than the removal that other devices may already hold. */

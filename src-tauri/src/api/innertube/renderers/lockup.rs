@@ -6,9 +6,10 @@
 use serde_json::Value;
 
 use super::collaborators::collaborators_in;
-use crate::api::innertube::json::age::relative_age;
+use crate::api::innertube::json::age::{published_at_ms, relative_age};
 use crate::api::innertube::json::count::parse_count;
 use crate::api::innertube::json::duration::parse_duration;
+use crate::api::innertube::json::text::browse_handle;
 use crate::api::innertube::json::thumbnail::{
     largest_url, normalize_youtube_image_url, thumbnail_url_from_array,
 };
@@ -271,11 +272,15 @@ pub fn lockup_item(lockup: &Value) -> Option<RelatedContentItem> {
         .map(|part| part.text.to_string());
     let image = &metadata(lockup)["image"];
     let collaborators = collaborators_in(&image["avatarStackViewModel"]);
-    let channel_id = image["decoratedAvatarViewModel"]["rendererContext"]["commandContext"]["onTap"]
-        ["innertubeCommand"]["browseEndpoint"]["browseId"]
+    let avatar_command = &image["decoratedAvatarViewModel"]["rendererContext"]["commandContext"]["onTap"]
+        ["innertubeCommand"];
+    let channel_id = avatar_command["browseEndpoint"]["browseId"]
         .as_str()
         .map(ToOwned::to_owned)
         .or_else(|| collaborators.first().map(|c| c.channel_id.clone()));
+    let channel_handle = channel_id
+        .as_deref()
+        .and_then(|id| channel_handle(lockup, avatar_command, id));
 
     Some(RelatedContentItem {
         id,
@@ -292,6 +297,7 @@ pub fn lockup_item(lockup: &Value) -> Option<RelatedContentItem> {
         duration_seconds: duration(lockup),
         is_upcoming: published.as_deref().is_some_and(is_upcoming_text)
             || views.as_deref().is_some_and(is_upcoming_text),
+        published_at_ms: published.as_deref().and_then(published_at_ms),
         published_text: published,
         view_count_text: views,
         video_id,
@@ -312,6 +318,26 @@ pub fn lockup_item(lockup: &Value) -> Option<RelatedContentItem> {
             .map(ToOwned::to_owned)
             .collect(),
         collaborators,
+        channel_handle,
+    })
+}
+
+/// The channel's `/@handle`, from the avatar's tap target or a byline link, when it is the
+/// channel's own.
+fn channel_handle(lockup: &Value, avatar_command: &Value, channel_id: &str) -> Option<String> {
+    let own = |command: &Value| {
+        (command["browseEndpoint"]["browseId"] == channel_id)
+            .then(|| browse_handle(command))
+            .flatten()
+    };
+    own(avatar_command).or_else(|| {
+        rows(lockup)
+            .iter()
+            .filter_map(|row| row["metadataParts"].as_array())
+            .flatten()
+            .filter_map(|part| part["text"]["commandRuns"].as_array())
+            .flatten()
+            .find_map(|run| own(&run["onTap"]["innertubeCommand"]))
     })
 }
 
@@ -329,6 +355,7 @@ pub fn related_to_video(item: RelatedContentItem) -> VideoSummary {
         thumbnail_url: item.thumbnail_url,
         duration_seconds: item.duration_seconds,
         published_text: item.published_text,
+        published_at_ms: item.published_at_ms,
         view_count_text: item.view_count_text,
         channel_avatar_url: item.channel_avatar_url,
         is_live: item.is_live,
@@ -339,6 +366,7 @@ pub fn related_to_video(item: RelatedContentItem) -> VideoSummary {
         is_short: item.is_short,
         badges: item.badges,
         collaborators: item.collaborators,
+        channel_handle: item.channel_handle,
         ..Default::default()
     }
 }
@@ -371,6 +399,38 @@ mod tests {
                 "metadata": { "contentMetadataViewModel": { "metadataRows": rows } }
             } }
         })
+    }
+
+    #[test]
+    fn the_channel_handle_comes_from_the_owners_avatar_or_byline_link() {
+        let mut lockup = video_lockup(&json!([]));
+        assert_eq!(lockup_item(&lockup).unwrap().channel_handle, None);
+
+        let avatar = "/metadata/lockupMetadataViewModel/image/decoratedAvatarViewModel/rendererContext/commandContext/onTap/innertubeCommand/browseEndpoint";
+        lockup.pointer_mut(avatar).unwrap()["canonicalBaseUrl"] = json!("/@Owner");
+        let item = lockup_item(&lockup).unwrap();
+        assert_eq!(item.channel_handle.as_deref(), Some("/@Owner"));
+        assert_eq!(
+            related_to_video(item).channel_handle.as_deref(),
+            Some("/@Owner")
+        );
+
+        let byline = video_lockup(&json!([{ "metadataParts": [{ "text": {
+            "content": "Owner",
+            "commandRuns": [{ "onTap": { "innertubeCommand": {
+                "browseEndpoint": { "browseId": "UCowner", "canonicalBaseUrl": "/@Byline" } } } }]
+        } }] }]));
+        assert_eq!(
+            lockup_item(&byline).unwrap().channel_handle.as_deref(),
+            Some("/@Byline")
+        );
+
+        let other = video_lockup(&json!([{ "metadataParts": [{ "text": {
+            "content": "Someone else",
+            "commandRuns": [{ "onTap": { "innertubeCommand": {
+                "browseEndpoint": { "browseId": "UCother", "canonicalBaseUrl": "/@Other" } } } }]
+        } }] }]));
+        assert_eq!(lockup_item(&other).unwrap().channel_handle, None);
     }
 
     #[test]
@@ -485,7 +545,10 @@ mod tests {
         assert_eq!(item.channel_name, "");
         assert_eq!(item.view_count_text.as_deref(), Some("1.2M views"));
         assert_eq!(item.published_text.as_deref(), Some("20 hours ago"));
+        let published_at = item.published_at_ms;
+        assert!(published_at.is_some());
         let video = related_to_video(item);
+        assert_eq!(video.published_at_ms, published_at);
         assert_eq!(video.channel_name, "");
         assert_eq!(video.view_count, Some(1_200_000));
         assert_eq!(video.view_count_text.as_deref(), Some("1.2M views"));

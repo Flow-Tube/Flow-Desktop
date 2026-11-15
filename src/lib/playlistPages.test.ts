@@ -2,13 +2,44 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { VideoSummary } from "../types/video";
 
 const getPlaylistDetails = vi.fn();
+const getMixPlaylist = vi.fn();
 vi.mock("./api/youtube", () => ({
   getPlaylistDetails: (id: string, token?: string | null) => getPlaylistDetails(id, token),
+  getMixPlaylist: (id: string, videoId?: string | null) => getMixPlaylist(id, videoId),
 }));
 
-import { PLAYLIST_PAGE_GUARD, appendUniqueVideos, loadRemainingPlaylistVideos, walkRemainingPlaylistPages } from "./playlistPages";
+import {
+  PLAYLIST_PAGE_GUARD,
+  appendUniqueVideos,
+  firstPlaylistPage,
+  loadRemainingPlaylistVideos,
+  walkRemainingPlaylistPages,
+} from "./playlistPages";
 
 const video = (id: string): VideoSummary => ({ id, title: id, channelName: "", isLive: false });
+
+describe("first playlist page", () => {
+  beforeEach(() => {
+    getPlaylistDetails.mockReset();
+    getMixPlaylist.mockReset();
+  });
+
+  it("reads a Mix from its watch queue, around the video it was opened from", async () => {
+    await firstPlaylistPage("RDdQw4w9WgXcQ", "aaaaaaaaaaa");
+    await firstPlaylistPage("RDMMdQw4w9WgXcQ");
+    expect(getMixPlaylist).toHaveBeenNthCalledWith(1, "RDdQw4w9WgXcQ", "aaaaaaaaaaa");
+    expect(getMixPlaylist).toHaveBeenNthCalledWith(2, "RDMMdQw4w9WgXcQ", undefined);
+    expect(getPlaylistDetails).not.toHaveBeenCalled();
+  });
+
+  it("browses every other playlist, album radios included", async () => {
+    await firstPlaylistPage("PLabcdefghij", "aaaaaaaaaaa");
+    await firstPlaylistPage("RDCLAK5uy_abcdef");
+    expect(getPlaylistDetails).toHaveBeenNthCalledWith(1, "PLabcdefghij", undefined);
+    expect(getPlaylistDetails).toHaveBeenNthCalledWith(2, "RDCLAK5uy_abcdef", undefined);
+    expect(getMixPlaylist).not.toHaveBeenCalled();
+  });
+});
 
 describe("playlist pages", () => {
   beforeEach(() => getPlaylistDetails.mockReset());

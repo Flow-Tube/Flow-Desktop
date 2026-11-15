@@ -1,13 +1,22 @@
 import { musicAudioEngine } from "../../audio/musicAudioEngine";
 
+// A jump this large is a seek, not a correction of the estimate.
+const SEEK_MS = 500;
+// How much faster or slower than the song the clock may run while it works off a correction.
+const MAX_CORRECTION = 0.5;
+
 /**
- * The song position the lyrics follow, read from the playing audio element and carried forward
- * by the time since it last changed, as Android does with its player position: the element's
- * clock moves in coarse steps, the lyrics must not.
+ * The song position the lyrics follow, read from the playing audio element and carried forward at
+ * the playback speed by the time since it last changed: the element's clock moves in coarse steps,
+ * the lyrics must not. Port of Android's LyricsFillClock on top: while playing it only moves
+ * forward, working a correction off by running a little slower or faster, so a word's fill never
+ * snaps back; a jump of half a second or more is a seek and is taken at once.
  */
 export class LyricsClock {
   private lastPosition = Number.NaN;
   private lastUpdate = 0;
+  private shown = Number.NaN;
+  private lastRead = 0;
 
   /** The position in ms at `nowMs` (a `performance.now()` time), without the sync offset. */
   read(nowMs: number, playing: boolean): number {
@@ -16,7 +25,21 @@ export class LyricsClock {
       this.lastPosition = position;
       this.lastUpdate = nowMs;
     }
-    return playing ? this.lastPosition + (nowMs - this.lastUpdate) : this.lastPosition;
+    if (!playing) {
+      this.shown = Number.NaN;
+      return this.lastPosition;
+    }
+    const speed = musicAudioEngine.getSpeed();
+    const estimate = this.lastPosition + (nowMs - this.lastUpdate) * speed;
+    const elapsed = Math.max(0, nowMs - this.lastRead) * speed;
+    this.lastRead = nowMs;
+    const predicted = this.shown + elapsed;
+    const error = estimate - predicted;
+    this.shown =
+      Number.isNaN(this.shown) || Math.abs(error) >= SEEK_MS
+        ? estimate
+        : predicted + Math.min(elapsed * MAX_CORRECTION, Math.max(-elapsed * MAX_CORRECTION, error));
+    return this.shown;
   }
 
   durationMs(): number {

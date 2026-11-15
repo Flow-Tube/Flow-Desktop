@@ -394,6 +394,32 @@ fn caption_url(base_url: &str, translated_language_code: Option<&str>) -> Option
     append_or_replace_query_param(&url, "fmt", "vtt")
 }
 
+/// The sphere layout of a 360 video, read from its video formats' `projectionType`.
+/// Any equirectangular format makes the video one, since some formats of a 360
+/// upload are listed as rectangular.
+fn stream_projection(streaming_data: &Value) -> Option<String> {
+    let video_formats = ["adaptiveFormats", "formats"]
+        .iter()
+        .filter_map(|key| streaming_data[*key].as_array())
+        .flatten()
+        .filter(|format| {
+            format["mimeType"]
+                .as_str()
+                .is_some_and(|mime| mime.starts_with("video/"))
+        });
+    let mut projection = None;
+    for format in video_formats {
+        match format["projectionType"].as_str() {
+            Some("EQUIRECTANGULAR") => return Some("equirectangular".to_string()),
+            Some("EQUIRECTANGULAR_THREED_TOP_BOTTOM") => {
+                projection = Some("equirectangular_top_bottom".to_string());
+            }
+            _ => {}
+        }
+    }
+    projection
+}
+
 fn format_is_video(format: &Value) -> bool {
     format["mimeType"]
         .as_str()
@@ -514,6 +540,39 @@ fn collect_stream_variants(
     (variants, last_error)
 }
 
+fn is_speech_track(track: &Value) -> bool {
+    track["kind"]
+        .as_str()
+        .is_some_and(|kind| kind.eq_ignore_ascii_case("asr"))
+        || track["vssId"]
+            .as_str()
+            .is_some_and(|id| id.starts_with("a."))
+}
+
+// The speech track, as the official apps ask for a translation: timedtext
+// refuses translations of an authored track more often. An auto-dub's speech
+// track is passed over, since translating it would translate the dub.
+fn translation_source(tracks: &[Value]) -> Option<&Value> {
+    let translatable: Vec<&Value> = tracks
+        .iter()
+        .filter(|track| {
+            track["isTranslatable"].as_bool().unwrap_or(false)
+                && track["baseUrl"].as_str().is_some()
+        })
+        .collect();
+    let is_dub_transcript = |track: &Value| {
+        track["baseUrl"]
+            .as_str()
+            .is_some_and(|url| url.contains("variant=timing-optimized"))
+    };
+    translatable
+        .iter()
+        .find(|track| is_speech_track(track) && !is_dub_transcript(track))
+        .or_else(|| translatable.iter().find(|track| !is_speech_track(track)))
+        .or_else(|| translatable.first())
+        .copied()
+}
+
 fn collect_caption_tracks(response: &Value) -> Vec<CaptionTrack> {
     let renderer = &response["captions"]["playerCaptionsTracklistRenderer"];
     let Some(tracks) = renderer["captionTracks"].as_array() else {
@@ -530,12 +589,7 @@ fn collect_caption_tracks(response: &Value) -> Vec<CaptionTrack> {
         let language_code = track["languageCode"].as_str().unwrap_or("und").to_string();
         native_language_codes.insert(language_code.clone());
         let label = text_of(&track["name"]).unwrap_or_else(|| language_code.clone());
-        let vss_id = track["vssId"].as_str().unwrap_or_default();
-        let is_auto_generated = vss_id.starts_with("a.")
-            || track["kind"]
-                .as_str()
-                .map(|kind| kind.eq_ignore_ascii_case("asr"))
-                .unwrap_or(false);
+        let is_auto_generated = is_speech_track(track);
         let Some(url) = caption_url(base_url, None) else {
             continue;
         };
@@ -550,22 +604,7 @@ fn collect_caption_tracks(response: &Value) -> Vec<CaptionTrack> {
         });
     }
 
-    // Translate from an authored track when there is one: a translation of the
-    // speech-recognition track carries every recognition error into the target.
-    let translatable_track = tracks
-        .iter()
-        .filter(|track| {
-            track["isTranslatable"].as_bool().unwrap_or(false)
-                && track["baseUrl"].as_str().is_some()
-        })
-        .min_by_key(|track| {
-            track["kind"].as_str() == Some("asr")
-                || track["vssId"]
-                    .as_str()
-                    .is_some_and(|id| id.starts_with("a."))
-        });
-
-    if let Some(track) = translatable_track {
+    if let Some(track) = translation_source(tracks) {
         let base_url = track["baseUrl"].as_str().unwrap_or_default();
         if let Some(translation_languages) = renderer["translationLanguages"].as_array() {
             let mut seen_translations = HashSet::new();
@@ -1039,6 +1078,37 @@ fn keyword_tags(details: &Value) -> Vec<String> {
         }
     }
     tags
+}
+
+// The watch page's owner is the channel people see: a music video's player
+// response can name a hidden VEVO channel, which would then sit beside the real
+// channel's avatar and subscribers. Name and id come from one side so they
+// never point at two channels.
+fn video_channel(details: &Value, owner: &watch_next::WatchOwner) -> (String, Option<String>) {
+    let author = details["author"]
+        .as_str()
+        .filter(|author| !author.is_empty());
+    if let Some(owner_id) = owner
+        .channel_id
+        .as_deref()
+        .filter(|id| id.starts_with("UC"))
+    {
+        let name = owner
+            .name
+            .as_deref()
+            .filter(|name| !name.is_empty())
+            .or(author)
+            .unwrap_or_default();
+        return (name.to_owned(), Some(owner_id.to_owned()));
+    }
+    let name = author
+        .or_else(|| owner.name.as_deref().filter(|name| !name.is_empty()))
+        .unwrap_or_default();
+    let channel_id = details["channelId"]
+        .as_str()
+        .filter(|id| !id.is_empty())
+        .or(owner.channel_id.as_deref());
+    (name.to_owned(), channel_id.map(ToOwned::to_owned))
 }
 
 // Decode `playerConfig.mediaCommonConfig.mediaUstreamerRequestConfig
@@ -1880,6 +1950,7 @@ impl InnertubeClient {
         let next = next.as_deref().unwrap_or(&Value::Null);
         let primary = watch_next::primary(next);
         let owner = watch_next::owner(next);
+        let (channel_name, channel_id) = video_channel(details, &owner);
 
         // The TV client's details carry neither title, author nor description;
         // the watch answer fills them in.
@@ -1903,16 +1974,8 @@ impl InnertubeClient {
                 .map(ToOwned::to_owned)
                 .or(primary.title)
                 .unwrap_or_default(),
-            channel_name: details["author"]
-                .as_str()
-                .filter(|author| !author.is_empty())
-                .map(ToOwned::to_owned)
-                .or(owner.name)
-                .unwrap_or_default(),
-            channel_id: details["channelId"]
-                .as_str()
-                .map(ToOwned::to_owned)
-                .or(owner.channel_id),
+            channel_name,
+            channel_id,
             description,
             thumbnail_url: thumbnail_url_from_array(&details["thumbnail"]["thumbnails"]),
             duration_seconds,
@@ -2162,6 +2225,7 @@ impl InnertubeClient {
             is_live,
             loudness_db: stream_loudness_db(&res, streaming_data),
             storyboard: super::storyboard::parse_storyboard(&res, duration_seconds),
+            projection: stream_projection(streaming_data),
             sabr,
             sabr_descriptor,
         })
@@ -3019,5 +3083,162 @@ mod keyword_tag_tests {
         let details = serde_json::json!({ "keywords": ["b", "a", "b", "  ", " c "] });
         assert_eq!(keyword_tags(&details), ["b", "a", "c"]);
         assert!(keyword_tags(&Value::Null).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod projection_tests {
+    use super::stream_projection;
+    use serde_json::json;
+
+    #[test]
+    fn a_360_video_is_equirectangular_even_beside_rectangular_formats() {
+        let data = json!({ "adaptiveFormats": [
+            { "mimeType": "video/mp4; codecs=\"avc1\"", "projectionType": "RECTANGULAR" },
+            { "mimeType": "video/webm; codecs=\"vp9\"", "projectionType": "EQUIRECTANGULAR" },
+            { "mimeType": "audio/mp4", "projectionType": "EQUIRECTANGULAR_THREED_TOP_BOTTOM" },
+        ]});
+        assert_eq!(stream_projection(&data).as_deref(), Some("equirectangular"));
+    }
+
+    #[test]
+    fn stereo_top_bottom_is_its_own_layout() {
+        let data = json!({ "formats": [
+            { "mimeType": "video/mp4", "projectionType": "EQUIRECTANGULAR_THREED_TOP_BOTTOM" },
+        ]});
+        assert_eq!(
+            stream_projection(&data).as_deref(),
+            Some("equirectangular_top_bottom")
+        );
+    }
+
+    #[test]
+    fn flat_and_cube_map_videos_have_none() {
+        let flat = json!({ "adaptiveFormats": [{ "mimeType": "video/mp4", "projectionType": "RECTANGULAR" }] });
+        let mesh =
+            json!({ "adaptiveFormats": [{ "mimeType": "video/mp4", "projectionType": "MESH" }] });
+        assert_eq!(stream_projection(&flat), None);
+        assert_eq!(stream_projection(&mesh), None);
+        assert_eq!(stream_projection(&json!({})), None);
+    }
+}
+
+#[cfg(test)]
+mod caption_translation_tests {
+    use super::*;
+    use serde_json::json;
+
+    const BASE_URL: &str = "https://www.youtube.com/api/timedtext?v=x&lang=en";
+
+    fn track(language: &str, kind: Option<&str>, url: &str) -> Value {
+        let mut track = json!({
+            "baseUrl": url,
+            "languageCode": language,
+            "isTranslatable": true,
+        });
+        if let Some(kind) = kind {
+            track["kind"] = json!(kind);
+        }
+        track
+    }
+
+    fn translated_url(tracks: &[Value]) -> String {
+        let response = json!({ "captions": { "playerCaptionsTracklistRenderer": {
+            "captionTracks": tracks,
+            "translationLanguages": [{ "languageCode": "ar", "languageName": { "simpleText": "Arabic" } }],
+        } } });
+        let translated = collect_caption_tracks(&response)
+            .into_iter()
+            .find(|caption| caption.is_translation)
+            .expect("an Arabic translation is offered");
+        assert!(translated.url.contains("tlang=ar"));
+        translated.url
+    }
+
+    #[test]
+    fn the_speech_track_is_translated_before_an_authored_one_as_youtubes_apps_do() {
+        let url = translated_url(&[
+            track("en", None, BASE_URL),
+            track("en", Some("asr"), &format!("{BASE_URL}&kind=asr")),
+        ]);
+        assert!(
+            url.contains("kind=asr"),
+            "the asr track should be the source: {url}"
+        );
+        assert!(url.contains("fmt=vtt"));
+    }
+
+    #[test]
+    fn an_auto_dub_transcript_is_not_the_translation_source() {
+        let url = translated_url(&[
+            track(
+                "de",
+                Some("asr"),
+                &format!("{BASE_URL}&kind=asr&variant=timing-optimized"),
+            ),
+            track("en", Some("asr"), &format!("{BASE_URL}&kind=asr")),
+        ]);
+        assert!(!url.contains("variant=timing-optimized"), "{url}");
+    }
+
+    #[test]
+    fn an_authored_track_is_the_source_when_only_a_dub_transcript_speaks() {
+        let url = translated_url(&[
+            track(
+                "de",
+                Some("asr"),
+                &format!("{BASE_URL}&kind=asr&variant=timing-optimized"),
+            ),
+            track("en", None, &format!("{BASE_URL}&name=authored")),
+        ]);
+        assert!(url.contains("name=authored"), "{url}");
+    }
+
+    #[test]
+    fn an_authored_only_source_is_still_asked_for_as_vtt() {
+        let url = translated_url(&[track("en", None, BASE_URL)]);
+        assert!(url.contains("fmt=vtt"));
+        assert!(!url.contains("fmt=srv3"));
+    }
+}
+
+#[cfg(test)]
+mod video_channel_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn owner(id: Option<&str>, name: Option<&str>) -> watch_next::WatchOwner {
+        watch_next::WatchOwner {
+            channel_id: id.map(ToOwned::to_owned),
+            name: name.map(ToOwned::to_owned),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn the_watch_page_owner_beats_a_hidden_channel_in_the_player_response() {
+        let details = json!({ "author": "CamilaCabelloVEVO", "channelId": "UCvevo" });
+        let (name, id) = video_channel(&details, &owner(Some("UCreal"), Some("Camila Cabello")));
+        assert_eq!(name, "Camila Cabello");
+        assert_eq!(id.as_deref(), Some("UCreal"));
+    }
+
+    #[test]
+    fn a_nameless_owner_keeps_its_id_and_borrows_the_author() {
+        let details = json!({ "author": "Camila Cabello", "channelId": "UCvevo" });
+        let (name, id) = video_channel(&details, &owner(Some("UCreal"), None));
+        assert_eq!(name, "Camila Cabello");
+        assert_eq!(id.as_deref(), Some("UCreal"));
+    }
+
+    #[test]
+    fn the_player_response_stands_in_without_a_watch_page_owner() {
+        let details = json!({ "author": "Rick Astley", "channelId": "UCuAXFkgsw1L7xaCfnd5JJOw" });
+        let (name, id) = video_channel(&details, &owner(None, None));
+        assert_eq!(name, "Rick Astley");
+        assert_eq!(id.as_deref(), Some("UCuAXFkgsw1L7xaCfnd5JJOw"));
+
+        let (name, id) = video_channel(&Value::Null, &owner(Some("UCreal"), Some("Real")));
+        assert_eq!((name.as_str(), id.as_deref()), ("Real", Some("UCreal")));
     }
 }

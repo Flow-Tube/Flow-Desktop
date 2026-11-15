@@ -10,8 +10,8 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
-permissions:
-  contents: write
+# Each job asks for what it needs.
+permissions: {}
 
 env:
   CARGO_TERM_COLOR: always
@@ -20,6 +20,8 @@ jobs:
   prepare:
     name: Prepare release metadata
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
     outputs:
       version: ${{ steps.release.outputs.version }}
       tag: ${{ steps.release.outputs.tag }}
@@ -29,12 +31,13 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
+          package-manager-cache: false
 
       - name: Resolve release channel
         id: release
@@ -80,10 +83,14 @@ jobs:
             echo "CHANGELOG_EOF"
           } >> "$GITHUB_OUTPUT"
 
-  publish:
+  # Builds every package with no signing key and read-only access. No cache
+  # is restored either: the files built here are what gets signed.
+  build:
     name: ${{ matrix.name }}
     needs: prepare
     timeout-minutes: 120
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -113,7 +120,6 @@ jobs:
             runner: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
             appimage: x86_64
-            asset_arch: (x86_64|amd64|x64)
             args: --target x86_64-unknown-linux-gnu --bundles appimage
           - name: Linux ARM64
             slug: linux-arm64
@@ -126,11 +132,9 @@ jobs:
             runner: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
             appimage: aarch64
-            asset_arch: (aarch64|arm64)
             args: --target aarch64-unknown-linux-gnu --bundles appimage
           # The DMG is for first installs. The app bundle is what the updater
-          # installs: Tauri signs it as .app.tar.gz and lists it under darwin-*
-          # in latest.json, which a DMG-only build never did.
+          # installs, as .app.tar.gz listed under darwin-* in latest.json.
           - name: macOS Intel
             slug: macos-x64
             runner: macos-15-intel
@@ -146,7 +150,9 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install Linux system dependencies
         if: runner.os == 'Linux'
@@ -177,26 +183,19 @@ jobs:
             xdg-utils
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
 
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
-          cache: pnpm
+          package-manager-cache: false
 
       - name: Install Rust target
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
+          toolchain: stable
           targets: ${{ matrix.target }}
-
-      - name: Cache Rust build data
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri -> target
-          # Per runner image: build scripts compiled against 24.04's glibc
-          # can't run on 22.04.
-          shared-key: release-${{ matrix.target }}-${{ matrix.runner }}
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
@@ -204,45 +203,43 @@ jobs:
       - name: Verify release version
         run: pnpm verify:version
 
-      - name: Build and publish release
-        uses: tauri-apps/tauri-action@v1
+      # The sign job signs the finished files, so the build makes no updater
+      # artifacts and needs no key.
+      - name: Build the packages
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           # Read at compile time; without them Last.fm sign-in stays off in the build.
           LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
           LASTFM_API_SECRET: ${{ secrets.LASTFM_API_SECRET }}
-        with:
-          tagName: ${{ needs.prepare.outputs.tag }}
-          releaseName: ${{ needs.prepare.outputs.is_prerelease == 'true' && 'Flow Beta v__VERSION__' || 'Flow v__VERSION__' }}
-          releaseBody: ${{ needs.prepare.outputs.notes }}
-          releaseDraft: false
-          prerelease: ${{ needs.prepare.outputs.is_prerelease == 'true' }}
-          generateReleaseNotes: false
-          uploadUpdaterJson: true
-          releaseAssetNamePattern: Flow_[version]_[platform]_[arch][setup][ext]
-          retryAttempts: 2
-          args: >-
-            ${{ matrix.args }}
-            ${{ needs.prepare.outputs.is_prerelease == 'true' && '--config src-tauri/tauri.prerelease.conf.json' || '' }}
-            ${{ needs.prepare.outputs.is_prerelease == 'true' && runner.os == 'Linux' && '--config src-tauri/tauri.prerelease.linux.conf.json' || '' }}
+          PRERELEASE: ${{ needs.prepare.outputs.is_prerelease }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          configs=(--config '{"bundle":{"createUpdaterArtifacts":false}}')
+          if [[ "$PRERELEASE" == "true" ]]; then
+            configs+=(--config src-tauri/tauri.prerelease.conf.json)
+            if [[ "$RUNNER_OS" == "Linux" ]]; then
+              configs+=(--config src-tauri/tauri.prerelease.linux.conf.json)
+            fi
+          fi
+          pnpm tauri build ${{ matrix.args }} "${configs[@]}"
 
       # The RPM bundler rejects "-" in a version, so a prerelease RPM is packaged
-      # as e.g. 0.1.0+beta3 from the binary tauri-action already built. Only the
+      # as e.g. 0.1.0+beta3 from the binary the step above built. Only the
       # package metadata changes: the app keeps its real version for the
       # updater, where 0.1.0+beta3 would rank above every later 0.1.0 prerelease.
       - name: Bundle the RPM
         if: matrix.rpm
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          PRERELEASE: ${{ needs.prepare.outputs.is_prerelease }}
         shell: bash
         run: |
           set -euo pipefail
-          version="${{ needs.prepare.outputs.version }}"
           configs=()
-          if [[ "${{ needs.prepare.outputs.is_prerelease }}" == "true" ]]; then
+          if [[ "$PRERELEASE" == "true" ]]; then
             configs+=(--config src-tauri/tauri.prerelease.conf.json --config src-tauri/tauri.prerelease.linux.conf.json)
           fi
-          configs+=(--config "{\"version\":\"${version/-/+}\",\"bundle\":{\"createUpdaterArtifacts\":false}}")
+          configs+=(--config "{\"version\":\"${VERSION/-/+}\",\"bundle\":{\"createUpdaterArtifacts\":false}}")
           pnpm tauri bundle --target ${{ matrix.target }} --bundles rpm "${configs[@]}"
 
       - name: Check the Linux packages
@@ -251,36 +248,6 @@ jobs:
           bash scripts/check-linux-packages.sh
           src-tauri/target/${{ matrix.target }}/release/bundle
           ${{ needs.prepare.outputs.is_prerelease == 'true' && 'flow-desktop-beta' || 'flow-desktop' }}
-
-      - name: Upload the RPM to the release and sign it
-        if: matrix.rpm && startsWith(github.ref, 'refs/tags/')
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          tag="${{ needs.prepare.outputs.tag }}"
-          rpm="$(ls src-tauri/target/${{ matrix.target }}/release/bundle/rpm/*.rpm | head -n1)"
-          asset="Flow_${{ needs.prepare.outputs.version }}_linux_${{ matrix.rpm }}.rpm"
-
-          cp "$rpm" "$asset"
-          rm -f "$asset.sig"
-          pnpm tauri signer sign "$asset"
-          gh release upload "$tag" "$asset" "$asset.sig" --clobber --repo "$GITHUB_REPOSITORY"
-
-          mkdir -p rpm-sig
-          cp "$asset.sig" "rpm-sig/linux-${{ matrix.rpm }}.sig"
-
-      - name: Upload RPM signature for the updater patch
-        if: matrix.rpm && startsWith(github.ref, 'refs/tags/')
-        uses: actions/upload-artifact@v7
-        with:
-          name: rpm-sig-linux-${{ matrix.rpm }}
-          path: rpm-sig/linux-${{ matrix.rpm }}.sig
-          if-no-files-found: error
-          retention-days: 1
 
       - name: Log the bundled media stack versions
         if: matrix.appimage
@@ -293,177 +260,298 @@ jobs:
           appimage="$(ls src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage | head -n1)"
           bash scripts/postprocess-appimage.sh "$appimage" "${{ matrix.appimage }}"
 
-      # Post-processing changed the AppImage's bytes, so RE-SIGN it and clobber
-      # the release asset + its .sig. tauri-action already uploaded the
-      # originals; we overwrite them here. The updater manifest (latest.json) is
-      # patched in the separate patch-appimage-updater job, after every matrix
-      # leg has merged its platform, so a parallel upload can't clobber it.
-      - name: Replace the release AppImage and re-sign it
-        if: matrix.appimage && startsWith(github.ref, 'refs/tags/')
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          tag="${{ needs.prepare.outputs.tag }}"
-          appimage="$(ls src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage | head -n1)"
-
-          # releaseAssetNamePattern can rename the uploaded asset, so resolve the
-          # actual AppImage asset name for this architecture and clobber it.
-          asset="$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets \
-            --jq '.assets[].name | select(endswith(".AppImage")) | select(test("${{ matrix.asset_arch }}"))' | head -n1)"
-          test -n "$asset" || { echo "no ${{ matrix.appimage }} .AppImage asset found on $tag"; exit 1; }
-          echo "Release asset: $asset"
-
-          cp "$appimage" "$asset"
-          rm -f "$asset.sig"
-          pnpm tauri signer sign "$asset"
-          gh release upload "$tag" "$asset" "$asset.sig" --clobber --repo "$GITHUB_REPOSITORY"
-
-          mkdir -p appimage-sig
-          cp "$asset.sig" "appimage-sig/linux-${{ matrix.appimage }}.sig"
-
-      - name: Upload re-signed AppImage signature for the updater patch
-        if: matrix.appimage && startsWith(github.ref, 'refs/tags/')
-        uses: actions/upload-artifact@v7
-        with:
-          name: appimage-sig-linux-${{ matrix.appimage }}
-          path: appimage-sig/linux-${{ matrix.appimage }}.sig
-          if-no-files-found: error
-          retention-days: 1
-
       - name: Report package sizes
         run: node scripts/report-bundle-sizes.mjs src-tauri/target/${{ matrix.target }}/release/bundle
 
-      - name: Upload tagged Windows installer
-        if: runner.os == 'Windows'
-        uses: actions/upload-artifact@v7
+      # Same names as earlier releases, so download links and the AUR
+      # PKGBUILDs keep working.
+      - name: Stage release assets
+        shell: bash
+        env:
+          BUNDLE: src-tauri/target/${{ matrix.target }}/release/bundle
+          VERSION: ${{ needs.prepare.outputs.version }}
+          TARGET: ${{ matrix.target }}
+          APPIMAGE: ${{ matrix.appimage }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          mkdir -p release-assets
+          prefix="release-assets/Flow_${VERSION}"
+
+          stage() {
+            local destination="$1"
+            shift
+            if [[ $# -ne 1 ]]; then
+              echo "expected one file for ${destination}, found $#: $*" >&2
+              exit 1
+            fi
+            cp "$1" "$destination"
+            echo "staged $destination"
+          }
+
+          case "$TARGET" in
+            x86_64-pc-windows-msvc) stage "${prefix}_windows_x64-setup.exe" "$BUNDLE"/nsis/*-setup.exe ;;
+            aarch64-pc-windows-msvc) stage "${prefix}_windows_arm64-setup.exe" "$BUNDLE"/nsis/*-setup.exe ;;
+            *-apple-darwin)
+              arch="${TARGET%%-*}"
+              [[ "$arch" == "x86_64" ]] && arch=x64
+              stage "${prefix}_darwin_${arch}.dmg" "$BUNDLE"/dmg/*.dmg
+              apps=("$BUNDLE"/macos/*.app)
+              if [[ ${#apps[@]} -ne 1 ]]; then
+                echo "expected one app bundle, found ${#apps[@]}" >&2
+                exit 1
+              fi
+              # Laid out like Tauri's own updater archive, the .app folder at
+              # the top, without AppleDouble files.
+              COPYFILE_DISABLE=1 tar --no-mac-metadata -czf "${prefix}_darwin_${arch}.app.tar.gz" \
+                -C "$BUNDLE/macos" "$(basename "${apps[0]}")"
+              ;;
+            x86_64-unknown-linux-gnu)
+              if [[ -n "$APPIMAGE" ]]; then
+                stage "${prefix}_linux_amd64.AppImage" "$BUNDLE"/appimage/*.AppImage
+              else
+                stage "${prefix}_linux_amd64.deb" "$BUNDLE"/deb/*.deb
+                stage "${prefix}_linux_x86_64.rpm" "$BUNDLE"/rpm/*.rpm
+              fi
+              ;;
+            aarch64-unknown-linux-gnu)
+              if [[ -n "$APPIMAGE" ]]; then
+                stage "${prefix}_linux_aarch64.AppImage" "$BUNDLE"/appimage/*.AppImage
+              else
+                stage "${prefix}_linux_arm64.deb" "$BUNDLE"/deb/*.deb
+                stage "${prefix}_linux_aarch64.rpm" "$BUNDLE"/rpm/*.rpm
+              fi
+              ;;
+            *) echo "no release asset names for $TARGET" >&2; exit 1 ;;
+          esac
+
+      - name: Upload release assets
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: Flow-${{ needs.prepare.outputs.version }}-${{ matrix.slug }}
-          path: src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe
+          name: release-${{ matrix.slug }}${{ matrix.appimage && '-appimage' || '' }}
+          path: release-assets/
           if-no-files-found: error
           retention-days: 30
 
-      - name: Upload tagged macOS disk image
-        if: runner.os == 'macOS'
-        uses: actions/upload-artifact@v7
-        with:
-          name: Flow-${{ needs.prepare.outputs.version }}-${{ matrix.slug }}
-          path: src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Upload tagged Linux AppImage
-        if: matrix.appimage
-        uses: actions/upload-artifact@v7
-        with:
-          name: Flow-${{ needs.prepare.outputs.version }}-${{ matrix.slug }}-appimage
-          path: src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Upload tagged Linux Debian package
-        if: runner.os == 'Linux' && !matrix.appimage
-        uses: actions/upload-artifact@v7
-        with:
-          name: Flow-${{ needs.prepare.outputs.version }}-${{ matrix.slug }}-deb
-          path: src-tauri/target/${{ matrix.target }}/release/bundle/deb/*.deb
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Upload tagged Linux RPM package
-        if: runner.os == 'Linux' && !matrix.appimage
-        uses: actions/upload-artifact@v7
-        with:
-          name: Flow-${{ needs.prepare.outputs.version }}-${{ matrix.slug }}-rpm
-          path: src-tauri/target/${{ matrix.target }}/release/bundle/rpm/*.rpm
-          if-no-files-found: error
-          retention-days: 30
-
-  # Patch the re-signed AppImages and the separately bundled RPMs into the
-  # combined updater manifest. Runs once, after every matrix leg has merged its
-  # platform into latest.json, so it operates on the full manifest and can't be
-  # clobbered by a parallel upload (the reason the steps above do NOT touch
-  # latest.json themselves). It also points the plain linux-<arch> entry at the
-  # AppImage: tauri-action sets that entry to whichever package its leg signed
-  # first, and .deb/.rpm build in their own legs.
-  patch-appimage-updater:
-    name: Patch updater manifest with re-signed AppImages and RPMs
-    needs: [prepare, publish]
+  # Signs the updater packages with the release key, which only the
+  # release-signing environment holds; its required reviewer approves each
+  # release here, after every build has passed. The job builds nothing and
+  # installs only the Tauri CLI locked in .github/signing.
+  sign:
+    name: Sign the updater packages
+    needs: [prepare, build]
     if: startsWith(github.ref, 'refs/tags/')
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: release-signing
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out the signing files
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            .github/signing/
+            scripts/release-updater-manifest.mjs
+            scripts/sign-updater-files.sh
+            scripts/updater-manifest.mjs
+            scripts/verify-updater-manifests.mjs
+            src-tauri/tauri.conf.json
+
+      - name: Install the Tauri CLI
+        working-directory: .github/signing
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Download release assets
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: release-*
+          path: upload
+          merge-multiple: true
+
+      - name: Plan the signatures
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+        run: node scripts/release-updater-manifest.mjs plan upload > signing-plan.tsv
+
+      - name: Sign the updater packages
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: bash scripts/sign-updater-files.sh upload signing-plan.tsv
+
+      - name: Check the signatures against the app's public key
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          node -p "require('./src-tauri/tauri.conf.json').plugins.updater.pubkey" > "$RUNNER_TEMP/updater.pub"
+          node scripts/release-updater-manifest.mjs write upload
+          node scripts/verify-updater-manifests.mjs upload "$RUNNER_TEMP/updater.pub"
+
+      - name: Upload the signatures
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-signatures
+          path: upload/*.sig
+          if-no-files-found: error
+          retention-days: 7
+
+  # A run started by hand (not on a tag) signs with a key made in the job, so
+  # the signing, latest.json and its check run without the release key and
+  # without publishing anything.
+  sign-dry-run:
+    name: Sign the updater packages (dry run)
+    needs: [prepare, build]
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out the signing files
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            .github/signing/
+            scripts/release-updater-manifest.mjs
+            scripts/sign-updater-files.sh
+            scripts/updater-manifest.mjs
+            scripts/verify-updater-manifests.mjs
+            src-tauri/tauri.conf.json
+
+      - name: Install the Tauri CLI
+        working-directory: .github/signing
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Download release assets
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: release-*
+          path: upload
+          merge-multiple: true
+
+      - name: Plan the signatures
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+        run: node scripts/release-updater-manifest.mjs plan upload > signing-plan.tsv
+
+      - name: Sign with a throwaway key
+        run: |
+          set -euo pipefail
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$(openssl rand -hex 16)"
+          TAURI_SIGNING_PRIVATE_KEY_PATH="$RUNNER_TEMP/throwaway.key"
+          export TAURI_SIGNING_PRIVATE_KEY_PASSWORD TAURI_SIGNING_PRIVATE_KEY_PATH
+          .github/signing/node_modules/.bin/tauri signer generate --ci \
+            -w "$TAURI_SIGNING_PRIVATE_KEY_PATH" -p "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" >/dev/null
+          bash scripts/sign-updater-files.sh upload signing-plan.tsv
+
+      - name: Check the signatures against the throwaway key
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          RELEASE_APP_NOTES: ${{ needs.prepare.outputs.app_notes }}
+        run: |
+          node scripts/release-updater-manifest.mjs write upload
+          node scripts/verify-updater-manifests.mjs upload "$RUNNER_TEMP/throwaway.key.pub"
+
+      - name: Upload latest.json and the signatures
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: signing-dry-run
+          path: |
+            upload/latest.json
+            upload/*.sig
+          if-no-files-found: error
+          retention-days: 3
+
+  # Creates the release and uploads every file, with latest.json last. It has
+  # write access and no signing key.
+  publish:
+    name: Publish the release
+    needs: [prepare, build, sign]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     permissions:
       contents: write
+
     steps:
-      - name: Download re-signed AppImage signatures
-        uses: actions/download-artifact@v8
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          pattern: appimage-sig-linux-*
-          path: appimage-sig
+          persist-credentials: false
+
+      - name: Download release assets and signatures
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: release-*
+          path: upload
           merge-multiple: true
 
-      - name: Download RPM signatures
-        uses: actions/download-artifact@v8
-        with:
-          pattern: rpm-sig-linux-*
-          path: rpm-sig
-          merge-multiple: true
-
-      - name: Patch latest.json with the AppImages, RPMs and app notes
+      - name: Check the disk images
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          APP_NOTES: ${{ needs.prepare.outputs.app_notes }}
+          VERSION: ${{ needs.prepare.outputs.version }}
         shell: bash
         run: |
           set -euo pipefail
-          tag="${{ needs.prepare.outputs.tag }}"
-          version="${{ needs.prepare.outputs.version }}"
-
-          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern latest.json --clobber
-          gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets > assets.json
-
-          for arch in x86_64 aarch64; do
-            case "$arch" in
-              x86_64) arch_names='(x86_64|amd64|x64)' ;;
-              aarch64) arch_names='(aarch64|arm64)' ;;
-            esac
-            appimage="$(jq -r --arg re "$arch_names" \
-              '.assets[].name | select(endswith(".AppImage")) | select(test($re))' assets.json | head -n1)"
-            rpm="Flow_${version}_linux_${arch}.rpm"
-
-            # Re-uploading an asset gives it a new id, so the URLs come from the
-            # release as it is now, not from what tauri-action recorded.
-            appimage_url="$(jq -er --arg name "$appimage" '.assets[] | select(.name == $name) | .apiUrl' assets.json)"
-            rpm_url="$(jq -er --arg name "$rpm" '.assets[] | select(.name == $name) | .apiUrl' assets.json)"
-            appimage_sig="$(cat "appimage-sig/linux-$arch.sig")"
-            rpm_sig="$(cat "rpm-sig/linux-$arch.sig")"
-            test -n "$appimage_sig" || { echo "empty re-signed AppImage signature for $arch"; exit 1; }
-            test -n "$rpm_sig" || { echo "empty RPM signature for $arch"; exit 1; }
-
-            jq --arg key "linux-$arch" \
-              --arg appimage_sig "$appimage_sig" --arg appimage_url "$appimage_url" \
-              --arg rpm_sig "$rpm_sig" --arg rpm_url "$rpm_url" '
-              .platforms[$key + "-appimage"] = {signature: $appimage_sig, url: $appimage_url}
-              | .platforms[$key] = .platforms[$key + "-appimage"]
-              | .platforms[$key + "-rpm"] = {signature: $rpm_sig, url: $rpm_url}
-            ' latest.json > latest.json.tmp
-            mv latest.json.tmp latest.json
+          for arch in x64 aarch64; do
+            test -f "upload/Flow_${VERSION}_darwin_${arch}.dmg" \
+              || { echo "missing Flow_${VERSION}_darwin_${arch}.dmg" >&2; exit 1; }
           done
 
-          # tauri-action copied the markdown release body into notes.
-          jq --arg notes "$APP_NOTES" '.notes = $notes' latest.json > latest.json.tmp
-          mv latest.json.tmp latest.json
+      - name: Write latest.json
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          RELEASE_APP_NOTES: ${{ needs.prepare.outputs.app_notes }}
+        run: node scripts/release-updater-manifest.mjs write upload
 
-          # Every platform that can update itself must be in the manifest, or its
-          # installs silently stay on this version.
-          for key in darwin-x86_64 darwin-aarch64 windows-x86_64 windows-aarch64 linux-x86_64 linux-aarch64; do
-            jq -e --arg key "$key" '.platforms[$key].url and .platforms[$key].signature' latest.json > /dev/null \
-              || { echo "::error::latest.json has no $key update"; exit 1; }
-          done
+      - name: Check the signatures against the app's public key
+        run: |
+          node -p "require('./src-tauri/tauri.conf.json').plugins.updater.pubkey" > "$RUNNER_TEMP/updater.pub"
+          node scripts/verify-updater-manifests.mjs upload "$RUNNER_TEMP/updater.pub"
 
-          gh release upload "$tag" latest.json --clobber --repo "$GITHUB_REPOSITORY"
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          PRERELEASE: ${{ needs.prepare.outputs.is_prerelease }}
+          NOTES: ${{ needs.prepare.outputs.notes }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$NOTES" > release-notes.md
+          if [[ "$PRERELEASE" == "true" ]]; then
+            title="Flow Beta v${VERSION}"
+            flags=(--prerelease)
+          else
+            title="Flow v${VERSION}"
+            flags=()
+          fi
+
+          # A re-run edits the release it made before.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "$title" --notes-file release-notes.md "${flags[@]}"
+          else
+            gh release create "$TAG" --verify-tag --title "$title" --notes-file release-notes.md "${flags[@]}"
+          fi
+
+          # Packages first, latest.json last, so installs never see an update
+          # whose file isn't there yet.
+          shopt -s extglob
+          gh release upload "$TAG" upload/!(latest.json) --clobber
+          gh release upload "$TAG" upload/latest.json --clobber
 
   # Publishes flow-desktop and flow-desktop-bin for every tag, betas included,
   # since the AUR packages follow the betas until 0.1.0. The pkgver is the tag
@@ -492,7 +580,7 @@ jobs:
 
       - name: Check out repository
         if: env.AUR_SSH_PRIVATE_KEY != ''
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set pkgver from the tag
         id: version

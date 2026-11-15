@@ -10,6 +10,7 @@ use sqlx::SqlitePool;
 
 use super::{Found, ImportError, TakenLike, TakenPlaylist, Watch};
 use crate::commands::backup::{SUBSCRIPTION_CHANNELS_KEY, get_setting_value, import_backup};
+use crate::db::watch_history;
 use crate::flow_neuro::bootstrap::ImportedVideo;
 use crate::sync::canonical::{
     Hlc, Like, LikeKind, LikeState, Playlist, PlaylistItem, PlaylistOrigin, WatchHistoryRecord,
@@ -31,6 +32,8 @@ pub struct ImportReport {
     pub music_playlists: usize,
     pub music_library: usize,
     pub likes: usize,
+    /// Ads an earlier import saved as watched, taken out of the history.
+    pub ads_removed: usize,
 }
 
 /// What the import hands the engines, and what it reports.
@@ -211,6 +214,30 @@ fn imported_video(
     }
 }
 
+/// An earlier import, before ads were told apart, saved them as watched. Rows for the ads this
+/// export lists go, unless they were played here since or the export also lists the video as a
+/// real watch.
+async fn remove_imported_ads(pool: &SqlitePool, found: &Found) -> Result<usize, ImportError> {
+    let watched: HashSet<&str> = found
+        .watches
+        .iter()
+        .map(|watch| watch.video_id.as_str())
+        .collect();
+    let ads: Vec<String> = found
+        .ad_video_ids
+        .iter()
+        .filter(|id| !watched.contains(id.as_str()))
+        .cloned()
+        .collect();
+    if ads.is_empty() {
+        return Ok(0);
+    }
+    let removed = watch_history::delete_unplayed_watch_records(pool, &ads)
+        .await
+        .map_err(|error| ImportError::Failed(error.to_string()))?;
+    Ok(usize::try_from(removed).unwrap_or(usize::MAX))
+}
+
 /// Writes everything found. Nothing has reached the engines yet when this returns.
 pub async fn save_found(pool: &SqlitePool, found: &Found, now: u64) -> Result<Saved, ImportError> {
     let mut collections = Map::new();
@@ -271,6 +298,7 @@ pub async fn save_found(pool: &SqlitePool, found: &Found, now: u64) -> Result<Sa
     import_backup(pool, &json!({ "collections": collections }))
         .await
         .map_err(|error| ImportError::Failed(error.to_string()))?;
+    report.ads_removed = remove_imported_ads(pool, found).await?;
 
     let mut learn_from: Vec<ImportedVideo> = watches
         .iter()

@@ -6,7 +6,7 @@ import type { LyricsPresentation } from "../../../lib/lyrics/display/presentatio
 import type { RowLayout } from "../../../lib/lyrics/display/rowLayout";
 import type { RowMotion } from "../../../lib/lyrics/display/rowMotion";
 import { isLineActive, rowTarget, type TargetContext } from "../../../lib/lyrics/display/panelLayout";
-import { IS_LINUX_RUNTIME } from "../../../lib/platform";
+import type { LyricsAnimation, LyricsGlow } from "../../../lib/lyrics/useLyricsLook";
 import { getString } from "../../../lib/i18n/index";
 import { IndicatorRow, LineRow } from "./LyricsRows";
 
@@ -31,6 +31,8 @@ export interface LyricsRowListProps {
   rowWidth: number;
   focusedLine: number | null;
   motionEnabled: boolean;
+  animation: LyricsAnimation;
+  glow: LyricsGlow;
   pixelRatioVersion: number;
   onLineClick: (lineIndex: number) => void;
   registerSurface: (lineIndex: number, surface: KaraokeSurface | null) => void;
@@ -40,7 +42,7 @@ export interface LyricsRowListProps {
 /** The rows that exist this render, each placed and moved by its own springs. */
 export function LyricsRowList(props: LyricsRowListProps) {
   const { rendered, motions, ctx, layouts, lines, lineWords, presentation, geometryFor, expressiveAccent } = props;
-  const { rowLeft, rowWidth, focusedLine, motionEnabled, pixelRatioVersion, onLineClick, registerSurface, registerDots } = props;
+  const { rowLeft, rowWidth, focusedLine, motionEnabled, animation, glow, pixelRatioVersion, onLineClick, registerSurface, registerDots } = props;
   const manualOffset = ctx.state.userManualOffset;
   return (
     <>
@@ -94,8 +96,8 @@ export function LyricsRowList(props: LyricsRowListProps) {
                 ? {
                     geometry,
                     unsungAlpha: item.entry.isBackground ? BACKGROUND_UNSUNG_ALPHA : FOCUSED_ALPHA,
-                    // WebKitGTK draws canvas shadows on the CPU, so the held-note glow stays off on Linux.
-                    glow: !IS_LINUX_RUNTIME,
+                    animation,
+                    glow,
                     motion: motionEnabled,
                     pixelRatioVersion,
                     register: registerSurface,

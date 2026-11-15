@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildNightlyManifests } from "./nightly-updater-manifest.mjs";
+import { buildNightlyManifests, nightlyPackages } from "./nightly-updater-manifest.mjs";
 import { nightlyVersion } from "./nightly-version.mjs";
 
 const V = "0.1.0-nightly.812";
@@ -61,8 +61,22 @@ describe("nightly updater manifests", () => {
     expect(platforms["linux-aarch64-deb"].url).toMatch(/linux-arm64\.deb$/);
   });
 
-  it("leaves the manifests out of an unsigned build", () => {
-    expect(build({})).toBeNull();
+  it("refuses an unsigned build", () => {
+    expect(() => build({})).toThrow(/unsigned updater packages/);
+  });
+
+  it("plans each package's signature for its own manifest's version", () => {
+    const plan = nightlyPackages({
+      files: FILES,
+      repository: "Flow-Tube/Flow-Desktop",
+      runNumber: "812",
+      baseVersion: "0.1.0-beta4",
+    });
+    expect(plan.map(({ file }) => file).sort()).toEqual([...PACKAGES].sort());
+    const versionOf = (suffix) => plan.find(({ file }) => file.endsWith(suffix)).version;
+    expect(versionOf("windows-x64-setup.exe")).toBe("0.1.0-nightly.812");
+    expect(versionOf("macos-arm64.app.tar.gz")).toBe("0.1.0-nightly.812");
+    expect(versionOf("linux-arm64.rpm")).toBe("0.1.0+nightly.812");
   });
 
   it("refuses a build signed only in part", () => {

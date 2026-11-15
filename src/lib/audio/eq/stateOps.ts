@@ -28,6 +28,7 @@ export function defaultEqState(): EqState {
     graphic: { presetId: null, curve: GraphicEq.flatCurve() },
     autoPreamp: true,
     bassBoost: 0,
+    spatialSound: "OFF",
     userPresets: [],
   };
 }
@@ -56,6 +57,7 @@ export const statesEqual = (a: EqState, b: EqState): boolean =>
   copiesEqual(a.graphic, b.graphic) &&
   a.autoPreamp === b.autoPreamp &&
   a.bassBoost === b.bassBoost &&
+  a.spatialSound === b.spatialSound &&
   a.userPresets.length === b.userPresets.length &&
   a.userPresets.every((p, i) => {
     const q = b.userPresets[i];

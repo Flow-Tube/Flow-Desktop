@@ -14,6 +14,7 @@ import {
   type Now,
 } from "../lib/api/live";
 import { getString } from "../lib/i18n/index";
+import { withClosedHint, type ClosedHints } from "../lib/live/elsewhere";
 import { nowOf, queueWindow } from "../lib/live/now";
 import { overrideFor, stillControlled, withOverrides, type Override } from "../lib/live/optimistic";
 import { applyCommand, pauseHere, playing, startSession } from "../lib/live/players";
@@ -24,12 +25,14 @@ import { useRemoteControlStore } from "./useRemoteControlStore";
 import { usePlayerStore } from "./usePlayerStore";
 import { useUiStore } from "./useUiStore";
 
-/** How long a handoff waits for the target's answer. */
-const HANDOFF_WITHIN_MS = 15_000;
+/** How long a handoff waits for the target's answer: longer than the 20 s the target waits for playback to start. */
+const HANDOFF_WITHIN_MS = 25_000;
 /** How long a remote command waits for its answer before what it showed is taken back. */
 const COMMAND_WITHIN_MS = 5_000;
 /** Answers kept for a request whose wait has not started yet; more than this are old. */
 const EARLY_LIMIT = 32;
+/** How long a device's row says a move to it failed, as on Android. */
+const FAILED_MS = 4_000;
 
 export type ConsentChoice = "always" | "once" | "decline";
 
@@ -46,10 +49,14 @@ interface PlayOnState {
   controlling: string | null;
   /** The device playback is on its way to; only one move runs at a time. */
   movingTo: string | null;
+  /** The device a move just failed to reach, for a few seconds. */
+  failed: string | null;
   /** The group's devices with their names, loaded once another device can be reached. */
   linked: LinkedDevice[];
   /** Requests waiting until the user allows their sender, oldest first. */
   asking: LiveRequest[];
+  /** The devices whose "Playing on" hint the user closed, with the video each played then. */
+  closedHints: ClosedHints;
   /** Listens to the live channel; `watch` opens a video's page. Resolves to a function that stops. */
   init: (watch: (videoId: string) => void) => Promise<() => void>;
   /**
@@ -66,13 +73,16 @@ interface PlayOnState {
   moveTo: (did: string) => Promise<void>;
   /** Controls `did`, which plays already, from the remote dock. */
   control: (did: string) => void;
-  /** Drives the player here, or on `did`. */
-  drive: (did: string | null, cmd: Command, value?: { pos?: number; vol?: number; queue?: string[] }) => Promise<void>;
+  /** Hides the "Playing on" hint for `did` until it plays something other than `video`. */
+  closeHint: (did: string, video: string) => void;
+  /** Drives the player here, or on `did`; resolves to false when the command didn't take. */
+  drive: (did: string | null, cmd: Command, value?: { pos?: number; vol?: number; queue?: string[] }) => Promise<boolean>;
   /** Answers the oldest question in `asking`. */
   answer: (choice: ConsentChoice) => Promise<void>;
 }
 
 let watch: (videoId: string) => void = () => undefined;
+let failedTimer: ReturnType<typeof setTimeout> | undefined;
 const waiting = new Map<number, (answer: Answer) => void>();
 /** Answers that arrived before their wait started, as a fast device's can. */
 const early = new Map<number, Answer>();
@@ -187,6 +197,15 @@ export const usePlayOnStore = create<PlayOnState>((set, get) => {
     if (unknown) getLinkedDevices().then((linked) => set({ linked }), () => undefined);
   }
 
+  /** Marks `did` as the device a move just failed to reach, until a later move or a few seconds pass. */
+  function failedOn(did: string) {
+    clearTimeout(failedTimer);
+    set({ failed: did });
+    failedTimer = setTimeout(() => {
+      if (get().failed === did) set({ failed: null });
+    }, FAILED_MS);
+  }
+
   /** Playing here takes control back from the other devices. */
   function playingHere(isPlaying: boolean) {
     if (isPlaying) set({ controlling: null });
@@ -198,8 +217,10 @@ export const usePlayOnStore = create<PlayOnState>((set, get) => {
     overrides: {},
     controlling: null,
     movingTo: null,
+    failed: null,
     linked: [],
     asking: [],
+    closedHints: {},
 
     init: async (open) => {
       watch = open;
@@ -220,11 +241,14 @@ export const usePlayOnStore = create<PlayOnState>((set, get) => {
         get().control(device.did);
         return;
       }
-      set({ movingTo: device.did });
+      set({ movingTo: device.did, failed: null });
       try {
         if (device.thisDevice) await get().pullFrom(driven);
         else if (movesDriven) await get().moveTo(device.did);
         else await get().transferTo(device.did);
+      } catch (error) {
+        failedOn(device.did);
+        throw error;
       } finally {
         set({ movingTo: null });
       }
@@ -263,11 +287,10 @@ export const usePlayOnStore = create<PlayOnState>((set, get) => {
 
     control: (did) => set({ controlling: did }),
 
+    closeHint: (did, video) => set({ closedHints: withClosedHint(get().closedHints, did, video) }),
+
     drive: async (did, cmd, value = {}) => {
-      if (!did) {
-        await applyCommand({ type: "cmd", to: "", cmd, ...value });
-        return;
-      }
+      if (!did) return applyCommand({ type: "cmd", to: "", cmd, ...value });
       const device = get().reported?.devices[did];
       const override = device ? overrideFor(device, cmd, value, Date.now()) : null;
       if (override) show(get().reported, { ...get().overrides, [did]: override });
@@ -278,12 +301,13 @@ export const usePlayOnStore = create<PlayOnState>((set, get) => {
       // A `now` that arrived meanwhile already replaced what was shown; a command that changed
       // nothing shown is still told about when it failed.
       const shown = get().overrides[did] === override;
-      if (answer.ok || (override && !shown)) return;
+      if (answer.ok || (override && !shown)) return answer.ok;
       if (override) {
         const { [did]: _, ...rest } = get().overrides;
         show(get().reported, rest);
       }
       useUiStore.getState().showToast({ variant: "error", message: getString("play_on_control_failed", deviceName(did)) });
+      return false;
     },
 
     answer: async (choice) => {

@@ -2,6 +2,7 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::missing_errors_doc)]
 
+mod ai_list;
 pub mod api;
 mod appimage;
 pub mod backup;
@@ -45,6 +46,10 @@ use std::sync::Arc;
 use tauri::Manager;
 
 use api::innertube::InnertubeClient;
+use commands::ai_list::{
+    ai_list_check_report, ai_list_learn_handles, ai_list_match_channels, ai_list_matcher_data,
+    ai_list_refresh, ai_list_source_settings, ai_list_status, ai_list_submit_report,
+};
 use commands::app_window::{AppWindowSession, AppWindowState, app_window_session, open_app_window};
 use commands::backup::{
     export_backup_data, import_backup_data, import_profile_backup, profiles_restore_master,
@@ -53,7 +58,7 @@ use commands::db::{
     add_watch_record, add_watch_records_bulk, clear_watch_history, delete_short_watch_records,
     delete_watch_record, get_music_history, get_setting, get_watch_history,
     get_watch_history_years, get_watch_progress, get_watch_records, reset_app_data,
-    restore_watch_record, set_setting,
+    restore_watch_record, set_setting, watch_history_settled,
 };
 use commands::diagnostics::{
     clear_logs, crash_report_delete, crash_report_dismiss, crash_report_read, get_graphics_mode,
@@ -78,11 +83,11 @@ use commands::linked::{
     linked_catch_up, linked_choose_profile, linked_contest, linked_create, linked_create_lan,
     linked_create_webdav, linked_dashboard, linked_decline_join, linked_delete_profile,
     linked_devices, linked_enter_code, linked_finish_login_change, linked_forget,
-    linked_join_requests, linked_keep_side, linked_leave, linked_link_phase,
+    linked_join_requests, linked_keep_side, linked_leave, linked_left_out, linked_link_phase,
     linked_preview_restore, linked_profiles, linked_recovery_saved, linked_remove, linked_rename,
-    linked_replace_recovery, linked_restore, linked_retry_keychain, linked_show_code,
-    linked_start_login_change, linked_status, linked_stop_profile, linked_sync_added_profile,
-    linked_sync_now, linked_sync_profile, linked_update_login,
+    linked_replace_recovery, linked_restore, linked_retry_keychain, linked_set_left_out,
+    linked_show_code, linked_start_login_change, linked_status, linked_stop_profile,
+    linked_sync_added_profile, linked_sync_now, linked_sync_profile, linked_update_login,
 };
 use commands::live::{live_consents, live_now, live_send, live_set_consent, live_status};
 use commands::lyrics::{
@@ -152,6 +157,7 @@ use commands::scrobble::{
 use commands::shorts::{
     get_shorts_feed, load_more_shorts, record_seen_shorts, report_short_view, reset_shorts_feed,
 };
+use commands::subscription_posts::{forget_subscription_posts, get_subscription_posts};
 use commands::subtitle_file::read_subtitle_file;
 use commands::sync::{
     sync_cancel, sync_device_info, sync_firewall_help, sync_host_receive, sync_respond_consent,
@@ -165,14 +171,14 @@ use commands::window::{PlayerFullscreenState, set_player_fullscreen};
 use commands::youtube::{
     fetch_subtitles, get_channel_about, get_channel_details, get_channel_page, get_channel_tab,
     get_comments, get_dearrow_override, get_explore_destination, get_explore_grid,
-    get_explore_page, get_live_chat, get_more_related_videos, get_non_music_segments,
-    get_original_title, get_paid_promotion, get_playlist_details, get_post_comments,
-    get_related_videos, get_return_youtube_dislike, get_sabr_debug_state, get_search_suggestions,
-    get_sponsorblock_segments, get_stream_info, get_subscription_rotation_feed,
-    get_subscription_rss_feed, get_unplayable_video_ids, get_video_category, get_video_details,
-    get_video_metadata, get_video_storyboard, parse_subscription_export, resolve_channel_id,
-    scan_subscription_collaborations, search_videos, stream_subscription_rss_feed,
-    submit_sponsorblock_segment,
+    get_explore_page, get_live_chat, get_mix_playlist, get_more_related_videos,
+    get_non_music_segments, get_original_title, get_paid_promotion, get_playlist_details,
+    get_post_comments, get_related_videos, get_return_youtube_dislike, get_sabr_debug_state,
+    get_search_suggestions, get_sponsorblock_segments, get_stream_info,
+    get_subscription_rotation_feed, get_subscription_rss_feed, get_unplayable_video_ids,
+    get_video_category, get_video_details, get_video_metadata, get_video_storyboard,
+    parse_subscription_export, resolve_channel_id, scan_subscription_collaborations, search_videos,
+    stream_subscription_rss_feed, submit_sponsorblock_segment,
 };
 use services::discord_presence::DiscordPresence;
 use services::music_service::MusicService;
@@ -483,6 +489,7 @@ pub fn run() {
 
             // Manage database pool
             app.manage(pool.clone());
+            app.manage(ai_list::AiListService::new(&app_data_dir));
             let scrobbler = Arc::new(scrobble::scrobbler::Scrobbler::new(
                 pool.clone(),
                 Arc::new(scrobble::credentials::ProfileScoped::new(
@@ -559,7 +566,9 @@ pub fn run() {
             app.manage(sync2::link_task::LinkTask::default());
             app.manage(sync2::lan_peers::LanPeers::default());
             app.manage(sync2::live_hub::LiveHub::default());
+            app.manage(sync2::push::LocalPushes::default());
             sync2::service::spawn(app.handle().clone());
+            sync2::push::spawn(app.handle().clone());
             sync2::lan_runtime::spawn(app.handle().clone());
             sync2::live::spawn(app.handle().clone());
 
@@ -605,6 +614,7 @@ pub fn run() {
             app.manage(update_support);
 
             services::notification_service::spawn_poll_loop(app.handle().clone(), pool.clone());
+            ai_list::service::spawn(app.handle().clone(), pool.clone());
             app.manage(backup::auto::AutoBackupState::default());
             backup::auto::spawn(app.handle().clone(), pool.clone());
             commands::cache::spawn_startup_trim(app.handle().clone(), pool.clone());
@@ -691,6 +701,7 @@ pub fn run() {
             get_channel_about,
             get_channel_tab,
             get_playlist_details,
+            get_mix_playlist,
             get_comments,
             get_post_comments,
             get_live_chat,
@@ -703,6 +714,7 @@ pub fn run() {
             get_music_history,
             add_watch_record,
             add_watch_records_bulk,
+            watch_history_settled,
             restore_watch_record,
             delete_watch_record,
             delete_short_watch_records,
@@ -836,6 +848,8 @@ pub fn run() {
             get_subscription_rss_feed,
             scan_subscription_collaborations,
             stream_subscription_rss_feed,
+            get_subscription_posts,
+            forget_subscription_posts,
             resolve_channel_id,
             fetch_subtitles,
             read_subtitle_file,
@@ -858,6 +872,8 @@ pub fn run() {
             updates_supported,
             set_player_fullscreen,
             commands::window::set_window_background,
+            commands::app_font::save_custom_font,
+            commands::app_font::read_custom_font,
             commands::theme::theme_file_state,
             commands::theme::create_theme_file,
             commands::theme::reveal_theme_file,
@@ -966,6 +982,8 @@ pub fn run() {
             live_set_consent,
             live_status,
             linked_sync_now,
+            linked_left_out,
+            linked_set_left_out,
             linked_profiles,
             linked_sync_profile,
             linked_sync_added_profile,
@@ -1007,6 +1025,15 @@ pub fn run() {
             set_upcoming_reminder,
             cancel_upcoming_reminder,
             check_subscriptions_now,
+            // --- AiSList channel filter ---
+            ai_list_status,
+            ai_list_refresh,
+            ai_list_matcher_data,
+            ai_list_learn_handles,
+            ai_list_match_channels,
+            ai_list_source_settings,
+            ai_list_check_report,
+            ai_list_submit_report,
             // --- Discord Rich Presence ---
             set_discord_presence,
             clear_discord_presence,

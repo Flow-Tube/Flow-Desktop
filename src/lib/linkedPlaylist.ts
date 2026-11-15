@@ -1,6 +1,5 @@
 import { usePlayerStore, type PlaylistContext } from "../store/usePlayerStore";
-import { getPlaylistDetails } from "./api/youtube";
-import { appendUniqueVideos, loadRemainingPlaylistVideos } from "./playlistPages";
+import { appendUniqueVideos, firstPlaylistPage, loadRemainingPlaylistVideos } from "./playlistPages";
 
 /**
  * Makes the linked playlist the queue around the video the link names. The video plays straight
@@ -10,7 +9,7 @@ import { appendUniqueVideos, loadRemainingPlaylistVideos } from "./playlistPages
 export async function playLinkedPlaylist(playlistId: string, videoId: string): Promise<void> {
   let details;
   try {
-    details = await getPlaylistDetails(playlistId);
+    details = await firstPlaylistPage(playlistId, videoId);
   } catch {
     return;
   }

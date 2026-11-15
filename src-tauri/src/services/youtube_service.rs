@@ -110,6 +110,14 @@ impl YoutubeService {
             .await
     }
 
+    pub async fn get_mix_playlist(
+        &self,
+        playlist_id: &str,
+        video_id: Option<&str>,
+    ) -> AppResult<PlaylistDetailsResponse> {
+        self.extractor.get_mix_playlist(playlist_id, video_id).await
+    }
+
     pub async fn get_comments(
         &self,
         video_id: &str,

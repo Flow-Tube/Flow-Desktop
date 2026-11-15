@@ -1,3 +1,5 @@
+pub mod ai_list;
+pub mod app_font;
 pub mod app_window;
 pub mod backup;
 pub mod backup_files;
@@ -26,6 +28,7 @@ pub mod recap;
 pub mod recommendation;
 pub mod scrobble;
 pub mod shorts;
+pub mod subscription_posts;
 pub mod subtitle_file;
 pub mod sync;
 pub mod theme;

@@ -49,7 +49,7 @@ beforeEach(async () => {
   });
   api.getLiveStatus.mockResolvedValue({ available: true, devices: {}, online: [] });
   api.sendLive.mockResolvedValue(9);
-  usePlayOnStore.setState({ status: null, reported: null, overrides: {}, controlling: null, movingTo: null, linked: [], asking: [] });
+  usePlayOnStore.setState({ status: null, reported: null, overrides: {}, controlling: null, movingTo: null, failed: null, linked: [], asking: [] });
   await usePlayOnStore.getState().init(() => undefined);
 });
 
@@ -150,6 +150,36 @@ describe("usePlayOnStore", () => {
     expect(usePlayOnStore.getState().movingTo).toBeNull();
   });
 
+  it("marks the device a move failed to reach for 4 s, until the next move", async () => {
+    vi.useFakeTimers();
+    try {
+      players.playing.mockReturnValue(PLAYING);
+      const target = { did: "bb", thisDevice: false, now: null } as unknown as PlayOnDevice;
+      const moving = usePlayOnStore.getState().pick(target);
+      await vi.advanceTimersByTimeAsync(0);
+      deliver({ from: "bb", seq: 1, ask: false, message: { type: "result", to: "me", ref: 9, ok: false, reason: "declined" } });
+      await expect(moving).rejects.toThrow("declined");
+      expect(usePlayOnStore.getState().failed).toBe("bb");
+      await vi.advanceTimersByTimeAsync(3_999);
+      expect(usePlayOnStore.getState().failed).toBe("bb");
+      await vi.advanceTimersByTimeAsync(1);
+      expect(usePlayOnStore.getState().failed).toBeNull();
+
+      const failing = usePlayOnStore.getState().pick(target);
+      await vi.advanceTimersByTimeAsync(0);
+      deliver({ from: "bb", seq: 2, ask: false, message: { type: "result", to: "me", ref: 9, ok: false } });
+      await expect(failing).rejects.toThrow();
+      expect(usePlayOnStore.getState().failed).toBe("bb");
+      const retry = usePlayOnStore.getState().pick(target);
+      expect(usePlayOnStore.getState().failed).toBeNull();
+      deliver({ from: "bb", seq: 3, ask: false, message: { type: "result", to: "me", ref: 9, ok: true } });
+      await retry;
+      expect(usePlayOnStore.getState().failed).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   describe("picking a device", () => {
     const SONG: Now = { video: "s1", title: "S", by: "A", music: true, link: null, pos: 2000, dur: 60_000, state: "paused", vol: 100, queue: ["s1"], index: 0 };
     const at = (devices: Record<string, Now | null>): LiveStatus => ({
@@ -224,7 +254,7 @@ describe("usePlayOnStore", () => {
       expect(shownState()).toBe("paused");
       await flush();
       deliver({ from: "bb", seq: 1, ask: false, message: { type: "result", to: "me", ref: 9, ok: true } });
-      await pausing;
+      await expect(pausing).resolves.toBe(true);
       expect(shownState()).toBe("paused");
       report(phone({ ...NOW, state: "playing" }, Date.now() + 1000));
       expect(shownState()).toBe("playing");
@@ -257,7 +287,7 @@ describe("usePlayOnStore", () => {
       const pausing = usePlayOnStore.getState().drive("bb", "pause");
       await flush();
       deliver({ from: "bb", seq: 1, ask: false, message: { type: "result", to: "me", ref: 9, ok: false, reason: "declined" } });
-      await pausing;
+      await expect(pausing).resolves.toBe(false);
       expect(shownState()).toBe("playing");
       expect(showToast).toHaveBeenCalledOnce();
     });

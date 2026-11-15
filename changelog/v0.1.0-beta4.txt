@@ -151,6 +151,8 @@ MUSIC
 - Mini player background paints the bar Tinted (the new default), Vivid, App theme, Cover colors, Black or Outlined.
 - Mini player buttons picks up to six buttons for the pill and their order, from Previous, Play and pause, Next, Like, Add to playlist, Shuffle, Repeat, Queue, Lyrics, Sleep timer, Back and Forward 10 seconds, Volume, Equalizer, Play on and Close.
 - Previous and next now sit flat against play/pause as one split button in the music player, under full-screen lyrics and on the Play on card, as on Android. Pressing one widens it. Split buttons in Settings > Music > Now playing switches back to the round buttons.
+- The pill mini player has more options in Settings > Music: its width, the ring around the cover, the song's progress on the bar itself (Fill, Edge, Line or Wavy line), the elapsed or remaining time, the line being sung in place of the artist, and whether clicking the cover plays and pauses.
+- In the pill, previous, play/pause and next chosen side by side form one small split button, Next names the song it plays on hover, and the Line and Wavy line can be dragged to seek.
 
 PLAYER
 - Live chat and chat replay beside a video can be closed. Show chat brings it back, as does the chat button on the player, which now works outside fullscreen too.

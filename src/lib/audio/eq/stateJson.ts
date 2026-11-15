@@ -1,11 +1,13 @@
 import {
   EQ_FILTER_TYPES,
+  EQ_SPATIAL_SOUNDS,
   EqLimits,
   type EqBand,
   type EqCurve,
   type EqFilterType,
   type EqMode,
   type EqPreset,
+  type EqSpatialSound,
   type EqState,
   type EqWorkingCopy,
 } from "./models";
@@ -47,6 +49,10 @@ const filterType = (v: unknown): EqFilterType => {
 const mode = (v: unknown): EqMode => {
   if (v !== "PARAMETRIC" && v !== "GRAPHIC") throw new Invalid();
   return v;
+};
+const spatialSound = (v: unknown): EqSpatialSound => {
+  if (!EQ_SPATIAL_SOUNDS.includes(v as EqSpatialSound)) throw new Invalid();
+  return v as EqSpatialSound;
 };
 const list = <T>(read: (v: unknown) => T) => (v: unknown): T[] => {
   if (!Array.isArray(v)) throw new Invalid();
@@ -110,6 +116,7 @@ export function decodeEqState(raw: string): EqState | null {
       graphic: field(o, "graphic", readCopy, () => defaults.graphic),
       autoPreamp: field(o, "autoPreamp", bool, () => defaults.autoPreamp),
       bassBoost: field(o, "bassBoost", num, () => defaults.bassBoost),
+      spatialSound: field(o, "spatialSound", spatialSound, () => defaults.spatialSound),
       userPresets: field(o, "userPresets", list(readPreset), () => defaults.userPresets),
     });
   } catch {
@@ -132,6 +139,7 @@ export function encodeEqState(state: EqState): string {
     graphic: copy(state.graphic),
     autoPreamp: state.autoPreamp,
     bassBoost: state.bassBoost,
+    spatialSound: state.spatialSound,
     userPresets: state.userPresets.map((p) => ({
       id: p.id,
       name: p.name,

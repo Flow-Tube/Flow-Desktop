@@ -39,6 +39,7 @@ describe("EqStateJson", () => {
       "graphic",
       "autoPreamp",
       "bassBoost",
+      "spatialSound",
       "userPresets",
     ]);
     expect(parsed.parametric).toEqual({ presetId: "builtin:flat", curve: { preamp: 0, bands: [] } });
@@ -51,6 +52,16 @@ describe("EqStateJson", () => {
     expect(decodeEqState(`{"enabled":"yes"}`)).toBeNull();
     expect(decodeEqState(`{"mode":"SPECTRAL"}`)).toBeNull();
     expect(decodeEqState("[]")).toBeNull();
+    expect(decodeEqState(`{"spatialSound":"LOUD"}`)).toBeNull();
+  });
+
+  it("keeps Android's spatial sound through a Desktop save", () => {
+    const fromPhone = ANDROID_JSON.replace(`"bassBoost":2.5,`, `"bassBoost":2.5,"spatialSound":"HIGH",`);
+    const state = decodeEqState(fromPhone)!;
+    expect(state.spatialSound).toBe("HIGH");
+    const saved = JSON.parse(encodeEqState({ ...state, bassBoost: 4 }));
+    expect(saved.spatialSound).toBe("HIGH");
+    expect(decodeEqState(ANDROID_JSON)!.spatialSound).toBe("OFF");
   });
 });
 

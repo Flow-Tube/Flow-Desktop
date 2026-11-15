@@ -342,3 +342,4 @@ FIXES
 - SponsorBlock: letting go of a seek inside a segment that skips on its own now lands at its end, as on Android, even for a segment at the very start of a video. Each segment counts once per video in your SponsorBlock stats and Recap, however often you rewind into it.
 - Lyrics: the word fill no longer jumps back at speeds below 1x, the lyrics hold still while the share, source or edit dialog is open over them, and saving a lyric card that could not be drawn now says so instead of doing nothing.
 - Saving the equalizer on this computer no longer turns Spatial sound off on a linked Android phone. Desktop now keeps the setting it syncs, though it doesn't play it yet.
+- Singer markers such as {agent:v1} and {bg} no longer show inside line-synced lyrics or lyrics saved by an earlier version. Their lines go to the right singer, and background vocals show as background lines.

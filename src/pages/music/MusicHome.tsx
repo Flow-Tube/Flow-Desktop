@@ -26,6 +26,9 @@ import { usePreference } from '../../lib/usePreference';
 import { SETTINGS } from '../../lib/settings/schema';
 import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
 import { useMusicArtistHidden, useMusicHiddenFilter } from '../../store/useMusicActionsStore';
+import { useAiListMatcher } from '../../lib/aiList/useAiList';
+import { aiHidesRecommended } from '../../lib/aiList/music';
+import { MIN_SHELF_ITEMS } from '../../lib/musicRecall';
 import { getString } from '../../lib/i18n/index';
 import { episodeAsSong } from '../../lib/searchResults';
 import { useGridStyle } from '../../lib/useGridColumns';
@@ -72,6 +75,17 @@ export default function MusicHome() {
     items.filter((it) =>
       it.type === 'song' ? !isHidden(it) : it.type === 'artist' ? !isArtistHidden(it) : true,
     );
+  // Recommendations also drop AI music; your library shelves keep everything, as on Android.
+  const ai = useAiListMatcher();
+  const recommendedSections = <S extends { items: YTItem[]; route?: string | null }>(sections: S[]): S[] =>
+    sections.flatMap((section) => {
+      const items = visible(section.items);
+      if (!ai.isMusicActive) return [{ ...section, items }];
+      const kept = items.filter((item) => !aiHidesRecommended(ai, item));
+      // A Daily Mix the filter thins out below a shelf's minimum goes, rather than showing two songs.
+      const thinMix = section.route?.startsWith('/music/mix/') && kept.length < items.length && kept.length < MIN_SHELF_ITEMS;
+      return thinMix ? [] : [{ ...section, items: kept }];
+    });
 
   const chips = (data?.chips ?? []).filter((chip) => !!chip.browseId);
   const categories = [getString('music_mood_all'), ...chips.map((chip) => chip.title).filter(Boolean)];
@@ -204,7 +218,7 @@ export default function MusicHome() {
     }
 
     if (activeChip) {
-      const items = visible(chipFilter.items);
+      const items = visible(chipFilter.items).filter((item) => !aiHidesRecommended(ai, item));
       const songContext = songsOf(items);
       if (chipFilter.error && items.length === 0) {
         return <div className="flex flex-col items-center gap-3 py-20 text-center">
@@ -234,11 +248,15 @@ export default function MusicHome() {
       );
     }
 
-    const quickPicks = personalization.quickPicks.filter((track) => !isHidden(track));
+    const quickPicks = personalization.quickPicks.filter(
+      (track) => !isHidden(track) && !aiHidesRecommended(ai, { ...track, type: 'song' }),
+    );
     const feed = composeMusicFeed(
-      [...libraryShelves, ...personalization.sections, ...discoverySections, ...moreSections, ...lastFm.sections]
-        .map((section) => ({ ...section, items: visible(section.items) })),
-      [...(data?.sections ?? []), ...charts].map((section) => ({ ...section, items: visible(section.items) })),
+      [
+        ...libraryShelves.map((section) => ({ ...section, items: visible(section.items) })),
+        ...recommendedSections([...personalization.sections, ...discoverySections, ...moreSections, ...lastFm.sections]),
+      ],
+      recommendedSections([...(data?.sections ?? []), ...charts]),
       personalization.maturity, quickPicks, { hasMoods: moodItems.length > 0 },
     ).filter((entry) => isShelfShown(entry, hiddenShelves));
 

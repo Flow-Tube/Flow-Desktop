@@ -8,11 +8,13 @@ import {
   pickTopResult,
   videoSections,
   withWatchState,
+  withoutAiMusic,
   withoutHidden,
   withoutShorts,
   type CombinedSearchResults,
 } from './searchResults';
-import type { ArtistItem } from '../types/music';
+import type { AlbumItem, ArtistItem, PlaylistItem, SongItem } from '../types/music';
+import { AI_LIST_MATCHER_NONE, createAiListMatcher, toAiLists } from './aiList/matcher';
 import type { SearchChannel, VideoSummary } from '../types/video';
 
 const channel = (channelId: string): SearchChannel => ({ channelId, name: channelId, isVerified: false });
@@ -165,5 +167,50 @@ describe('pairCreator', () => {
     const mixed = { title: 'People also watched', videos: [{ ...upload, channelId: 'UC2' }] };
     const input = { ...emptyResults(), channels: [channel], shelves: [mixed] };
     expect(pairCreator(input)).toEqual({ creator: null, results: input });
+  });
+});
+
+describe('withoutAiMusic', () => {
+  const AI = 'UCaaaaaaaaaaaaaaaaaaaaaa';
+  const REAL = 'UCrrrrrrrrrrrrrrrrrrrrrr';
+  const ai = createAiListMatcher(
+    toAiLists({ handles: [], ids: [] }, { handles: [], ids: [] }, { handles: [], ids: [AI] }),
+    { blockEnabled: false, warnEnabled: false, musicEnabled: true, exemptIds: new Set(), exemptHandles: new Set() },
+    null,
+  );
+  const song = (id: string, ...artistIds: string[]) =>
+    ({ id, title: id, artists: artistIds.map((a) => ({ id: a, name: a })) }) as SongItem;
+  const album = (browseId: string, artistId: string) =>
+    ({ browseId, title: browseId, artists: [{ id: artistId, name: artistId }] }) as AlbumItem;
+  const playlist = (id: string, authorId: string) => ({ id, title: id, author: { id: authorId, name: authorId } }) as PlaylistItem;
+  const artist = { id: AI, title: 'AI band' } as ArtistItem;
+
+  it('drops songs, collaborations, albums and playlists by a listed artist and keeps the artist card', () => {
+    const results: CombinedSearchResults = {
+      ...emptyResults(),
+      topResult: { kind: 'artist', item: artist },
+      songs: [song('a', AI), song('b', REAL, AI), song('c', REAL)],
+      albums: [album('A1', AI), album('A2', REAL)],
+      playlists: [playlist('P1', AI), playlist('P2', REAL)],
+      artists: [artist],
+    };
+    const kept = withoutAiMusic(results, ai);
+    expect(kept.songs.map((s) => s.id)).toEqual(['c']);
+    expect(kept.albums.map((a) => a.browseId)).toEqual(['A2']);
+    expect(kept.playlists.map((p) => p.id)).toEqual(['P2']);
+    expect(kept.artists).toEqual([artist]);
+    expect(kept.topResult?.kind).toBe('artist');
+  });
+
+  it('drops a listed song or album top result', () => {
+    const top = withoutAiMusic({ ...emptyResults(), topResult: { kind: 'song', item: song('a', AI) } }, ai);
+    expect(top.topResult).toBeNull();
+  });
+
+  it('returns the same object when nothing goes or the filter is off', () => {
+    const clean: CombinedSearchResults = { ...emptyResults(), songs: [song('c', REAL)] };
+    expect(withoutAiMusic(clean, ai)).toBe(clean);
+    const listed: CombinedSearchResults = { ...emptyResults(), songs: [song('a', AI)] };
+    expect(withoutAiMusic(listed, AI_LIST_MATCHER_NONE)).toBe(listed);
   });
 });

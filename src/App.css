@@ -796,16 +796,6 @@
   width: auto;
   inset-inline-end: 0;
 }
-.m3-slider[data-bar-style="wavy"] .m3-slider__track--active {
-  height: 0.75rem;
-  border-radius: 0;
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='12'%3E%3Cpath d='M0 6 Q6 0 12 6 T24 6' fill='none' stroke='black' stroke-width='3'/%3E%3C/svg%3E") repeat-x center / 24px 12px;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='12'%3E%3Cpath d='M0 6 Q6 0 12 6 T24 6' fill='none' stroke='black' stroke-width='3'/%3E%3C/svg%3E") repeat-x center / 24px 12px;
-}
-.m3-slider[data-bar-style="wavy"] .m3-slider__track--inactive {
-  height: 0.1875rem;
-}
-
 /* Marks the end of travel; pointless once the handle has reached it. */
 .m3-slider__stop {
   position: absolute;

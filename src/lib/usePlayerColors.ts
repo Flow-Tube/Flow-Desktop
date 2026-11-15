@@ -6,6 +6,7 @@ import {
   isPlayerBackgroundStyle,
   playerColors,
   playerCssVariables,
+  dockControlVariables,
   playerTurnsLight,
   toggleColorsOn,
   type PlainControlColors,
@@ -65,5 +66,16 @@ export function useDockToggleColors(swatches: ArtworkSwatches | null): CSSProper
   return useMemo(() => {
     const surface = parseHex(app.surfaceContainerHigh) ?? { r: 36, g: 36, b: 36 };
     return toggleColorsOn(surface, swatches, app, artworkControls, plainControls);
+  }, [app, swatches, artworkControls, plainControls]);
+}
+
+/** The mini player's control colours: the full player's rule, on the bar's surface. */
+export function useDockControlColors(swatches: ArtworkSwatches | null): CSSProperties {
+  const { theme, variant } = useTheme();
+  const { artworkControls, plainControls } = usePlayerColorPrefs();
+  const app = theme.variants[variant];
+  return useMemo(() => {
+    const surface = parseHex(app.surfaceContainerHigh) ?? parseHex(app.background) ?? { r: 36, g: 36, b: 36 };
+    return dockControlVariables(surface, swatches, app, artworkControls, plainControls) as CSSProperties;
   }, [app, swatches, artworkControls, plainControls]);
 }

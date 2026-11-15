@@ -5,6 +5,7 @@ import { MusicArtwork } from "../MusicArtwork";
 import { MusicCardMenu } from "../MusicCardMenu";
 import { PlayingWave } from "../PlayingWave";
 import { CoverRing } from "./CoverRing";
+import { MiniLyricsLine } from "./MiniLyricsLine";
 import type { DockModel } from "./dockModel";
 
 /**
@@ -13,8 +14,12 @@ import type { DockModel } from "./dockModel";
  */
 export function DockTrackInfo({ model, round }: { model: DockModel; round: boolean }) {
   const openOverlay = useMusicPlayerStore((s) => s.openOverlay);
-  const { shown, away, playing, busy, menu, menuActions } = model;
+  const { shown, away, playing, busy, menu, menuActions, look } = model;
   const shape = round ? "rounded-full" : "rounded-xl";
+  // The Pill's own options; Classic keeps its fixed look.
+  const ring = round && !away && look.coverRing;
+  const coverPlays = round && !away && look.coverTap === "play_pause";
+  const sung = round && !away && look.sungLine && model.track;
   return (
     <>
       <button
@@ -23,9 +28,19 @@ export function DockTrackInfo({ model, round }: { model: DockModel; round: boole
         onClick={() => openOverlay("full")}
         onContextMenu={menu.openMenuFromContext}
         aria-label={getString("music_expand")}
-        className="group/art flex min-w-0 items-center gap-3 rounded-md text-start outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
+        className="group/art flex min-w-0 flex-1 items-center gap-3 rounded-md text-start outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
       >
-        <div className={`relative shrink-0 ${round ? "h-12 w-12 p-1" : "h-12 w-12"}`}>
+        <div
+          className={`relative shrink-0 ${round ? "h-12 w-12 p-1" : "h-12 w-12"}`}
+          onClick={
+            coverPlays
+              ? (event) => {
+                  event.stopPropagation();
+                  useMusicPlayerStore.getState().togglePlay();
+                }
+              : undefined
+          }
+        >
           <MusicArtwork
             src={shown.thumbnail}
             alt={shown.title}
@@ -37,9 +52,9 @@ export function DockTrackInfo({ model, round }: { model: DockModel; round: boole
               <PlayingWave className={round ? "h-3.5" : "h-4"} />
             </span>
           )}
-          {round && !away && <CoverRing />}
+          {ring && <CoverRing />}
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div dir="auto" className="line-clamp-1 text-[15px] font-semibold tracking-tight text-chrome-neutral-100">
             {shown.title}
           </div>
@@ -48,6 +63,8 @@ export function DockTrackInfo({ model, round }: { model: DockModel; round: boole
               <DeviceKindIcon kind={away.kind} className="h-3.5 w-3.5 shrink-0" />
               <span className="line-clamp-1">{getString("play_on_on_device", away.name)}</span>
             </div>
+          ) : sung ? (
+            <MiniLyricsLine track={sung} artist={shown.by} />
           ) : (
             <div className="mt-0.5 line-clamp-1 text-[13px] font-medium text-chrome-neutral-400">{shown.by}</div>
           )}

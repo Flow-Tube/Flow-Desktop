@@ -22,6 +22,7 @@ import {
 
 import { getString } from "../../../lib/i18n/index";
 import { isLocalMediaId } from "../../../lib/localMediaId";
+import { upcomingIndex } from "../../../lib/musicQueueOrder";
 import { miniBarButtonLabel, type MiniBarButton } from "../../../lib/music/miniPlayerLook";
 import { toggleSongLikeWithToast } from "../../../lib/songLikeToast";
 import { useAlbumLibraryStore } from "../../../store/useAlbumLibraryStore";
@@ -85,8 +86,9 @@ export function MiniBarButtonView({ button, ctx }: { button: MiniBarButton; ctx:
   const repeatMode = useMusicPlayerStore((s) => s.repeatMode);
   const openAddToAlbum = useAlbumLibraryStore((s) => s.openAddToAlbum);
   const label = miniBarButtonLabel(button);
-  const plain = (icon: React.ReactNode, onClick: () => void, ariaLabel = label) => (
-    <HapticButton onClick={onClick} aria-label={ariaLabel} className={GHOST_IDLE}>
+  const nextTitle = useMusicPlayerStore((s) => (button === "next" ? (s.queue[upcomingIndex(s)]?.title ?? null) : null));
+  const plain = (icon: React.ReactNode, onClick: () => void, ariaLabel = label, title?: string) => (
+    <HapticButton onClick={onClick} aria-label={ariaLabel} title={title} className={GHOST_IDLE}>
       {icon}
     </HapticButton>
   );
@@ -111,7 +113,12 @@ export function MiniBarButtonView({ button, ctx }: { button: MiniBarButton; ctx:
     case "previous":
       return plain(<SkipBack className="h-5 w-5" fill="currentColor" />, () => store().previous(), getString("music_previous"));
     case "next":
-      return plain(<SkipForward className="h-5 w-5" fill="currentColor" />, () => store().next(), getString("music_next"));
+      return plain(
+        <SkipForward className="h-5 w-5" fill="currentColor" />,
+        () => store().next(),
+        getString("music_next"),
+        nextTitle ? `${getString("music_up_next")}: ${nextTitle}` : undefined,
+      );
     case "like":
       return ctx.track && !isLocalMediaId(ctx.track.videoId ?? ctx.track.id) ? <LikeButton track={ctx.track} /> : null;
     case "add_to_playlist":

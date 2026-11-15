@@ -153,6 +153,12 @@ MUSIC
 - The music mini player is now a compact pill with a round cover and the song's progress around it, as on Android. Mini player style in Settings > Music switches back to the Classic wide bar.
 - Mini player background paints the bar Tinted (the new default), Vivid, App theme, Cover colors, Black or Outlined.
 - Mini player buttons picks up to six buttons for the pill and their order, from Previous, Play and pause, Next, Like, Add to playlist, Shuffle, Repeat, Queue, Lyrics, Sleep timer, Back and Forward 10 seconds, Volume, Equalizer, Play on and Close.
+- Previous and next now sit flat against play/pause as one split button in the music player, under full-screen lyrics and on the Play on card, as on Android. Pressing one widens it. Split buttons in Settings > Music > Now playing switches back to the round buttons.
+- The pill mini player has more options in Settings > Music: its width, the ring around the cover, the song's progress on the bar itself (Fill, Edge, Line or Squiggly), the elapsed or remaining time, the line being sung in place of the artist with your lyrics animation, and whether clicking the cover plays and pauses. Compact holds up to 5 buttons, Regular 8 and Wide 10.
+- In the pill, previous, play/pause and next chosen side by side form a small split button that presses like the full player's and takes the cover's colours when Artwork colors on controls is on. Next names the song it plays on hover, and the Line and Squiggly can be dragged to seek.
+- The Wavy seek bar is now Android's Squiggly: a wave that moves while music plays and flattens when it pauses, with a round thumb that grows while dragged.
+- The mini player and the full music player are now one card, as on Android. Dragging the mini player up grows it wider and taller into the player, with the bar stretching across its top until the player takes over, and dragging the open player down, or swiping down with two fingers on its cover or background, shrinks it back. It opens with a small stretch and lands with a small bounce.
+- Drag the mini player down past half its height, or flick it down, to close it. Swipe left and Swipe right in Settings > Music can play the next or previous song or close it with a sideways drag or two-finger swipe. Both are off at first on this computer.
 
 PLAYER
 - Live chat and chat replay beside a video can be closed. Show chat brings it back, as does the chat button on the player, which now works outside fullscreen too.

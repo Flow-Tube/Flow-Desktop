@@ -202,6 +202,35 @@ export function toggleColorsOn(
 }
 
 /**
+ * The control roles for the mini player's buttons, worked out on the bar's own surface the way the
+ * full player works out its own: the cover's colour when artwork colours are on, otherwise the
+ * plain choice. Android's mini player draws its controls in the same `controlScheme`.
+ */
+export function dockControlVariables(
+  surface: Rgb,
+  swatches: ArtworkSwatches | null,
+  app: ThemeColors,
+  artworkControls: boolean,
+  plainControls: PlainControlColors,
+): Record<string, string> {
+  const dark = luminance(surface) < 0.5;
+  const ink = dark ? WHITE : INK_DARK;
+  const roles: Roles = artworkControls
+    ? dark
+      ? { ...darkRoles(surface, swatches?.accent ?? parseHex(app.primary) ?? NEUTRAL_ACCENT), surface }
+      : { ...lightRoles(surface, swatches?.accent ?? parseHex(app.primary) ?? NEUTRAL_ACCENT), surface }
+    : plainControls === "app_theme"
+      ? appThemeControls({ surface, ink, primary: ink, onPrimary: ink, primaryContainer: ink, onPrimaryContainer: ink }, app)
+      : { surface, ink, primary: ink, onPrimary: dark ? BLACK : WHITE, primaryContainer: mix(surface, ink, 0.16), onPrimaryContainer: ink };
+  return {
+    "--player-primary-container": css(roles.primaryContainer),
+    "--player-on-primary-container": css(roles.onPrimaryContainer),
+    "--color-primary": css(roles.primary),
+    "--color-on-primary": css(roles.onPrimary),
+  };
+}
+
+/**
  * The surface variables for a panel inside the player drawn in the cover's colour: its surface and
  * the containers on it are the player's surface lifted towards its ink, so rows, tabs and hovers
  * keep their steps on the cover's colour instead of the theme's greys.

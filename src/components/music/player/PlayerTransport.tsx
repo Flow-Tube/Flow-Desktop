@@ -1,8 +1,11 @@
 import { Loader2, Pause, Play, Repeat, Repeat1, Shuffle, SkipBack, SkipForward } from "lucide-react";
 
 import { getString } from "../../../lib/i18n/index";
+import { useBoolPref } from "../../../lib/usePreference";
+import { SETTINGS } from "../../../lib/settings/schema";
 import { useMusicPlayerStore } from "../../../store/useMusicPlayerStore";
 import { HapticButton } from "../HapticButton";
+import { SplitTransport } from "./SplitTransport";
 import { upcomingIndex } from "../../../lib/musicQueueOrder";
 
 const SIDE = "grid h-11 w-11 place-items-center rounded-full transition-colors duration-200 ease-out";
@@ -16,6 +19,11 @@ const SIZES = {
   sm: { skip: "h-9 w-9", skipIcon: "h-5 w-5", play: "h-11 w-11", playIcon: "h-6 w-6", gap: "gap-4" },
 } as const;
 
+/** Whether the transport draws as Android's split button; on by default. */
+export function useSplitTransport(): boolean {
+  return useBoolPref(SETTINGS.MUSIC_SPLIT_TRANSPORT)[0];
+}
+
 interface TransportButtonsProps {
   size: keyof typeof SIZES;
   playing: boolean;
@@ -25,10 +33,14 @@ interface TransportButtonsProps {
   onNext: () => void;
   /** What Next plays, named on hover. */
   nextTitle?: string | null;
+  /** Previous and Next as the sides of a split button around Play/pause. */
+  split?: boolean;
 }
 
 /** Previous, play/pause and next, for whichever player they drive. */
-export function TransportButtons({ size, playing, loading, onPrevious, onTogglePlay, onNext, nextTitle }: TransportButtonsProps) {
+export function TransportButtons(props: TransportButtonsProps) {
+  if (props.split) return <SplitTransport {...props} />;
+  const { size, playing, loading, onPrevious, onTogglePlay, onNext, nextTitle } = props;
   const sizes = SIZES[size];
   const skipClass = `grid ${sizes.skip} place-items-center rounded-full text-chrome-neutral-100 transition-transform duration-200 ease-out hover:scale-110`;
   // Media controls run left to right in every language, as the timeline above them does.
@@ -81,8 +93,10 @@ export function PlayerTransport({ size = "lg", withModes = true }: PlayerTranspo
   const cycleRepeat = useMusicPlayerStore((s) => s.cycleRepeat);
   // Hovering Next names the song it will play, in place of Android's press-and-hold preview.
   const nextTitle = useMusicPlayerStore((s) => s.queue[upcomingIndex(s)]?.title ?? null);
+  const split = useSplitTransport();
   const center = (
     <TransportButtons
+      split={split}
       size={size}
       playing={isPlaying}
       loading={loading}
@@ -96,7 +110,7 @@ export function PlayerTransport({ size = "lg", withModes = true }: PlayerTranspo
   if (!withModes) return center;
 
   return (
-    <div dir="ltr" className="flex w-full items-center justify-between">
+    <div dir="ltr" className={`flex w-full items-center ${split ? "justify-center gap-4" : "justify-between"}`}>
       <HapticButton
         onClick={toggleShuffle}
         aria-label={getString("music_shuffle")}

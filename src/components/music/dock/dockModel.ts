@@ -1,7 +1,7 @@
 import type { CSSProperties, Ref } from "react";
 
 import type { ControlledDevice } from "../../../lib/live/usePlayOn";
-import type { MiniBarButton } from "../../../lib/music/miniPlayerLook";
+import type { MiniBarButton, MiniPlayerLook } from "../../../lib/music/miniPlayerLook";
 import type { SongItem } from "../../../types/music";
 import type { MusicMenuAction, useMusicContextMenu } from "../MusicCardMenu";
 
@@ -22,4 +22,5 @@ export interface DockModel {
   menu: ReturnType<typeof useMusicContextMenu>;
   menuActions: MusicMenuAction[];
   buttons: MiniBarButton[];
+  look: MiniPlayerLook;
 }

@@ -1,4 +1,5 @@
 import type { LyricsEntry } from "./types";
+import { withoutLineMarkers } from "./lyricsUtils";
 import { evictCachedLyrics, getCachedLyrics, putCachedLyrics } from "../api/lyrics";
 import { profileStorage } from "../storage/profileStorage";
 
@@ -43,10 +44,10 @@ function parseCached(raw: string | null): CachedLyrics | null {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as unknown;
-    if (Array.isArray(parsed)) return { entries: parsed as LyricsEntry[], provider: null };
+    if (Array.isArray(parsed)) return { entries: withoutLineMarkers(parsed as LyricsEntry[]), provider: null };
     if (parsed && typeof parsed === "object" && Array.isArray((parsed as CachedLyrics).entries)) {
       const { entries, provider } = parsed as CachedLyrics;
-      return { entries, provider: typeof provider === "string" ? provider : null };
+      return { entries: withoutLineMarkers(entries), provider: typeof provider === "string" ? provider : null };
     }
     return null;
   } catch {

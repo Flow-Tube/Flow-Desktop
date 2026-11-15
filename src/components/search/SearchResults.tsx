@@ -25,10 +25,11 @@ import type {
   UseCombinedSearchReturn,
 } from '../../lib/useCombinedSearch';
 import type { AlbumItem, ArtistItem, EpisodeItem, PlaylistItem, PodcastItem, SongItem } from '../../types/music';
-import { episodeAsSong, pairCreator, withWatchState, withoutHidden, withoutShorts } from '../../lib/searchResults';
+import { episodeAsSong, pairCreator, withWatchState, withoutAiMusic, withoutHidden, withoutShorts } from '../../lib/searchResults';
 import { useShortsEnabled } from '../../lib/useShortsContent';
 import { useWatchedVideoIds } from '../../lib/useWatchedFilter';
 import { useFeedActionsStore } from '../../store/useFeedActionsStore';
+import { useAiHidesChannel, useAiListMatcher } from '../../lib/aiList/useAiList';
 import type { PlaylistSummary, SearchChannel, SearchShelf, VideoSummary } from '../../types/video';
 import { useOriginalTitle } from '../../lib/useOriginalTitle';
 import { joinIsolated } from '../../lib/direction';
@@ -76,11 +77,16 @@ export function SearchResults({ search, onPlayVideo, onAddToQueue }: SearchResul
   const watchFilterApplies = search.filterType === 'videos' || search.filterType === 'shorts' || search.filterType === 'live';
   const effectiveWatchState = watchFilterApplies ? watchState : 'any';
   const watchedIds = useWatchedVideoIds(effectiveWatchState !== 'any');
+  const hidesAsAi = useAiHidesChannel();
+  const ai = useAiListMatcher();
   const { creator, results: r } = useMemo(() => {
-    const visible = withoutHidden(search.results, { videoIds: dismissedVideoIds, channelIds: blockedChannelIds });
+    const visible = withoutAiMusic(
+      withoutHidden(search.results, { videoIds: dismissedVideoIds, channelIds: blockedChannelIds, hidesAsAi }),
+      ai,
+    );
     const allowed = shortsEnabled ? visible : withoutShorts(visible);
     return pairCreator(withWatchState(allowed, effectiveWatchState, watchedIds));
-  }, [search.results, dismissedVideoIds, blockedChannelIds, shortsEnabled, effectiveWatchState, watchedIds]);
+  }, [search.results, dismissedVideoIds, blockedChannelIds, hidesAsAi, ai, shortsEnabled, effectiveWatchState, watchedIds]);
 
   const {
     filterType,

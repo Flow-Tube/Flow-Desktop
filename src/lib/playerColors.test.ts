@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { contrastRatio, parseHex, tone } from "./color/tone";
-import { playerColors, playerCssVariables, playerTurnsLight, toggleColorsOn } from "./playerColors";
+import { dockControlVariables, playerColors, playerCssVariables, playerTurnsLight, toggleColorsOn } from "./playerColors";
 import { BUILTIN_THEMES } from "./themes";
 
 const app = BUILTIN_THEMES[0]!.variants.dark;
@@ -60,5 +60,21 @@ describe("playerColors", () => {
     const { color } = toggleColorsOn(surface, pale, lightApp, true, "monochrome");
     const [r, g, b] = color.match(/\d+/g)!.map(Number);
     expect(contrastRatio({ r: r!, g: g!, b: b! }, surface)).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+describe("dockControlVariables", () => {
+  const surface = { r: 36, g: 36, b: 36 };
+
+  it("takes the cover's colour with artwork colours on, readable on the bar", () => {
+    const vars = dockControlVariables(surface, dim, app, true, "monochrome");
+    const [r, g, b] = vars["--color-primary"]!.match(/\d+/g)!.map(Number);
+    const primary = { r: r!, g: g!, b: b! };
+    expect(contrastRatio(primary, surface)).toBeGreaterThanOrEqual(3);
+    expect(vars["--color-primary"]).not.toBe("rgb(255 255 255)");
+  });
+
+  it("goes white on a dark bar with plain monochrome controls", () => {
+    expect(dockControlVariables(surface, dim, app, false, "monochrome")["--color-primary"]).toBe("rgb(255 255 255)");
   });
 });

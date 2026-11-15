@@ -17,7 +17,7 @@ use serde_json::{Value, json};
 use tokio::sync::Semaphore;
 
 use crate::api::innertube::InnertubeClient;
-use crate::api::innertube::core::clients;
+use crate::api::innertube::core::{clients, locale};
 use crate::api::innertube::json::continuation::continuation_item_lists;
 use crate::errors::{AppError, AppResult};
 use crate::models::channel::{ChannelAbout, ChannelDetails, ChannelPage, ChannelTabResponse};
@@ -27,10 +27,13 @@ pub use header::parse_header;
 
 /// The params of a channel's search tab.
 const SEARCH_PARAMS: &str = "EgZzZWFyY2jyBgQKAloA";
+/// The language a channel search is asked again in when the user's finds nothing.
+const SEARCH_FALLBACK_LANGUAGE: &str = "en";
 /// The Videos and Shorts tabs' params as the site sends them, for a feed that
 /// needs one tab of many channels without browsing each landing page first.
 pub const VIDEOS_TAB_PARAMS: &str = "EgZ2aWRlb3PyBgQKAjoA";
 pub const SHORTS_TAB_PARAMS: &str = "EgZzaG9ydHPyBgUKA5oBAA==";
+pub const POSTS_TAB_PARAMS: &str = "EgVwb3N0c_IGBAoCSgA=";
 const DETAILS_TTL: Duration = Duration::from_mins(30);
 const DETAILS_CAPACITY: usize = 512;
 /// Avatar lookups browse a whole landing page each; a feed must not open dozens at once.
@@ -173,7 +176,7 @@ impl InnertubeClient {
         let body = if let Some(token) = page_token {
             json!({ "continuation": token })
         } else if let Some(query) = query {
-            json!({ "browseId": channel_id, "params": SEARCH_PARAMS, "query": query })
+            return self.search_channel(channel_id, &query).await;
         } else if let Some(params) = params {
             json!({ "browseId": channel_id, "params": params })
         } else {
@@ -181,6 +184,26 @@ impl InnertubeClient {
         };
         let page = self.channel_browse(body).await?;
         Ok(parse_tab(&page, channel_id))
+    }
+
+    /// A search of the channel, asked again in English when the content
+    /// language finds nothing.
+    async fn search_channel(&self, channel_id: &str, query: &str) -> AppResult<ChannelTabResponse> {
+        let body = || json!({ "browseId": channel_id, "params": SEARCH_PARAMS, "query": query });
+        let found = parse_tab(&self.channel_browse(body()).await?, channel_id);
+        let language = locale::content_language();
+        if !should_search_in_english(found.items.len(), &language) {
+            return Ok(found);
+        }
+        tracing::debug!(channel_id, hl = %language, "channel search found nothing; asking in English");
+        let visitor = self.fetch_visitor_data().await;
+        let mut english = body();
+        english["context"] = clients::WEB.context_in(
+            visitor.as_deref(),
+            Some(&locale::content_country()),
+            SEARCH_FALLBACK_LANGUAGE,
+        );
+        Ok(parse_tab(&self.channel_browse(english).await?, channel_id))
     }
 
     /// The About panel behind [`ChannelDetails::about_token`].
@@ -191,6 +214,18 @@ impl InnertubeClient {
         parse_about(&page)
             .ok_or_else(|| AppError::ContentNotAvailable("This channel has no About panel".into()))
     }
+}
+
+/// The site answers some channel searches with nothing in one language and
+/// finds them in English (Flow for Android #2057: "xlov" on a channel has no
+/// videos with `hl=es` and 28 with `hl=en`, on the website too).
+fn should_search_in_english(found: usize, language: &str) -> bool {
+    found == 0
+        && !language
+            .split('-')
+            .next()
+            .unwrap_or_default()
+            .eq_ignore_ascii_case(SEARCH_FALLBACK_LANGUAGE)
 }
 
 fn valid_id(channel_id: &str) -> AppResult<&str> {
@@ -205,6 +240,19 @@ fn valid_id(channel_id: &str) -> AppResult<&str> {
 mod tests {
     use super::*;
     use crate::models::channel::ChannelItem;
+
+    #[test]
+    fn an_empty_search_in_another_language_is_asked_again_in_english() {
+        assert!(should_search_in_english(0, "es"));
+        assert!(should_search_in_english(0, "pt-BR"));
+    }
+
+    #[test]
+    fn a_search_that_found_items_or_was_in_english_is_not_repeated() {
+        assert!(!should_search_in_english(3, "es"));
+        assert!(!should_search_in_english(0, "en"));
+        assert!(!should_search_in_english(0, "en-GB"));
+    }
 
     #[test]
     fn later_search_pages_unwrap_each_item_section() {

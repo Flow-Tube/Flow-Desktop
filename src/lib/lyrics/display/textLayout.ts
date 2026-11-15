@@ -64,6 +64,19 @@ export function segmenter(granularity: "word" | "grapheme"): SegmenterLike | nul
   return (graphemeSegmenter ??= new Ctor(undefined, { granularity }));
 }
 
+/** Where each user-perceived character of `text` starts; code points where segmenting is missing. */
+export function graphemeStarts(text: string): number[] {
+  const graphemes = segmenter("grapheme");
+  if (graphemes) return Array.from(graphemes.segment(text), (g) => g.index);
+  const starts: number[] = [];
+  let at = 0;
+  for (const character of text) {
+    starts.push(at);
+    at += character.length;
+  }
+  return starts;
+}
+
 /** Pieces a line may break between: words with their trailing punctuation, spaces, CJK characters. */
 function pieces(text: string): Piece[] {
   const result: Piece[] = [];

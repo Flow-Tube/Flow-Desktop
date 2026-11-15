@@ -8,6 +8,8 @@ export interface VideoSummary {
   publishedText?: string | null;
   /** Epoch ms a stored track's relative `publishedText` is pinned to. */
   publishedAt?: number | null;
+  /** Epoch ms the backend read `publishedText` as when it fetched the card, in any language. */
+  publishedAtMs?: number | null;
   /** Epoch ms a stored track was added to its playlist; missing for tracks saved before it was kept. */
   addedAtInPlaylist?: number | null;
   viewCountText?: string | null;
@@ -30,6 +32,8 @@ export interface VideoSummary {
   collaborators?: Collaborator[];
   /** The description excerpt search results show. */
   snippet?: string | null;
+  /** The channel's `/@handle` path when the card links to it, which the AI channel list matches. */
+  channelHandle?: string | null;
 }
 
 /** One channel of a collaboration. */
@@ -50,6 +54,7 @@ export interface RelatedContentItem {
   thumbnailUrl?: string | null;
   durationSeconds?: number | null;
   publishedText?: string | null;
+  publishedAtMs?: number | null;
   viewCountText?: string | null;
   videoId?: string | null;
   playlistId?: string | null;
@@ -63,6 +68,8 @@ export interface RelatedContentItem {
   isShort?: boolean;
   badges?: string[];
   collaborators?: Collaborator[];
+  /** The channel's `/@handle` path when the card links to it. */
+  channelHandle?: string | null;
 }
 
 export interface VideoChapter {
@@ -188,6 +195,8 @@ export interface StreamInfo {
   sabr?: SabrStreamInfo | null;
   /** Seek-bar preview sheets, one entry per resolution, smallest first. */
   storyboard?: StoryboardLevel[];
+  /** How a 360 video maps onto its sphere; absent for a flat video. */
+  projection?: "equirectangular" | "equirectangular_top_bottom";
   /** How many dB louder than the site's target the video plays. */
   loudnessDb?: number | null;
 }

@@ -40,6 +40,8 @@ export interface ImportReport {
   musicPlaylists: number;
   musicLibrary: number;
   likes: number;
+  /** Ads an earlier import saved as watched, taken out of the history. */
+  adsRemoved: number;
 }
 
 export type ImportFailure = "invalid_format" | "too_large" | "no_content" | "no_entries" | "no_videos" | "no_likes" | "failed";

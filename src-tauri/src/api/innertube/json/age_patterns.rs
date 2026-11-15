@@ -7,13 +7,62 @@
 
 use super::age::AgeUnit;
 
+/// Each unit with the words that name it.
+pub type Units = &'static [(AgeUnit, &'static [&'static str])];
+
 pub struct AgePatterns {
     pub language: &'static str,
     pub separator: &'static str,
-    pub units: &'static [(AgeUnit, &'static [&'static str])],
+    pub units: Units,
     /// Whole phrases that name an amount too, such as Hebrew's dual "two days".
     pub special: &'static [(AgeUnit, &'static str, u64)],
 }
+
+/// The abbreviated units the related list writes ("hace 3 m", "5 дн. назад"),
+/// keyed by base language, from Flow for Android. They only count right after
+/// the text's one number, since a lone letter is also a word.
+pub static ABBREVIATED: &[(&str, Units)] = &[
+    ("de", &[(AgeUnit::Hour, &["std."])]),
+    (
+        "es",
+        &[
+            (AgeUnit::Hour, &["h"]),
+            (AgeUnit::Day, &["d"]),
+            (AgeUnit::Week, &["sem."]),
+            (AgeUnit::Month, &["m"]),
+            (AgeUnit::Year, &["a"]),
+        ],
+    ),
+    (
+        "fr",
+        &[
+            (AgeUnit::Hour, &["h"]),
+            (AgeUnit::Day, &["j"]),
+            (AgeUnit::Week, &["sem."]),
+            (AgeUnit::Month, &["m."]),
+            (AgeUnit::Year, &["a"]),
+        ],
+    ),
+    (
+        "it",
+        &[
+            (AgeUnit::Hour, &["h"]),
+            (AgeUnit::Day, &["g", "gg"]),
+            (AgeUnit::Week, &["sett."]),
+        ],
+    ),
+    ("pt", &[(AgeUnit::Week, &["sem."])]),
+    (
+        "ru",
+        &[
+            (AgeUnit::Hour, &["ч"]),
+            (AgeUnit::Day, &["дн."]),
+            (AgeUnit::Week, &["нед."]),
+            (AgeUnit::Month, &["мес."]),
+            (AgeUnit::Year, &["г.", "л."]),
+        ],
+    ),
+];
 
 pub static PATTERNS: &[AgePatterns] = &[
     AgePatterns {

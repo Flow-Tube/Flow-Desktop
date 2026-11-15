@@ -101,7 +101,7 @@ async fn an_import_fills_the_library() {
             },
         ],
         likes: vec![like("ccccccccccc", NOW - 5, false)],
-        library_song_count: 0,
+        ..Found::default()
     };
     let saved = save_found(&pool, &found, NOW).await.unwrap();
 
@@ -199,6 +199,44 @@ async fn watch_later_keeps_what_the_viewer_saved_and_adds_after_it() {
         .filter_map(|track| track["id"].as_str())
         .collect();
     assert_eq!(ids, ["mine0000000", "aaaaaaaaaaa"]);
+}
+
+#[tokio::test]
+async fn ads_an_earlier_import_saved_are_removed_unless_played_or_watched() {
+    let pool = memory_pool().await;
+    let earlier = Found {
+        watches: ["adonly00000", "adplayed000", "adwatched00"]
+            .into_iter()
+            .map(|id| watch(id, 10, false))
+            .collect(),
+        ..Found::default()
+    };
+    save_found(&pool, &earlier, NOW).await.unwrap();
+    sqlx::query(
+        "UPDATE watch_history SET watch_duration_seconds = 30, total_duration_seconds = 60 \
+         WHERE video_id = 'adplayed000'",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let again = Found {
+        watches: vec![watch("adwatched00", 20, false)],
+        ad_video_ids: ["adonly00000", "adplayed000", "adwatched00"]
+            .into_iter()
+            .map(String::from)
+            .collect(),
+        ..Found::default()
+    };
+    let saved = save_found(&pool, &again, NOW).await.unwrap();
+
+    assert_eq!(saved.report.ads_removed, 1);
+    let mut left: Vec<String> = sqlx::query_scalar("SELECT video_id FROM watch_history")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    left.sort();
+    assert_eq!(left, ["adplayed000", "adwatched00"]);
 }
 
 #[tokio::test]

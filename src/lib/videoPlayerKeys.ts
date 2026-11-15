@@ -24,7 +24,8 @@ export type VideoPlayerKeyAction =
   | { kind: "next-chapter" }
   | { kind: "seek-start" }
   | { kind: "seek-end" }
-  | { kind: "seek-to-fraction"; fraction: number };
+  | { kind: "seek-to-fraction"; fraction: number }
+  | { kind: "look"; key: string };
 
 export const VIDEO_KEY_BINDINGS: readonly KeyBinding<VideoPlayerKeyAction>[] = [
   { keys: [" ", "k"], label: "keyboard_shortcut_play_pause", action: () => ({ kind: "toggle-play" }) },
@@ -50,6 +51,7 @@ export const VIDEO_KEY_BINDINGS: readonly KeyBinding<VideoPlayerKeyAction>[] = [
   { keys: ["]"], label: "keyboard_shortcut_next_chapter", action: () => ({ kind: "next-chapter" }) },
   { keys: ["home"], label: "keyboard_shortcut_seek_start", action: () => ({ kind: "seek-start" }) },
   { keys: ["end"], label: "keyboard_shortcut_seek_end", action: () => ({ kind: "seek-end" }) },
+  { keys: ["w", "a", "s", "d"], label: "keyboard_shortcut_look_around", action: (key) => ({ kind: "look", key }) },
   {
     keys: DIGIT_KEYS,
     label: "keyboard_shortcut_seek_percent",

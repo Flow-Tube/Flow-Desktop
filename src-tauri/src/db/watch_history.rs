@@ -332,6 +332,35 @@ pub async fn delete_watch_record(pool: &SqlitePool, video_id: &str) -> AppResult
     Ok(())
 }
 
+/// Deletes the rows of `video_ids` that were only imported, never played here: no time watched and
+/// no length known. Returns how many went.
+pub async fn delete_unplayed_watch_records(
+    pool: &SqlitePool,
+    video_ids: &[String],
+) -> AppResult<u64> {
+    // Below SQLite's bound-variable limit.
+    const BATCH: usize = 500;
+    let mut removed = 0;
+    for batch in video_ids.chunks(BATCH) {
+        let mut query = QueryBuilder::<Sqlite>::new(
+            "DELETE FROM watch_history WHERE watch_duration_seconds = 0 \
+             AND COALESCE(total_duration_seconds, 0) = 0 AND video_id IN (",
+        );
+        let mut ids = query.separated(", ");
+        for id in batch {
+            ids.push_bind(id);
+        }
+        ids.push_unseparated(")");
+        removed += query
+            .build()
+            .execute(pool)
+            .await
+            .map_err(AppError::from)?
+            .rows_affected();
+    }
+    Ok(removed)
+}
+
 pub async fn clear_watch_history(pool: &SqlitePool) -> AppResult<()> {
     sqlx::query("DELETE FROM watch_history")
         .execute(pool)
@@ -516,6 +545,34 @@ mod shorts_and_years_tests {
                 .unwrap();
         }
         assert_eq!(watch_history_years(&pool).await.unwrap(), vec![2026, 2024]);
+    }
+
+    #[tokio::test]
+    async fn only_rows_never_played_here_are_deleted_as_unplayed() {
+        let pool = pool().await;
+        let row = |id: &str, watched: i64, total: Option<i64>| WatchHistoryRecord {
+            watch_duration_seconds: watched,
+            total_duration_seconds: total,
+            ..record(id, "2026-11-12T10:00:00Z", false)
+        };
+        for record in [
+            row("imported", 0, None),
+            row("opened", 0, Some(30)),
+            row("played", 12, Some(30)),
+            row("kept", 0, None),
+        ] {
+            upsert_watch_record(&pool, &record).await.unwrap();
+        }
+        let ids = ["imported", "opened", "played", "missing"].map(String::from);
+        assert_eq!(delete_unplayed_watch_records(&pool, &ids).await.unwrap(), 1);
+        let mut left: Vec<String> = get_watch_history(&pool, 10, 0)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|row| row.video_id)
+            .collect();
+        left.sort();
+        assert_eq!(left, ["kept", "opened", "played"]);
     }
 
     #[tokio::test]

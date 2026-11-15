@@ -76,6 +76,16 @@ describe("withPublishedAt", () => {
     expect(withPublishedAt(pinned, NOW)).toBe(pinned);
   });
 
+  it("pins text in another language to the time the backend read from it", () => {
+    const spanish = { ...video("hace 3 m"), publishedAtMs: NOW - 90 * DAY };
+    expect(withPublishedAt(spanish, NOW + DAY).publishedAt).toBe(NOW - 90 * DAY);
+  });
+
+  it("keeps a track pinned before the backend sent its time", () => {
+    const pinned = { ...video("1 hour ago", NOW - 2 * DAY), publishedAtMs: NOW - HOUR };
+    expect(withPublishedAt(pinned, NOW)).toBe(pinned);
+  });
+
   it("leaves missing and live text alone", () => {
     expect(withPublishedAt(video(null), NOW).publishedAt).toBeUndefined();
     expect(withPublishedAt(video("LIVE"), NOW).publishedAt).toBeUndefined();

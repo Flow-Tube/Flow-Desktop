@@ -8,7 +8,7 @@ import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 import { usePlayOnStore } from "../../store/usePlayOnStore";
 import { useUiStore } from "../../store/useUiStore";
 import { Button } from "../ui/Button";
-import { GHOST_IDLE } from "../music/GlobalMusicDock";
+import { GHOST_IDLE } from "../music/dock/dockStyles";
 import { DeviceKindIcon } from "./DeviceKindIcon";
 import { RemoteProgress } from "./RemoteProgress";
 

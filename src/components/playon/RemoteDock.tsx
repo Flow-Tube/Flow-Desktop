@@ -3,7 +3,7 @@ import { useControlledDevice, useRemoteActive } from "../../lib/live/usePlayOn";
 import { youtubeThumbnailUrl } from "../../lib/thumbnails";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 import { usePlayOnStore } from "../../store/usePlayOnStore";
-import { GHOST_IDLE } from "../music/GlobalMusicDock";
+import { GHOST_IDLE } from "../music/dock/dockStyles";
 import { TransportButtons } from "../music/player/PlayerTransport";
 import { DeviceKindIcon } from "./DeviceKindIcon";
 import { PlayOnButton } from "./PlayOnButton";

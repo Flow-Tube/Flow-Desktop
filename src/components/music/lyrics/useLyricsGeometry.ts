@@ -26,14 +26,18 @@ export function useLineWords(lines: LyricsEntry[], nextLineTimes: Array<number |
   );
 }
 
-/** Karaoke geometry for a line, built the first time the line comes near the sung one. */
+/**
+ * Karaoke geometry for a line, built the first time the line comes near the sung one. Cadence
+ * (`splitLetters`) also measures each letter of a main line's words, so they can rise one by one.
+ */
 export function useKaraokeGeometry(
   lines: LyricsEntry[],
   layouts: RowLayout[],
   lineWords: WordTimestamp[][],
   presentation: LyricsPresentation,
+  splitLetters: boolean,
 ): (lineIndex: number, listIndex: number) => KaraokeGeometry | null {
-  const cache = useRef(new Map<number, { layout: RowLayout; words: WordTimestamp[]; geometry: KaraokeGeometry }>());
+  const cache = useRef(new Map<number, { layout: RowLayout; words: WordTimestamp[]; letters: boolean; geometry: KaraokeGeometry }>());
   return useCallback(
     (lineIndex: number, listIndex: number) => {
       const layout = layouts[listIndex];
@@ -41,7 +45,8 @@ export function useKaraokeGeometry(
       const line = lines[lineIndex];
       if (!layout || layout.kind !== "line" || !words || !line) return null;
       const cached = cache.current.get(lineIndex);
-      if (cached && cached.layout === layout && cached.words === words) return cached.geometry;
+      const letters = splitLetters && !line.isBackground;
+      if (cached && cached.layout === layout && cached.words === words && cached.letters === letters) return cached.geometry;
       const geometry = buildKaraokeGeometry(
         layout.mainText,
         layout.main,
@@ -50,10 +55,11 @@ export function useKaraokeGeometry(
         words,
         wordCharRanges(layout.mainText, words, !!line.isBackground),
         lyricsMeasurer(),
+        letters,
       );
-      cache.current.set(lineIndex, { layout, words, geometry });
+      cache.current.set(lineIndex, { layout, words, letters, geometry });
       return geometry;
     },
-    [lines, layouts, lineWords, presentation],
+    [lines, layouts, lineWords, presentation, splitLetters],
   );
 }

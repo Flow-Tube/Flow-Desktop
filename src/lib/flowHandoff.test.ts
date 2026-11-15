@@ -17,9 +17,15 @@ describe("flow://open", () => {
     expect(open(`https://www.youtube.com/watch?v=${VIDEO}&list=PLabcdefghij`)).toEqual({ action: "watch", v: VIDEO, list: "PLabcdefghij" });
   });
 
-  it("plays a video alone from a mix or an account's own list", () => {
-    for (const list of ["RDdQw4w9WgXcQ", "RDAMVMdQw4w9WgXcQ", "LL", "WL", "LM"]) {
+  it("plays a video alone from an account's own list", () => {
+    for (const list of ["LL", "WL", "LM"]) {
       expect(open(`https://www.youtube.com/watch?v=${VIDEO}&list=${list}`)).toEqual({ action: "watch", v: VIDEO, list: undefined });
+    }
+  });
+
+  it("plays a video in the Mix its link names", () => {
+    for (const list of ["RDdQw4w9WgXcQ", "RDAMVMdQw4w9WgXcQ"]) {
+      expect(open(`https://www.youtube.com/watch?v=${VIDEO}&list=${list}`)).toEqual({ action: "watch", v: VIDEO, list });
     }
   });
 
@@ -66,11 +72,17 @@ describe("flow://open", () => {
     expect(open("https://www.youtube.com/@flow")).toEqual({ action: "channel", url: "https://www.youtube.com/@flow", music: false });
   });
 
-  it("opens the account's own lists locally, and has no page for a mix", () => {
+  it("opens the account's own lists locally", () => {
     expect(open("https://www.youtube.com/playlist?list=LL")).toEqual({ action: "page", route: "/liked" });
     expect(open("https://www.youtube.com/playlist?list=WL")).toEqual({ action: "page", route: "/watch-later" });
     expect(open("https://music.youtube.com/playlist?list=LM")).toEqual({ action: "page", route: "/liked" });
-    expect(open("https://www.youtube.com/playlist?list=RDdQw4w9WgXcQ")).toBeNull();
+  });
+
+  it("plays a Mix link from the video it grew from, and has no page for one that names none", () => {
+    expect(open("https://www.youtube.com/playlist?list=RDdQw4w9WgXcQ")).toEqual({ action: "watch", v: VIDEO, list: "RDdQw4w9WgXcQ" });
+    expect(open("https://music.youtube.com/playlist?list=RDdQw4w9WgXcQ")).toEqual({ action: "music", v: VIDEO, list: "RDdQw4w9WgXcQ" });
+    expect(open("https://www.youtube.com/playlist?list=RDMMdQw4w9WgXcQ")).toBeNull();
+    expect(open("https://www.youtube.com/playlist?list=RDCLAK5uy_abcdef")).toEqual({ action: "page", route: "/playlist/RDCLAK5uy_abcdef" });
   });
 
   it("reads the same links from nocookie, piped.video and yewtu.be", () => {
@@ -118,8 +130,8 @@ describe("the older verbs", () => {
     expect(parseFlowUrl(`flow://music-download?v=${VIDEO}`)).toEqual({ action: "music-download", v: VIDEO });
   });
 
-  it("skip a mix or an unreadable list on a watch link", () => {
-    expect(parseFlowUrl(`flow://watch?v=${VIDEO}&list=RDdQw4w9WgXcQ`)).toMatchObject({ list: undefined });
+  it("keep a Mix and skip an unreadable list on a watch link", () => {
+    expect(parseFlowUrl(`flow://watch?v=${VIDEO}&list=RDdQw4w9WgXcQ`)).toMatchObject({ list: "RDdQw4w9WgXcQ" });
     expect(parseFlowUrl(`flow://watch?v=${VIDEO}&list=bad!list`)).toMatchObject({ list: undefined });
     expect(parseFlowUrl(`flow://watch?v=${VIDEO}&t=abc`)).toMatchObject({ t: undefined });
     expect(parseFlowUrl("flow://watch?v=bad")).toBeNull();

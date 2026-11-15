@@ -12,6 +12,8 @@ import {
   Sliders,
   SlidersHorizontal,
   SunDim,
+  Move3d,
+  Rotate3d,
 } from "lucide-react";
 import { usePlayerStore, type PlaybackRate } from "../../store/usePlayerStore";
 import type { AudioTrack, CaptionTrack, StreamVariant } from "../../types/video";
@@ -30,6 +32,8 @@ import { videoEqAvailable } from "../../lib/audio/mediaEqEngine";
 import { useEqStore } from "../../store/useEqStore";
 import { videoCodecLabel } from "../../lib/settings/playerRuntime";
 import { getString } from "../../lib/i18n/index";
+import { LOOK_SPEEDS } from "../../lib/spherical/view";
+import { useLookSpeed } from "../../lib/spherical/useLookSpeed";
 import { MOTION_EASE, motionMs } from "../../lib/motion";
 import { PLAYER_MENU_ATTR } from "../../lib/playerMenuDismiss";
 import { VIDEO_FIT_LABELS, VIDEO_FITS } from "../../lib/videoFit";
@@ -44,7 +48,8 @@ export type SettingsPane =
   | "captions-customize"
   | "audio"
   | "sleep"
-  | "resize";
+  | "resize"
+  | "look-speed";
 
 // How deep a pane sits, so going deeper slides in from the right and going back from the left.
 const PANE_DEPTH: Record<SettingsPane, number> = {
@@ -55,6 +60,7 @@ const PANE_DEPTH: Record<SettingsPane, number> = {
   audio: 1,
   sleep: 1,
   resize: 1,
+  "look-speed": 1,
   "captions-translate": 2,
   "captions-customize": 2,
 };
@@ -69,6 +75,7 @@ const PANE_TITLE = {
   audio: "player_menu_audio",
   sleep: "sleep_timer",
   resize: "player_menu_resize",
+  "look-speed": "player_settings_spherical_drag_speed",
 } as const satisfies Record<Exclude<SettingsPane, "root">, string>;
 
 const ROW = "flex min-h-10 w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-start text-sm font-medium transition-colors duration-200 ease-out";
@@ -111,6 +118,8 @@ interface PlayerSettingsMenuProps {
   speedSliderEnabled: boolean;
   playbackRate: PlaybackRate;
   onSelectPlaybackRate: (rate: PlaybackRate) => void;
+  /** The 360 view of the playing video, or null where the player can't show one (the mini player). */
+  spherical?: { shown: boolean; onToggle: (shown: boolean) => void } | null;
 }
 
 export function PlayerSettingsMenu({
@@ -133,7 +142,9 @@ export function PlayerSettingsMenu({
   speedSliderEnabled,
   playbackRate,
   onSelectPlaybackRate,
+  spherical = null,
 }: PlayerSettingsMenuProps) {
+  const [lookSpeed, setLookSpeed] = useLookSpeed();
   const eqActive = useEqActive();
   const eqEditorHosted = useEqStore((s) => s.editorHosted);
   const openEqEditor = useEqStore((s) => s.setEditorOpen);
@@ -316,6 +327,20 @@ export function PlayerSettingsMenu({
                 <SunDim size={18} />,
                 setAmbientGlow,
               )}
+            {spherical && toggleRow(getString("player_settings_spherical_view"), spherical.shown, <Rotate3d size={18} />, spherical.onToggle)}
+            {spherical?.shown &&
+              settingRow(getString("player_settings_spherical_drag_speed"), `${lookSpeed}x`, <Move3d size={18} />, () => onPaneChange("look-speed"))}
+          </div>
+        )}
+
+        {pane === "look-speed" && (
+          <div className={LIST}>
+            {LOOK_SPEEDS.map((speed) => (
+              <button key={speed} type="button" onClick={() => pick(() => setLookSpeed(speed))} className={cx(ROW, "hover:bg-chrome-white/10")}>
+                <span>{`${speed}x`}</span>
+                {check(lookSpeed === speed)}
+              </button>
+            ))}
           </div>
         )}
 

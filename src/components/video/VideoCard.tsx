@@ -23,6 +23,7 @@ import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
 import { SETTINGS } from '../../lib/settings/schema';
 import type { MenuAnchor } from '../ui/AnchoredPortalMenu';
 import { MediaMenu, type MediaMenuAction } from '../ui/MediaMenu';
+import { useAiReportAction } from './useAiReportAction';
 import { shareLink } from '../../lib/clipboard';
 import { youtubeWatchUrl } from '../../lib/youtubeUrl';
 import { getString } from '../../lib/i18n/index';
@@ -476,6 +477,7 @@ function VideoCardComponent({
       .then(() => showToast({ variant: "success", message: getString("mark_as_unwatched_toast") }))
       .catch(feedActionFailed);
 
+  const aiReportActions = useAiReportAction(video);
   const menuActions: MediaMenuAction[] = ownMenuActions ?? [
     {
       id: "play-next",
@@ -626,6 +628,7 @@ function VideoCardComponent({
         onSelect: () => blockChannelAction(video).catch(feedActionFailed),
       }]
       : []),
+    ...aiReportActions,
   ];
 
   const renderMenu = () => {

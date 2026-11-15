@@ -105,9 +105,15 @@ function relativePrefix(text: string): string | null {
   return null;
 }
 
+/** The upload time the backend read from the card's text; it reads every language, this file only English. */
+export function backendPublishedTimestamp(video: VideoSummary): number | null {
+  return video.publishedAtMs && video.publishedAtMs > 0 ? video.publishedAtMs : null;
+}
+
 export function withPublishedAt(video: VideoSummary, now = Date.now()): VideoSummary {
   if (!video.publishedText) return video;
-  const publishedAt = resolveDisplayUploadTimestamp(video.publishedText, video.publishedAt, now);
+  const fromBackend = video.publishedAt ? null : backendPublishedTimestamp(video);
+  const publishedAt = fromBackend ?? resolveDisplayUploadTimestamp(video.publishedText, video.publishedAt, now);
   if (publishedAt === null || publishedAt === video.publishedAt) return video;
   return { ...video, publishedAt };
 }

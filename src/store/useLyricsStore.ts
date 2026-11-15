@@ -46,6 +46,8 @@ interface LyricsStore extends LyricsView {
   /** The offset a downloaded song's `.lrc` file asked for, which goes with its lyrics. */
   fileOffsetMs: number;
   showSyncControls: boolean;
+  /** A dialog from the lyrics menu covers the lyrics, so they hold still under it. */
+  covered: boolean;
   candidates: LyricsCandidate[];
   isBrowsing: boolean;
   /** `onSettled` runs once this song's lookup has ended, unless another took its place. */
@@ -55,6 +57,7 @@ interface LyricsStore extends LyricsView {
   adjustSyncOffset: (deltaMs: number) => void;
   resetSyncOffset: () => void;
   setShowSyncControls: (show: boolean) => void;
+  setCovered: (covered: boolean) => void;
   browseCandidates: () => void;
   cancelBrowse: () => void;
   applyCandidate: (candidate: LyricsCandidate) => void;
@@ -190,6 +193,7 @@ export const useLyricsStore = create<LyricsStore>((set, get) => {
   return {
     ...EMPTY_LYRICS,
     ...SESSION_RESET,
+    covered: false,
     videoId: null,
     request: null,
     load: run,
@@ -220,6 +224,7 @@ export const useLyricsStore = create<LyricsStore>((set, get) => {
       if (videoId) clearSyncOffset(videoId);
     },
     setShowSyncControls: (show) => set({ showSyncControls: show }),
+    setCovered: (covered) => set({ covered }),
     browseCandidates: () => {
       const { request } = get();
       if (!request || isLocalMediaId(request.videoId)) return;

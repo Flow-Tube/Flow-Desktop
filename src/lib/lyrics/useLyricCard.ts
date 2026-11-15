@@ -87,8 +87,13 @@ export function useLyricCardImage(data: LyricCardData | null, look: Omit<LyricCa
   }, [showToast]);
 
   const save = useCallback(async () => {
+    if (!data) return;
     const blob = await pending.current;
-    if (!blob || !data) return;
+    // A card that couldn't be drawn says so instead of saving nothing.
+    if (!blob) {
+      showToast({ variant: "error", message: getString("lyrics_share_save_failed") });
+      return;
+    }
     const name = safeFileName([data.artist, data.title].filter(Boolean).join(" - "), "flow-lyrics");
     try {
       if (await savePngImage(await blobToBase64(blob), `${name}.png`, getString("lyrics_share_save_image"))) {

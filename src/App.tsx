@@ -13,6 +13,7 @@ import { useNotesStore } from "./store/useNotesStore";
 import { useDownloadsLibraryStore } from "./store/useDownloadsLibraryStore";
 import { useDownloadCollectionsLibraryStore } from "./store/useDownloadCollectionsLibraryStore";
 import { useWatchLaterStore } from "./store/useWatchLaterStore";
+import { startAiList } from "./store/useAiListStore";
 import { startWatchProgress } from "./store/useWatchProgressStore";
 import { useSubscriptionStore } from "./store/useSubscriptionStore";
 import { useNotificationStore } from "./store/useNotificationStore";
@@ -70,11 +71,10 @@ import FlowNeuroPersona from "./pages/FlowNeuroPersona";
 import { LayoutGroup } from "framer-motion";
 import { ToastHost } from "./components/layout/ToastHost";
 import { GlobalMusicAudio } from "./components/music/GlobalMusicAudio";
-import { GlobalMusicDock } from "./components/music/GlobalMusicDock";
+import { MusicPlayerSheet } from "./components/music/sheet/MusicPlayerSheet";
 import { PlayingElsewhereBar } from "./components/playon/PlayingElsewhereBar";
 import { RemoteDock } from "./components/playon/RemoteDock";
 import { ConsentDialog } from "./components/playon/ConsentDialog";
-import { MusicOverlay } from "./components/music/MusicOverlay";
 import { MusicOnly } from "./components/music/MusicOnly";
 import { EqualizerDialog } from "./components/music/eq/EqualizerDialog";
 import { ContinueWatchingMini } from "./components/player/ContinueWatchingMini";
@@ -170,6 +170,7 @@ function App() {
     // Every subscribe button reads these, so they load once here rather than once per button.
     void useSubscriptionStore.getState().loadSubscriptions();
     void useNotificationStore.getState().loadChannelPreferences();
+    startAiList();
     if (IS_MAIN_WINDOW) void registerAutoBackup(getString("settings_backup_failed_notice")).catch(() => {});
   }, []);
 
@@ -355,11 +356,10 @@ function App() {
           <GlobalMusicAudio />
           <ContinueWatchingMini />
           <LayoutGroup>
-            <GlobalMusicDock />
+            <MusicPlayerSheet />
             <RemoteDock />
             <PlayingElsewhereBar />
             <ConsentDialog />
-            <MusicOverlay />
           </LayoutGroup>
           <DeepFlowController />
           <DeepLinkController />

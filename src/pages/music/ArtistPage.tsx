@@ -5,6 +5,7 @@ import { AlertTriangle, Check, ChevronRight, ExternalLink, Music2, Play, Plus, S
 import { Button, type ButtonProps } from '../../components/ui/Button';
 import { SoftBackdrop } from '../../components/ui/SoftBackdrop';
 import { AlbumTrackRow } from '../../components/music/AlbumTrackRow';
+import { ArtistAiNotice } from '../../components/music/ArtistAiNotice';
 import { ArtistSkeleton } from '../../components/music/ArtistSkeleton';
 import { MusicItemCard } from '../../components/music/MusicItemCard';
 import { MusicShelf } from '../../components/music/MusicShelf';
@@ -362,6 +363,7 @@ export default function ArtistPage() {
       />
 
       <main className="mx-auto flex max-w-[1600px] flex-col gap-12 px-8 pt-8">
+        <ArtistAiNotice artistId={followId} name={header.title} />
         {topSongs.length > 0 ? (
           <section data-artist-section="popular">
             <SectionTitle

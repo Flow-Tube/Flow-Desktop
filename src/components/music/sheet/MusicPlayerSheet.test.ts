@@ -7,7 +7,7 @@ vi.mock("react-router-dom", () => ({
   useNavigate: () => vi.fn(),
 }));
 
-vi.mock("../../store/useDownloadsLibraryStore", () => ({
+vi.mock("../../../store/useDownloadsLibraryStore", () => ({
   useDownloadsLibraryStore: (selector: (state: unknown) => unknown) =>
     selector({
       load: vi.fn(),
@@ -22,15 +22,17 @@ vi.mock("../../store/useDownloadsLibraryStore", () => ({
 const mockRemoteActive = vi.fn<() => string | null>(() => null);
 const mockControlledDevice = vi.fn<() => unknown>(() => null);
 
-vi.mock("../../lib/live/usePlayOn", () => ({
+vi.mock("../../../lib/live/usePlayOn", () => ({
   useRemoteActive: () => mockRemoteActive(),
   useControlledDevice: () => mockControlledDevice(),
   usePlayOnAvailable: () => false,
 }));
 
-import type { SongItem } from "../../types/music";
-import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
-import { GlobalMusicDock } from "./GlobalMusicDock";
+import type { SongItem } from "../../../types/music";
+import { useMusicPlayerStore } from "../../../store/useMusicPlayerStore";
+import { useAppSettingsStore } from "../../../store/useAppSettingsStore";
+import { SETTINGS } from "../../../lib/settings/schema";
+import { MusicPlayerSheet } from "./MusicPlayerSheet";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -51,7 +53,7 @@ const sampleTrack: SongItem = {
 let host: HTMLDivElement;
 let root: Root;
 
-describe("GlobalMusicDock background click expansion", () => {
+describe("MusicPlayerSheet background click expansion", () => {
   beforeEach(() => {
     host = document.createElement("div");
     document.body.append(host);
@@ -77,7 +79,11 @@ describe("GlobalMusicDock background click expansion", () => {
     });
   });
 
+  const setLook = (values: Record<string, string>) =>
+    useAppSettingsStore.setState((state) => ({ values: { ...state.values, ...values } }));
+
   afterEach(() => {
+    setLook({ [SETTINGS.MUSIC_MINI_PLAYER_STYLE]: "pill", [SETTINGS.MINI_BAR_BUTTONS]: "" });
     act(() => root.unmount());
     host.remove();
     vi.clearAllMocks();
@@ -88,10 +94,10 @@ describe("GlobalMusicDock background click expansion", () => {
     useMusicPlayerStore.setState({ openOverlay });
 
     act(() => {
-      root.render(createElement(GlobalMusicDock));
+      root.render(createElement(MusicPlayerSheet));
     });
 
-    const pill = host.querySelector<HTMLDivElement>(".bg-surface-container-high");
+    const pill = host.querySelector<HTMLDivElement>("[data-music-dock-bar]");
     expect(pill).not.toBeNull();
     expect(pill?.className).toContain("cursor-pointer");
 
@@ -109,7 +115,7 @@ describe("GlobalMusicDock background click expansion", () => {
     useMusicPlayerStore.setState({ openOverlay });
 
     act(() => {
-      root.render(createElement(GlobalMusicDock));
+      root.render(createElement(MusicPlayerSheet));
     });
 
     const expandButton = host.querySelector<HTMLButtonElement>('button[aria-label="Expand"]');
@@ -129,7 +135,7 @@ describe("GlobalMusicDock background click expansion", () => {
     useMusicPlayerStore.setState({ openOverlay, togglePlay });
 
     act(() => {
-      root.render(createElement(GlobalMusicDock));
+      root.render(createElement(MusicPlayerSheet));
     });
 
     const playButton = host.querySelector<HTMLButtonElement>('button[aria-label="Play"]');
@@ -143,12 +149,13 @@ describe("GlobalMusicDock background click expansion", () => {
     expect(openOverlay).not.toHaveBeenCalled();
   });
 
-  it("does not expand full player via background handler when clicking scrubber", () => {
+  it("does not expand full player via background handler when clicking the Classic scrubber", () => {
     const openOverlay = vi.fn();
     useMusicPlayerStore.setState({ openOverlay });
+    setLook({ [SETTINGS.MUSIC_MINI_PLAYER_STYLE]: "classic" });
 
     act(() => {
-      root.render(createElement(GlobalMusicDock));
+      root.render(createElement(MusicPlayerSheet));
     });
 
     const scrubber = host.querySelector<HTMLElement>('[data-sheet-drag-ignore]');
@@ -159,6 +166,29 @@ describe("GlobalMusicDock background click expansion", () => {
     });
 
     expect(openOverlay).not.toHaveBeenCalled();
+  });
+
+  it("shows the Pill's chosen buttons in their order", () => {
+    setLook({ [SETTINGS.MINI_BAR_BUTTONS]: "next,play_pause,queue,close" });
+    act(() => {
+      root.render(createElement(MusicPlayerSheet));
+    });
+
+    const labels = [...host.querySelectorAll<HTMLButtonElement>('[data-music-dock-bar] [dir="ltr"] button')].map((b) => b.getAttribute("aria-label"));
+    expect(labels).toEqual(["Next", "Play", "Queue", "Close player"]);
+    // Close is in the bar, so the corner's dismiss button stays away.
+    expect(host.querySelectorAll('button[aria-label="Close player"]').length).toBe(1);
+  });
+
+  it("keeps the Classic bar's fixed transport and actions", () => {
+    setLook({ [SETTINGS.MUSIC_MINI_PLAYER_STYLE]: "classic", [SETTINGS.MINI_BAR_BUTTONS]: "next" });
+    act(() => {
+      root.render(createElement(MusicPlayerSheet));
+    });
+
+    for (const label of ["Shuffle", "Previous", "Play", "Next", "Repeat", "Volume", "Queue", "Lyrics", "Equalizer"]) {
+      expect(host.querySelector(`button[aria-label="${label}"]`), label).not.toBeNull();
+    }
   });
 
   const pressAndRelease = (pill: HTMLElement, dx: number, dy: number) => {
@@ -175,10 +205,10 @@ describe("GlobalMusicDock background click expansion", () => {
     const openOverlay = vi.fn();
     useMusicPlayerStore.setState({ openOverlay });
     act(() => {
-      root.render(createElement(GlobalMusicDock));
+      root.render(createElement(MusicPlayerSheet));
     });
 
-    pressAndRelease(host.querySelector<HTMLDivElement>(".bg-surface-container-high")!, 3, 2);
+    pressAndRelease(host.querySelector<HTMLDivElement>("[data-music-dock-bar]")!, 3, 2);
 
     expect(openOverlay).toHaveBeenCalledTimes(1);
   });
@@ -190,10 +220,10 @@ describe("GlobalMusicDock background click expansion", () => {
     const openOverlay = vi.fn();
     useMusicPlayerStore.setState({ openOverlay });
     act(() => {
-      root.render(createElement(GlobalMusicDock));
+      root.render(createElement(MusicPlayerSheet));
     });
 
-    pressAndRelease(host.querySelector<HTMLDivElement>(".bg-surface-container-high")!, dx, dy);
+    pressAndRelease(host.querySelector<HTMLDivElement>("[data-music-dock-bar]")!, dx, dy);
 
     expect(openOverlay).not.toHaveBeenCalled();
   });
@@ -220,10 +250,10 @@ describe("GlobalMusicDock background click expansion", () => {
     useMusicPlayerStore.setState({ openOverlay });
 
     act(() => {
-      root.render(createElement(GlobalMusicDock));
+      root.render(createElement(MusicPlayerSheet));
     });
 
-    const pill = host.querySelector<HTMLDivElement>(".bg-surface-container-high");
+    const pill = host.querySelector<HTMLDivElement>("[data-music-dock-bar]");
     expect(pill).not.toBeNull();
     expect(pill?.className).not.toContain("cursor-pointer");
 

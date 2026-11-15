@@ -85,6 +85,17 @@ describe("sortPlaylistVideos", () => {
     expect(ids(sortPlaylistVideos(mixed, "date_published_oldest", true, NOW))).toEqual(["undated", "dated"]);
   });
 
+  it("orders text in another language by the time the backend read from it", () => {
+    const months = video("months", { publishedText: "hace 3 m", publishedAtMs: NOW - 90 * DAY_MS });
+    const days = video("days", { publishedText: "5 дн. назад", publishedAtMs: NOW - 5 * DAY_MS });
+    const english = video("english", { publishedText: "1 month ago" });
+    expect(ids(sortPlaylistVideos([months, english, days], "date_published_newest", true, NOW))).toEqual([
+      "days",
+      "english",
+      "months",
+    ]);
+  });
+
   it("keeps a stored publish time only when it is clearly older than the text", () => {
     const pinned = video("pinned", { publishedText: "2 days ago", publishedAt: NOW - 10 * DAY_MS });
     const close = video("close", { publishedText: "5 days ago", publishedAt: NOW - 5 * DAY_MS - 60_000 });

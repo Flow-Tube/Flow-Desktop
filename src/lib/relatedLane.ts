@@ -18,6 +18,7 @@ export function relatedItemToVideoSummary(item: RelatedContentItem): VideoSummar
     thumbnailUrl: item.thumbnailUrl,
     durationSeconds: item.durationSeconds,
     publishedText: item.publishedText,
+    publishedAtMs: item.publishedAtMs,
     viewCountText: item.viewCountText,
     isLive: item.isLive,
     channelAvatarUrl: item.channelAvatarUrl,
@@ -27,6 +28,7 @@ export function relatedItemToVideoSummary(item: RelatedContentItem): VideoSummar
     isShort: item.isShort,
     badges: item.badges,
     collaborators: item.collaborators,
+    channelHandle: item.channelHandle,
   };
 }
 

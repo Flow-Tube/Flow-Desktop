@@ -94,6 +94,9 @@ LIBRARY
 - Videos a channel you follow made with someone else now reach your subscription feed. Collaborations has its own switch in Settings.
 - The Subscribed menu on a channel can add it to a subscription group and hide that channel's Shorts from your feed. Channel pages have a Share button.
 - Discover channels, opened from Your taste, lists channels like the ones you follow and channels you watch without following, and searches for any channel.
+- A Posts chip first in Subscriptions shows recent community posts from the channels you follow, most active channels first, as on Android. It reads eight channels at a time, keeps posts from the last 30 days and follows the group you picked. Settings > Subscriptions can hide the chip.
+- AI channels, in Extensions, hides channels on the community list AiSList or labels their videos Suspected AI, as on Android. Both are off by default. The signed list is downloaded once a day and never synced or backed up. A channel page says when it is listed and can show its videos anyway, and a Report AI channel item in the video menu can send a channel to AiSList for review.
+- Hide AI music, in Extensions, hides songs, albums and playlists by artists on a public AI music list on Music Home, in radio and in search, as on Android. It is off by default. An artist page says when the artist is listed and can show their music anyway, and Settings credits the list's sources.
 
 MUSIC
 - Each credited artist on a song with multiple artists now has their own link in the player and track lists, opening their own profile instead of the primary artist's.
@@ -145,6 +148,17 @@ MUSIC
 - Lyrics in media controls, in Settings > Lyrics, shows the current line as the song title in your system's media controls and lock screen, with long lines in parts, repeats counted and notes during breaks. It is off by default and has its own timing slider.
 - The Podcasts category chip on Music Home now loads podcast shelves and episodes instead of showing an empty result.
 - Share lyrics as an image, as on Flow for Android: pick up to five lines in Music mode, then choose the card's colors from the cover, a Classic, Poster or Shape layout, a Fit, 1:1 or Story size, and square, framed or clear edges. Copy the card, save it as a PNG, or copy the lines as text with the song credit. Lines in any language wrap inside the card.
+- Lyrics animation, in Settings > Lyrics and the lyrics menu, chooses how synced lines move: Cadence, the new default as on Android, raises letters as they are sung, swells long notes and lets a line go smoothly. Classic lifts whole words as before, and Calm only fills.
+- Held-note glow sets how brightly long notes glow: Off, Soft, Normal or Bright. Linux never draws the glow, so it doesn't show there.
+- The music mini player is now a compact pill with a round cover and the song's progress around it, as on Android. Mini player style in Settings > Music switches back to the Classic wide bar.
+- Mini player background paints the bar Tinted (the new default), Vivid, App theme, Cover colors, Black or Outlined.
+- Mini player buttons picks up to six buttons for the pill and their order, from Previous, Play and pause, Next, Like, Add to playlist, Shuffle, Repeat, Queue, Lyrics, Sleep timer, Back and Forward 10 seconds, Volume, Equalizer, Play on and Close.
+- Previous and next now sit flat against play/pause as one split button in the music player, under full-screen lyrics and on the Play on card, as on Android. Pressing one widens it. Split buttons in Settings > Music > Now playing switches back to the round buttons.
+- The pill mini player has more options in Settings > Music: its width, the ring around the cover, the song's progress on the bar itself (Fill, Edge, Line or Squiggly), the elapsed or remaining time, the line being sung in place of the artist with your lyrics animation, and whether clicking the cover plays and pauses. Compact holds up to 5 buttons, Regular 8 and Wide 10.
+- In the pill, previous, play/pause and next chosen side by side form a small split button that presses like the full player's and takes the cover's colours when Artwork colors on controls is on. Next names the song it plays on hover, and the Line and Squiggly can be dragged to seek.
+- The Wavy seek bar is now Android's Squiggly: a wave that moves while music plays and flattens when it pauses, with a round thumb that grows while dragged.
+- The mini player and the full music player are now one card, as on Android. Dragging the mini player up grows it wider and taller into the player, with the bar stretching across its top until the player takes over, and dragging the open player down, or swiping down with two fingers on its cover or background, shrinks it back. It opens with a small stretch and lands with a small bounce.
+- Drag the mini player down past half its height, or flick it down, to close it. Swipe left and Swipe right in Settings > Music can play the next or previous song or close it with a sideways drag or two-finger swipe. Both are off at first on this computer.
 
 PLAYER
 - Live chat and chat replay beside a video can be closed. Show chat brings it back, as does the chat button on the player, which now works outside fullscreen too.
@@ -206,6 +220,7 @@ PLAYER
 - Remote signature fallback, in Settings > Network, is now on by default, as on Flow for Android: the TV client's streams are signed and only PipePipe's public decoder can solve them. It never receives the video id.
 - When YouTube refuses a video's stream partway through, Flow fetches the same file from another client and carries on from the same byte, so the video keeps playing instead of stopping or reloading.
 - The video title no longer sits above the seek bar, where it repeated the title under the video. It shows there in fullscreen, where the Fullscreen Title switch is now on by default, and in the pop-out player.
+- 360° videos can be looked around, as on Android: drag the picture, zoom with the wheel, or use W, A, S and D. The settings menu has a 360° view switch for each video and a Look-around speed of 1x to 3x. The mini player and ambient glow show the flat picture. If a computer can't draw the view smoothly, Flow goes back to the flat picture and says so.
 
 SETTINGS
 - Flow's windows can now shrink to 480 by 360, small enough for a half or quarter screen tile. In a narrow window the menu button opens the side menu over the page, as it does on the Watch page.
@@ -224,6 +239,7 @@ SETTINGS
 - Start page, under Navigation tabs, picks the page Flow opens on, such as Subscriptions. Open tabs from the last run still come back first, and reloading the window keeps the page you are on.
 - Double-click sides to seek, under Player, can be turned off. A double-click anywhere on the video then switches fullscreen.
 - Subscriptions remembers the group you picked last, across restarts, as Flow for Android does.
+- Font, in Settings > Appearance, adds Condensed and Serif, and Choose a font file uses any .ttf or .otf file up to 10 MB as the app font, as on Android. A variable font keeps all of its weights. The file stays on this computer and is not part of backups.
 
 DOWNLOADS
 - Sort downloads by Newest, Oldest, Largest, Title or Channel. Each video shows its size and date.
@@ -330,3 +346,13 @@ FIXES
 - Text you type in search and other fields follows the direction of what you type. On Linux, Flow uses Noto's Arabic fonts when they are installed, so Arabic letters keep their dots and joins.
 - The Subscriptions page no longer jumps while you scroll during a refresh. The feed you are reading stays on screen until the check of every channel finishes, cards keep their thumbnails when new videos arrive, and the video you are looking at stays in place when things above it change.
 - Play on: moving a video that takes a while to start no longer leaves it playing on both devices.
+- SponsorBlock: letting go of a seek inside a segment that skips on its own now lands at its end, as on Android, even for a segment at the very start of a video. Each segment counts once per video in your SponsorBlock stats and Recap, however often you rewind into it.
+- Lyrics: the word fill no longer jumps back at speeds below 1x, the lyrics hold still while the share, source or edit dialog is open over them, and saving a lyric card that could not be drawn now says so instead of doing nothing.
+- Saving the equalizer on this computer no longer turns Spatial sound off on a linked Android phone. Desktop now keeps the setting it syncs, though it doesn't play it yet.
+- Singer markers such as {agent:v1} and {bg} no longer show inside line-synced lyrics or lyrics saved by an earlier version. Their lines go to the right singer, and background vocals show as background lines.
+- Translated captions load more often. They are now made from YouTube's speech track, as the official apps and Flow for Android do, instead of the uploader's own track.
+- Auto chapters that start part-way through a second show again, and a music video no longer shows a hidden label channel, such as a VEVO channel, in place of the artist's own.
+- Outside English, a channel page no longer shows its video count as its subscribers, and a channel search that finds nothing in your language tries again in English.
+- Saved playlists, the playlist date sort and collaborations in Subscriptions read upload dates in every language now, including short forms such as hace 3 m and 5 дн., instead of only English.
+- Mixes open again. A Mix in related videos, in search or behind a Mix link now plays as a queue from YouTube's watch page, instead of a request YouTube refuses for Mixes.
+- Importing YouTube history from a Google Takeout HTML file now skips ads and no longer gives an entry the next entry's channel. Ads an earlier import saved are removed if you never played them in Flow, and the import says how many.

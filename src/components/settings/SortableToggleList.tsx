@@ -1,4 +1,3 @@
-import { lyricsSourceLabel } from '../../lib/lyrics/offline';
 import {
   DndContext,
   closestCenter,
@@ -21,29 +20,39 @@ import { ChevronDown, ChevronUp, GripVertical } from 'lucide-react';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { getString } from '../../lib/i18n/index';
 
-export interface LyricsProviderListProps {
-  /** Provider names in the order they are tried. */
+export interface SortableToggleListProps {
+  /** Item ids in their order. */
   order: string[];
-  isEnabled: (name: string) => boolean;
+  /** What the list is, for screen readers. */
+  label: string;
+  labelOf: (id: string) => string;
+  /** The line under a row's name. */
+  statusOf: (id: string, enabled: boolean) => string;
+  isEnabled: (id: string) => boolean;
+  /** False keeps a row's switch from turning on, such as when a limit is reached. */
+  canEnable?: (id: string) => boolean;
   onReorder: (order: string[]) => void;
-  onToggle: (name: string, enabled: boolean) => void;
+  onToggle: (id: string, enabled: boolean) => void;
 }
 
 const MOVE_BTN =
   'grid h-8 w-8 place-items-center rounded-full text-chrome-neutral-400 transition-colors duration-200 ease-out hover:bg-surface-container-high hover:text-chrome-neutral-100 disabled:pointer-events-none disabled:opacity-30';
 
 interface RowProps {
+  id: string;
   name: string;
+  status: string;
   index: number;
   count: number;
   enabled: boolean;
+  canEnable: boolean;
   onMove: (from: number, to: number) => void;
-  onToggle: (name: string, enabled: boolean) => void;
+  onToggle: (id: string, enabled: boolean) => void;
 }
 
-function ProviderRow({ name, index, count, enabled, onMove, onToggle }: RowProps) {
+function SortableRow({ id, name, status, index, count, enabled, canEnable, onMove, onToggle }: RowProps) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
-    useSortable({ id: name });
+    useSortable({ id });
 
   return (
     <div
@@ -64,10 +73,8 @@ function ProviderRow({ name, index, count, enabled, onMove, onToggle }: RowProps
         <GripVertical className="h-4 w-4" />
       </button>
       <div className="min-w-0 flex-1">
-        <div className="text-sm font-medium text-chrome-neutral-200">{`${index + 1}. ${lyricsSourceLabel(name)}`}</div>
-        <div className="mt-0.5 text-xs text-chrome-neutral-400">
-          {getString(enabled ? 'settings_lyrics_provider_enabled' : 'settings_lyrics_provider_disabled')}
-        </div>
+        <div className="text-sm font-medium text-chrome-neutral-200">{`${index + 1}. ${name}`}</div>
+        <div className="mt-0.5 text-xs text-chrome-neutral-400">{status}</div>
       </div>
       <button
         type="button"
@@ -88,14 +95,14 @@ function ProviderRow({ name, index, count, enabled, onMove, onToggle }: RowProps
         <ChevronDown className="h-4 w-4" />
       </button>
       <div className="ms-2 shrink-0">
-        <ToggleSwitch checked={enabled} onChange={(next) => onToggle(name, next)} />
+        <ToggleSwitch checked={enabled} disabled={!enabled && !canEnable} onChange={(next) => onToggle(id, next)} />
       </div>
     </div>
   );
 }
 
-/** Lyrics providers in lookup order: drag a row, or move it with the arrow buttons. */
-export function LyricsProviderList({ order, isEnabled, onReorder, onToggle }: LyricsProviderListProps) {
+/** Items in their order, each with a switch: drag a row, or move it with the arrow buttons. */
+export function SortableToggleList({ order, label, labelOf, statusOf, isEnabled, canEnable, onReorder, onToggle }: SortableToggleListProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -114,19 +121,25 @@ export function LyricsProviderList({ order, isEnabled, onReorder, onToggle }: Ly
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <SortableContext items={order} strategy={verticalListSortingStrategy}>
-        <div role="list" aria-label={getString('settings_lyrics_providers')} className="flex flex-col divide-y-2 divide-[var(--color-background)]">
-          {order.map((name, index) => (
-            <div role="listitem" key={name}>
-              <ProviderRow
-                name={name}
-                index={index}
-                count={order.length}
-                enabled={isEnabled(name)}
-                onMove={move}
-                onToggle={onToggle}
-              />
-            </div>
-          ))}
+        <div role="list" aria-label={label} className="flex flex-col divide-y-2 divide-[var(--color-background)]">
+          {order.map((id, index) => {
+            const enabled = isEnabled(id);
+            return (
+              <div role="listitem" key={id}>
+                <SortableRow
+                  id={id}
+                  name={labelOf(id)}
+                  status={statusOf(id, enabled)}
+                  index={index}
+                  count={order.length}
+                  enabled={enabled}
+                  canEnable={canEnable?.(id) ?? true}
+                  onMove={move}
+                  onToggle={onToggle}
+                />
+              </div>
+            );
+          })}
         </div>
       </SortableContext>
     </DndContext>

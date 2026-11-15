@@ -6,7 +6,7 @@ use std::path::Path;
 use serde_json::Value;
 
 use super::db_file::{are_real_tables, copy_to_temp, fetch_rows, int_at, open_read_only, text_at};
-use super::takeout_activity::{read_activity_json, read_history_html};
+use super::takeout_activity::{TakeoutHistory, read_activity_json, read_history_html};
 use super::{
     Channel, Found, ImportError, MAX_ACTIVITY_BYTES, MAX_CHANNELS, MAX_JSON_BYTES, MAX_PLAYLISTS,
     TakenPlaylist, Track, Watch, clean, is_video_id, read_file_limited, video_id_of_url,
@@ -210,28 +210,34 @@ pub fn read_history_file(path: &Path, now: u64) -> Result<Found, ImportError> {
         .iter()
         .find(|byte| !byte.is_ascii_whitespace() && !matches!(**byte, 0xEF | 0xBB | 0xBF))
         .copied();
-    let watches = match start {
+    let history = match start {
         Some(b'<') => read_history_html(bytes.as_slice(), now, false)?,
-        Some(b'[') => {
-            read_activity_json(bytes.as_slice(), true)
+        Some(b'[') => TakeoutHistory {
+            watches: read_activity_json(bytes.as_slice(), true)
                 .ok_or(ImportError::InvalidFormat)?
-                .watches
-        }
+                .watches,
+            ..TakeoutHistory::default()
+        },
         Some(b'{') => {
             let text = String::from_utf8_lossy(&bytes);
-            text.lines()
-                .filter(|line| !line.trim().is_empty())
-                .enumerate()
-                .filter_map(|(index, line)| freetube_watch(line, index, now))
-                .collect()
+            TakeoutHistory {
+                watches: text
+                    .lines()
+                    .filter(|line| !line.trim().is_empty())
+                    .enumerate()
+                    .filter_map(|(index, line)| freetube_watch(line, index, now))
+                    .collect(),
+                ..TakeoutHistory::default()
+            }
         }
         _ => return Err(ImportError::InvalidFormat),
     };
-    if watches.is_empty() {
+    if history.watches.is_empty() && history.ad_video_ids.is_empty() {
         return Err(ImportError::NoEntries);
     }
     Ok(Found {
-        watches,
+        watches: history.watches,
+        ad_video_ids: history.ad_video_ids,
         ..Found::default()
     })
 }

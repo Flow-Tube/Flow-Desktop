@@ -66,22 +66,63 @@ export function serializeMiniBarButtons(buttons: readonly MiniBarButton[]): stri
   return buttons.slice(0, MAX_MINI_BAR_BUTTONS).join(",");
 }
 
+/** The song's progress drawn on the Pill itself, besides the ring round its cover. */
+export type MiniBarProgress = "none" | "fill" | "edge" | "line" | "wavy_line";
+/** What clicking the Pill's cover does; the rest of the bar always opens the player. */
+export type MiniCoverTap = "open" | "play_pause";
+/** A small time figure before the Pill's buttons. Desktop's own. */
+export type MiniBarTime = "off" | "elapsed" | "remaining";
+/** How wide the Pill floats. Desktop's own. */
+export type MiniBarWidth = "compact" | "regular" | "wide";
+
+const PROGRESS: readonly MiniBarProgress[] = ["none", "fill", "edge", "line", "wavy_line"];
+const COVER_TAPS: readonly MiniCoverTap[] = ["open", "play_pause"];
+const TIMES: readonly MiniBarTime[] = ["off", "elapsed", "remaining"];
+const WIDTHS: readonly MiniBarWidth[] = ["compact", "regular", "wide"];
+
 export interface MiniPlayerLook {
   style: MiniPlayerStyle;
   background: MiniBarBackground;
   buttons: MiniBarButton[];
+  coverRing: boolean;
+  barProgress: MiniBarProgress;
+  coverTap: MiniCoverTap;
+  time: MiniBarTime;
+  width: MiniBarWidth;
+  /** The line being sung in place of the artist. */
+  sungLine: boolean;
 }
+
+const oneOf = <T extends string>(value: string, options: readonly T[], fallback: T): T =>
+  options.includes(value as T) ? (value as T) : fallback;
 
 export function useMiniPlayerLook(): MiniPlayerLook {
   const [style] = usePreference(SETTINGS.MUSIC_MINI_PLAYER_STYLE);
   const [background] = usePreference(SETTINGS.MINI_BAR_BACKGROUND);
   const [buttons] = usePreference(SETTINGS.MINI_BAR_BUTTONS);
+  const [coverRing] = usePreference(SETTINGS.MINI_COVER_RING);
+  const [barProgress] = usePreference(SETTINGS.MINI_BAR_PROGRESS);
+  const [coverTap] = usePreference(SETTINGS.MINI_COVER_TAP);
+  const [time] = usePreference(SETTINGS.MINI_BAR_TIME);
+  const [width] = usePreference(SETTINGS.MINI_BAR_WIDTH);
+  const [sungLine] = usePreference(SETTINGS.LYRICS_IN_MINI_PLAYER);
   return {
-    style: STYLES.includes(style as MiniPlayerStyle) ? (style as MiniPlayerStyle) : "pill",
-    background: BACKGROUNDS.includes(background as MiniBarBackground) ? (background as MiniBarBackground) : "tinted",
+    style: oneOf(style, STYLES, "pill"),
+    background: oneOf(background, BACKGROUNDS, "tinted"),
     buttons: parseMiniBarButtons(buttons),
+    coverRing: coverRing !== "false",
+    barProgress: oneOf(barProgress, PROGRESS, "none"),
+    coverTap: oneOf(coverTap, COVER_TAPS, "open"),
+    time: oneOf(time, TIMES, "off"),
+    width: oneOf(width, WIDTHS, "regular"),
+    sungLine: sungLine === "true",
   };
 }
+
+export const miniBarProgressOptions = () => PROGRESS.map((value) => ({ value, label: getString(`mini_bar_progress_${value}`) }));
+export const miniCoverTapOptions = () => COVER_TAPS.map((value) => ({ value, label: getString(`mini_cover_tap_${value}`) }));
+export const miniBarTimeOptions = () => TIMES.map((value) => ({ value, label: getString(`mini_bar_time_${value}`) }));
+export const miniBarWidthOptions = () => WIDTHS.map((value) => ({ value, label: getString(`mini_bar_width_${value}`) }));
 
 export const miniPlayerStyleOptions = (): Array<{ value: MiniPlayerStyle; label: string }> =>
   STYLES.map((value) => ({ value, label: getString(`mini_player_style_${value}`) }));

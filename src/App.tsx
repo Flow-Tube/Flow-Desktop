@@ -70,11 +70,10 @@ import FlowNeuroPersona from "./pages/FlowNeuroPersona";
 import { LayoutGroup } from "framer-motion";
 import { ToastHost } from "./components/layout/ToastHost";
 import { GlobalMusicAudio } from "./components/music/GlobalMusicAudio";
-import { GlobalMusicDock } from "./components/music/GlobalMusicDock";
+import { MusicPlayerSheet } from "./components/music/sheet/MusicPlayerSheet";
 import { PlayingElsewhereBar } from "./components/playon/PlayingElsewhereBar";
 import { RemoteDock } from "./components/playon/RemoteDock";
 import { ConsentDialog } from "./components/playon/ConsentDialog";
-import { MusicOverlay } from "./components/music/MusicOverlay";
 import { MusicOnly } from "./components/music/MusicOnly";
 import { EqualizerDialog } from "./components/music/eq/EqualizerDialog";
 import { ContinueWatchingMini } from "./components/player/ContinueWatchingMini";
@@ -355,11 +354,10 @@ function App() {
           <GlobalMusicAudio />
           <ContinueWatchingMini />
           <LayoutGroup>
-            <GlobalMusicDock />
+            <MusicPlayerSheet />
             <RemoteDock />
             <PlayingElsewhereBar />
             <ConsentDialog />
-            <MusicOverlay />
           </LayoutGroup>
           <DeepFlowController />
           <DeepLinkController />

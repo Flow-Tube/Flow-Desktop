@@ -2,39 +2,39 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { AnimatePresence, motion, useMotionValueEvent, useTransform } from "framer-motion";
 import { ChevronDown, ListMusic, Mic2, Minimize2, SlidersHorizontal, Volume2, VolumeX } from "lucide-react";
 
-import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
-import { useMusicSheetStore } from "../../store/useMusicSheetStore";
-import { useMusicPlayerError } from "../../lib/useMusicPlayerError";
-import { useCoverAppContent } from "../../lib/useCoverAppContent";
-import { useMusicPlayerKeyboard } from "../../lib/useMusicPlayerKeyboard";
-import { useMediaQuery } from "../../lib/useMediaQuery";
-import { useBoolPref } from "../../lib/usePreference";
-import { SETTINGS } from "../../lib/settings/schema";
-import { useMusicWheelVolume } from "../../lib/useMusicWheelVolume";
-import { useVolumeFeedback } from "../../lib/useVolumeFeedback";
-import { VolumeFeedbackPill } from "../ui/VolumeFeedbackPill";
-import { PlayerErrorState } from "../ui/PlayerErrorState";
-import { getString } from "../../lib/i18n/index";
-import { HapticButton } from "./HapticButton";
-import { MusicScrubber } from "./MusicScrubber";
-import { MusicQueuePane } from "./MusicQueuePane";
-import { LyricsActionsMenu, MusicLyrics } from "./MusicLyrics";
-import { AmbientBackdrop } from "./AmbientBackdrop";
-import { LyricsCoverBackground } from "./lyrics/LyricsCoverBackground";
-import { useLyricsBackground, useLyricsCover } from "../../lib/lyrics/useLyricsCover";
-import { EqPanel } from "./EqPanel";
-import { useEqActive } from "../../lib/audio/eq/useEqualizer";
-import { VolumePopover } from "./VolumePopover";
-import { PlayOnButton } from "../playon/PlayOnButton";
-import { LAYOUT_SPRING, NowPlayingColumn } from "./player/NowPlayingColumn";
-import { PlayerSidePane, type SidePaneTab } from "./player/PlayerSidePane";
-import { PlayerTransport } from "./player/PlayerTransport";
-import { GROUP_BUTTON, GROUP_BUTTON_ACTIVE, GroupItem, NO_TAP_SCALE, PlayerButtonGroup } from "./player/PlayerButtonGroup";
-import { useArtworkSwatches } from "../../lib/useArtworkSwatches";
-import { useFullPlayerColors } from "../../lib/usePlayerColors";
-import { coverSurfaceVariables } from "../../lib/playerColors";
-import { upgradeMusicImageUrl } from "../../lib/thumbnails";
-import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
+import { useMusicPlayerStore } from "../../../store/useMusicPlayerStore";
+import { useMusicSheetStore } from "../../../store/useMusicSheetStore";
+import { useMusicPlayerError } from "../../../lib/useMusicPlayerError";
+import { useCoverAppContent } from "../../../lib/useCoverAppContent";
+import { useMusicPlayerKeyboard } from "../../../lib/useMusicPlayerKeyboard";
+import { useMediaQuery } from "../../../lib/useMediaQuery";
+import { useBoolPref } from "../../../lib/usePreference";
+import { SETTINGS } from "../../../lib/settings/schema";
+import { useMusicWheelVolume } from "../../../lib/useMusicWheelVolume";
+import { useVolumeFeedback } from "../../../lib/useVolumeFeedback";
+import { VolumeFeedbackPill } from "../../ui/VolumeFeedbackPill";
+import { PlayerErrorState } from "../../ui/PlayerErrorState";
+import { getString } from "../../../lib/i18n/index";
+import { HapticButton } from "../HapticButton";
+import { MusicScrubber } from "../MusicScrubber";
+import { MusicQueuePane } from "../MusicQueuePane";
+import { LyricsActionsMenu, MusicLyrics } from "../MusicLyrics";
+import { AmbientBackdrop } from "../AmbientBackdrop";
+import { LyricsCoverBackground } from "../lyrics/LyricsCoverBackground";
+import { useLyricsBackground, useLyricsCover } from "../../../lib/lyrics/useLyricsCover";
+import { EqPanel } from "../EqPanel";
+import { useEqActive } from "../../../lib/audio/eq/useEqualizer";
+import { VolumePopover } from "../VolumePopover";
+import { PlayOnButton } from "../../playon/PlayOnButton";
+import { LAYOUT_SPRING, NowPlayingColumn } from "../player/NowPlayingColumn";
+import { PlayerSidePane, type SidePaneTab } from "../player/PlayerSidePane";
+import { PlayerTransport } from "../player/PlayerTransport";
+import { GROUP_BUTTON, GROUP_BUTTON_ACTIVE, GroupItem, NO_TAP_SCALE, PlayerButtonGroup } from "../player/PlayerButtonGroup";
+import { useArtworkSwatches } from "../../../lib/useArtworkSwatches";
+import { useFullPlayerColors } from "../../../lib/usePlayerColors";
+import { coverSurfaceVariables } from "../../../lib/playerColors";
+import { upgradeMusicImageUrl } from "../../../lib/thumbnails";
+import { useProxiedImageUrl } from "../../../lib/useProxiedImageUrl";
 import {
   contentOpacity,
   contentScale,
@@ -44,14 +44,14 @@ import {
   sheetDockBox,
   sheetOpacity,
   sheetProgress,
-} from "../../lib/musicSheet";
+} from "../../../lib/musicSheet";
 
 const rgbCss = ({ r, g, b }: { r: number; g: number; b: number }) => `rgb(${r} ${g} ${b})`;
 
 /** From this width the song keeps its column and Up next or the lyrics sit beside it, as on Android tablets. */
 const WIDE_QUERY = "(min-width: 1100px)";
 
-export function MusicOverlay() {
+export function FullLayer() {
   const currentTrack = useMusicPlayerStore((s) => s.currentTrack);
   const viewState = useMusicPlayerStore((s) => s.viewState);
   const eqEnabled = useEqActive();

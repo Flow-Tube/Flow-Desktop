@@ -2,35 +2,35 @@ import { useState } from "react";
 import { AnimatePresence, motion, useTransform } from "framer-motion";
 import { X } from "lucide-react";
 
-import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
-import { useMusicPlayerError } from "../../lib/useMusicPlayerError";
-import { getString } from "../../lib/i18n/index";
-import { artistsText } from "../../lib/musicFormat";
-import { PlayerErrorState } from "../ui/PlayerErrorState";
-import { HapticButton } from "./HapticButton";
-import { useMusicContextMenu } from "./MusicCardMenu";
-import { useNowPlayingMenuActions } from "./useNowPlayingMenuActions";
-import { EqPanel } from "./EqPanel";
-import { useEqActive } from "../../lib/audio/eq/useEqualizer";
-import { VolumePopover } from "./VolumePopover";
-import { useArtworkSwatches } from "../../lib/useArtworkSwatches";
-import { useDockControlColors, useDockToggleColors } from "../../lib/usePlayerColors";
-import { useMusicWheelVolume } from "../../lib/useMusicWheelVolume";
-import { useVolumeFeedback } from "../../lib/useVolumeFeedback";
-import { VolumeFeedbackPill } from "../ui/VolumeFeedbackPill";
-import { upgradeMusicImageUrl } from "../../lib/thumbnails";
-import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
-import { dockOpacity, registerSheetDock, sheetProgress } from "../../lib/musicSheet";
-import { useSheetDrag } from "../../lib/useSheetDrag";
-import { useControlledDevice, useRemoteActive } from "../../lib/live/usePlayOn";
-import { youtubeThumbnailUrl } from "../../lib/thumbnails";
-import { useMiniPlayerLook } from "../../lib/music/miniPlayerLook";
-import { useMiniBarSurface } from "../../lib/music/miniBarSurface";
-import { useLyricsCover } from "../../lib/lyrics/useLyricsCover";
-import { LyricsCoverBackground } from "./lyrics/LyricsCoverBackground";
-import { ClassicDockBody } from "./dock/ClassicDockBody";
-import { PillDockBody } from "./dock/PillDockBody";
-import type { DockModel } from "./dock/dockModel";
+import { useMusicPlayerStore } from "../../../store/useMusicPlayerStore";
+import { useMusicPlayerError } from "../../../lib/useMusicPlayerError";
+import { getString } from "../../../lib/i18n/index";
+import { artistsText } from "../../../lib/musicFormat";
+import { PlayerErrorState } from "../../ui/PlayerErrorState";
+import { HapticButton } from "../HapticButton";
+import { useMusicContextMenu } from "../MusicCardMenu";
+import { useNowPlayingMenuActions } from "../useNowPlayingMenuActions";
+import { EqPanel } from "../EqPanel";
+import { useEqActive } from "../../../lib/audio/eq/useEqualizer";
+import { VolumePopover } from "../VolumePopover";
+import { useArtworkSwatches } from "../../../lib/useArtworkSwatches";
+import { useDockControlColors, useDockToggleColors } from "../../../lib/usePlayerColors";
+import { useMusicWheelVolume } from "../../../lib/useMusicWheelVolume";
+import { useVolumeFeedback } from "../../../lib/useVolumeFeedback";
+import { VolumeFeedbackPill } from "../../ui/VolumeFeedbackPill";
+import { upgradeMusicImageUrl } from "../../../lib/thumbnails";
+import { useProxiedImageUrl } from "../../../lib/useProxiedImageUrl";
+import { dockOpacity, registerSheetDock, sheetProgress } from "../../../lib/musicSheet";
+import { useSheetDrag } from "../../../lib/useSheetDrag";
+import { useControlledDevice, useRemoteActive } from "../../../lib/live/usePlayOn";
+import { youtubeThumbnailUrl } from "../../../lib/thumbnails";
+import { useMiniPlayerLook } from "../../../lib/music/miniPlayerLook";
+import { useMiniBarSurface } from "../../../lib/music/miniBarSurface";
+import { useLyricsCover } from "../../../lib/lyrics/useLyricsCover";
+import { LyricsCoverBackground } from "../lyrics/LyricsCoverBackground";
+import { ClassicDockBody } from "../dock/ClassicDockBody";
+import { PillDockBody } from "../dock/PillDockBody";
+import type { DockModel } from "../dock/dockModel";
 
 /** The Pill's widths, never wider than 90% of the window. */
 const PILL_WIDTH = {
@@ -39,7 +39,7 @@ const PILL_WIDTH = {
   wide: "w-[min(90%,56rem)]",
 } as const;
 
-export function GlobalMusicDock() {
+export function MiniLayer() {
   const currentTrack = useMusicPlayerStore((s) => s.currentTrack);
   const viewState = useMusicPlayerStore((s) => s.viewState);
   const isPlaying = useMusicPlayerStore((s) => s.isPlaying);

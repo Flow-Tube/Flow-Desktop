@@ -343,7 +343,10 @@ async fn restore_through_a_zip(source: &SqlitePool, target: &SqlitePool) -> Vec<
     };
     write_archive(&path, &archive).unwrap();
     let zip = zip::ZipArchive::new(std::fs::File::open(&path).unwrap()).unwrap();
-    let names = zip.file_names().map(str::to_string).collect();
+    let names = zip
+        .file_names()
+        .map(|name| name.unwrap().into_owned())
+        .collect();
     let BackupFile::Backup(backup) = read_backup_file(&path, 2_000).unwrap() else {
         panic!("a master reads as a backup");
     };

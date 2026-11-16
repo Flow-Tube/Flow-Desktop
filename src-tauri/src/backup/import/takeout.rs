@@ -3,6 +3,7 @@
 //! sit and what they hold, because Takeout translates their names. Only the few entries that matter
 //! are ever decompressed, so an archive that also holds hundreds of gigabytes of video stays cheap.
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -99,7 +100,10 @@ fn read_archive(
         if entry.is_dir() {
             continue;
         }
-        let name = entry.name().to_string();
+        // A name that doesn't decode can't be one of the files we read.
+        let Ok(name) = entry.name().map(Cow::into_owned) else {
+            continue;
+        };
         let english_history = name.to_ascii_lowercase().ends_with(ENGLISH_WATCH_HISTORY);
         let bounded = entry.take(MAX_ACTIVITY_BYTES);
         if english_history || is_history_entry(&name, "html") {
@@ -298,8 +302,9 @@ pub fn read_likes_file(path: &Path) -> Result<Found, ImportError> {
         let mut archive = open_zip(path)?;
         let name = archive
             .file_names()
+            .filter_map(Result::ok)
             .find(|name| is_my_activity_entry(name))
-            .map(str::to_string)
+            .map(Cow::into_owned)
             .ok_or(ImportError::NoLikes)?;
         let entry = archive.by_name(&name)?;
         read_activity_json(entry.take(MAX_ACTIVITY_BYTES), false)

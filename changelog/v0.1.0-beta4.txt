@@ -322,6 +322,7 @@ FIXES
 - The rows on the About page that open something, such as Changelog, can be reached and opened with the keyboard.
 - Playlist cards show all four covers when two of the songs share a cover.
 - The onboarding topics and import steps can now be translated, and their wording is plainer.
+- Importing a Flow backup during setup now restores everything in it, as Settings > Import does: history, playlists, likes, settings, notes, your taste and every profile. Before, setup only took the subscriptions from it. Setup also reads Takeout, NewPipe, LibreTube, FreeTube and Metrolist files the way Settings does.
 - Flow no longer says FlowNeuro anywhere: settings, backups, sync, import and the window title all call it your taste, as Flow for Android does.
 - Saved lyrics show where they came from in the lyrics menu and side pane, instead of an internal name like MemoryCache. Lyrics saved by an older version show no source until they are fetched again.
 - About links to the new website, flow-tube.org, and the Flow-Tube organisation on GitHub. Crash reports open an issue there too.

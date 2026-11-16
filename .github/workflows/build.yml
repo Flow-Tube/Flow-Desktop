@@ -709,6 +709,16 @@ jobs:
           name: flatpak-sources-${{ github.run_number }}
           path: packaging/flatpak/generated-sources
 
+      # The image ships its runtimes in a read-only layer, and Docker's overlay filesystem
+      # can't rename directories out of it (EXDEV, "Invalid cross-device link"). Without a
+      # restored cache, flatpak-builder then fails to update the GNOME SDK and crashes.
+      # A copy in the container's own layer can be updated in place.
+      - name: Move the image's Flatpak installation into the container layer
+        run: |
+          cp -a /var/lib/flatpak /var/lib/flatpak.writable
+          rm -rf /var/lib/flatpak
+          mv /var/lib/flatpak.writable /var/lib/flatpak
+
       - name: Build the Flatpak bundle
         uses: flatpak/flatpak-github-actions/flatpak-builder@79327416609af08178ad73b352877e51450790b3 # v6.8
         with:

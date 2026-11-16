@@ -1,10 +1,8 @@
 import type { Ref } from 'react';
-import { VideoGrid } from '../../video/VideoGrid';
 import { MusicItemCard } from '../../music/MusicItemCard';
 import { MusicShelf } from '../../music/MusicShelf';
 import { ArtistCard } from '../../music/ArtistCard';
 import { PlaylistCard } from '../../video/PlaylistCard';
-import { ShortsShelf } from '../../shelf/ShortsShelf';
 import { ChannelShortsGrid } from '../../channel/ChannelGrids';
 import { SearchCorrectionLine } from '../SearchCorrectionLine';
 import { SearchCreatorCard } from '../SearchCreatorCard';
@@ -14,7 +12,8 @@ import { useGridStyle } from '../../../lib/useGridColumns';
 import type { UseCombinedSearchReturn } from '../../../lib/useCombinedSearch';
 import type { VisibleSearchResults } from '../../../lib/useVisibleSearchResults';
 import type { SearchChannel, VideoSummary } from '../../../types/video';
-import { LoadMore, RESULT_GRID, SearchChannelCard, ShelfHeader, VideoShelves, toPlaylistSummary } from './ResultParts';
+import { LoadMore, RESULT_GRID, SearchChannelCard, ShelfHeader, toPlaylistSummary } from './ResultParts';
+import { VideoResults, type SearchLayout } from './VideoResults';
 import type { ResultActions } from './useResultActions';
 
 interface TabResultsProps {
@@ -22,12 +21,13 @@ interface TabResultsProps {
   visible: VisibleSearchResults;
   actions: ResultActions;
   sentinelRef: Ref<HTMLDivElement>;
+  layout: SearchLayout;
   onPlayVideo: (v: VideoSummary) => void;
   onAddToQueue: (v: VideoSummary) => void;
 }
 
 /** One kind of result, paged as you scroll. */
-export function TabResults({ search, visible, actions, sentinelRef, onPlayVideo, onAddToQueue }: TabResultsProps) {
+export function TabResults({ search, visible, actions, sentinelRef, layout, onPlayVideo, onAddToQueue }: TabResultsProps) {
   const squareGridStyle = useGridStyle({ density: 'dense' });
   const wideGridStyle = useGridStyle();
   const { creator, results: r } = visible;
@@ -58,16 +58,30 @@ export function TabResults({ search, visible, actions, sentinelRef, onPlayVideo,
               renderItem={(c) => <SearchChannelCard channel={c} />}
             />
           )}
-          <ShortsShelf title={getString('search_section_shorts')} shorts={r.shorts} onPlay={onPlayVideo} />
-          <VideoGrid videos={r.videos} onPlay={onPlayVideo} onAddToQueue={onAddToQueue} />
-          <VideoShelves shelves={r.shelves} onPlay={onPlayVideo} onAddToQueue={onAddToQueue} />
+          <VideoResults
+            videos={r.videos}
+            order={search.results.videos.map((video) => video.id)}
+            shelves={r.shelves}
+            shortsShelves={r.shortsShelves}
+            layout={layout}
+            query={search.query}
+            onPlay={onPlayVideo}
+            onAddToQueue={onAddToQueue}
+          />
           {more}
         </div>
       )}
 
       {filterType === 'live' && (
         <>
-          <VideoGrid videos={r.live} onPlay={onPlayVideo} onAddToQueue={onAddToQueue} />
+          <VideoResults
+            videos={r.live}
+            order={search.results.live.map((video) => video.id)}
+            layout={layout}
+            query={search.query}
+            onPlay={onPlayVideo}
+            onAddToQueue={onAddToQueue}
+          />
           {more}
         </>
       )}

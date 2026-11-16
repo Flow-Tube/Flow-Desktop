@@ -13,6 +13,8 @@ interface SegmentedControlProps<T extends string> {
   label: string;
   /** Spreads the options evenly over the full width. */
   stretch?: boolean;
+  /** Shows only each option's icon; the label still names it for screen readers and on hover. */
+  iconOnly?: boolean;
 }
 
 /** A pill row of mutually exclusive choices; the chosen one sits on the surface. */
@@ -22,6 +24,7 @@ export function SegmentedControl<T extends string>({
   onChange,
   label,
   stretch = false,
+  iconOnly = false,
 }: SegmentedControlProps<T>) {
   return (
     <div
@@ -38,14 +41,15 @@ export function SegmentedControl<T extends string>({
             role="radio"
             aria-checked={selected}
             onClick={() => onChange(option.value)}
-            className={`${stretch ? "flex-1 justify-center px-2" : "inline-flex px-3.5"} inline-flex h-8 items-center gap-1.5 rounded-full text-sm font-medium transition-colors duration-200 ease-out ${
+            title={iconOnly ? option.label : undefined}
+            className={`${stretch ? "flex-1 justify-center px-2" : iconOnly ? "w-8 justify-center" : "inline-flex px-3.5"} inline-flex h-8 items-center gap-1.5 rounded-full text-sm font-medium transition-colors duration-200 ease-out ${
               selected
                 ? "bg-surface text-chrome-neutral-100 ring-1 ring-chrome-neutral-800"
                 : "text-chrome-neutral-400 hover:text-chrome-neutral-200"
-            }`}
+            } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary`}
           >
             {option.icon && <span className="shrink-0">{option.icon}</span>}
-            <span className="truncate">{option.label}</span>
+            <span className={iconOnly ? "sr-only" : "truncate"}>{option.label}</span>
           </button>
         );
       })}

@@ -7,10 +7,12 @@ import { AllResults } from './results/AllResults';
 import { ResultsSkeleton } from './results/ResultsSkeleton';
 import { SearchEmptyState } from './results/SearchEmptyState';
 import { TabResults } from './results/TabResults';
+import type { SearchLayout } from './results/VideoResults';
 import { useResultActions } from './results/useResultActions';
 
 interface SearchResultsProps {
   search: UseCombinedSearchReturn;
+  layout: SearchLayout;
   onPlayVideo: (v: VideoSummary) => void;
   onAddToQueue: (v: VideoSummary) => void;
 }
@@ -25,6 +27,7 @@ function hasAnyResult(r: CombinedSearchResults, hasCreator: boolean): boolean {
       r.channels.length ||
       r.shorts.length ||
       r.shelves.length ||
+      r.shortsShelves.length ||
       r.videoPlaylists.length ||
       r.albums.length ||
       r.playlists.length ||
@@ -34,7 +37,7 @@ function hasAnyResult(r: CombinedSearchResults, hasCreator: boolean): boolean {
   );
 }
 
-export function SearchResults({ search, onPlayVideo, onAddToQueue }: SearchResultsProps) {
+export function SearchResults({ search, layout, onPlayVideo, onAddToQueue }: SearchResultsProps) {
   const visible = useVisibleSearchResults(search);
   const actions = useResultActions();
   const { filterType, isLoading, isFetchingNextPage, error, query } = search;
@@ -48,7 +51,7 @@ export function SearchResults({ search, onPlayVideo, onAddToQueue }: SearchResul
   if (!query) {
     return <SearchEmptyState title={getString('search_empty_title')} body={getString('search_empty_body')} />;
   }
-  if (isLoading && !hasAny) return <ResultsSkeleton filterType={filterType} />;
+  if (isLoading && !hasAny) return <ResultsSkeleton filterType={filterType} layout={layout} />;
   if (error && !hasAny) return <SearchEmptyState title={getString('search_error_title')} body={error} tone="error" />;
   if (!hasAny) {
     return <SearchEmptyState title={getString('search_no_results_title', query)} body={getString('search_no_results_body')} />;
@@ -62,6 +65,7 @@ export function SearchResults({ search, onPlayVideo, onAddToQueue }: SearchResul
       visible={visible}
       actions={actions}
       sentinelRef={sentinelRef}
+      layout={layout}
       onPlayVideo={onPlayVideo}
       onAddToQueue={onAddToQueue}
     />

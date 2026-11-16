@@ -53,6 +53,7 @@ import { isLocalMediaId } from '../../lib/localMediaId';
 import { alignToEnd, growFromPoint } from "../../lib/direction";
 import { VideoHoverPreview } from './VideoHoverPreview';
 import { continueFromPreview } from '../../lib/inlinePreviewHandoff';
+import { highlightTerms } from '../../lib/highlightTerms';
 
 export interface VideoCardProps {
   video: VideoSummary;
@@ -61,7 +62,7 @@ export interface VideoCardProps {
   onRemoveFromHistory?: (videoId: string) => void;
   onRemoveFromContinueWatching?: (videoId: string) => void;
   onRemoveFromLikes?: (videoId: string) => void;
-  variant?: 'default' | 'grid' | 'history' | 'continue' | 'list' | 'compact';
+  variant?: 'default' | 'grid' | 'history' | 'continue' | 'list' | 'compact' | 'search';
   hideChannelAvatar?: boolean;
   showDragHandle?: boolean;
   dragHandleProps?: React.ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -82,6 +83,8 @@ export interface VideoCardProps {
   onRemoveDownload?: () => void;
   /** Replaces the whole menu, for an item that isn't on YouTube. */
   menuActions?: MediaMenuAction[];
+  /** The search a `search` row answers; its words are bold in the description excerpt. */
+  searchQuery?: string;
 }
 
 /*
@@ -145,6 +148,7 @@ function VideoCardComponent({
   thumbnailOverlay,
   onRemoveDownload,
   menuActions: ownMenuActions,
+  searchQuery = '',
 }: VideoCardProps) {
   const navigate = useNavigate();
   const subscribe = useSubscriptionStore((s) => s.subscribe);
@@ -313,7 +317,8 @@ function VideoCardComponent({
   );
   const isHistoryCard = variant === 'history';
   const isContinueCard = variant === 'continue';
-  const isListVariant = variant === 'list';
+  const isSearchRow = variant === 'search';
+  const isListVariant = variant === 'list' || isSearchRow;
   const showWatchProgress = useAppSettingsStore((s) => s.values[SETTINGS.SHOW_WATCH_PROGRESS] !== 'false');
   const historyPercent = useWatchProgressPercent(video.id);
   // History and Continue Watching always show where you are; elsewhere the bar follows the switch.
@@ -790,13 +795,13 @@ function VideoCardComponent({
     return (
       <div
         ref={cardRef}
-        className={`group ${COLOR_WASH_HOST} flex w-full flex-row items-center gap-4 rounded-xl px-1 py-2`}
+        className={`group ${COLOR_WASH_HOST} flex w-full flex-row gap-4 rounded-xl px-1 py-2 ${isSearchRow ? 'items-start' : 'items-center'}`}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         onContextMenu={handleContextMenu}
       >
         <ColorWash active={isHovered} color={dominantColor} alpha={0.2} spread="row" />
-        {showDragHandle ? (
+        {isSearchRow ? null : showDragHandle ? (
           <button
             type="button"
             aria-label={getString('reorder_item', video.title)}
@@ -817,7 +822,7 @@ function VideoCardComponent({
         )}
 
         <div
-          className="relative aspect-video w-40 shrink-0 cursor-pointer overflow-hidden rounded-xl bg-chrome-zinc-900 sm:w-48"
+          className={`relative aspect-video shrink-0 cursor-pointer overflow-hidden rounded-xl bg-chrome-zinc-900 ${isSearchRow ? 'w-56 md:w-72 xl:w-[360px]' : 'w-40 sm:w-48'}`}
           onClick={play}
           {...tabClickProps}
         >
@@ -850,39 +855,80 @@ function VideoCardComponent({
           {showsProgressBar ? <ThumbnailWatchProgress percent={progressPercent} /> : null}
         </div>
 
-        <div className="flex min-w-0 flex-1 flex-col">
-          <h3
-            onClick={play}
-          {...tabClickProps}
-            style={titleClampStyle}
-            dir="auto"
-            className="cursor-pointer text-sm font-medium leading-snug text-chrome-neutral-100 transition-colors hover:text-[var(--color-primary)]"
-          >
-            {displayTitle}
-          </h3>
-          <button
-            type="button"
-            onClick={(e) => { void handleChannelNavigate(e); }}
-            className="mt-0.5 truncate text-start text-[13px] text-chrome-neutral-400 transition-colors hover:text-chrome-neutral-300"
-          >
-            <ChannelLabel name={byline} verified={video.isVerified} />
-          </button>
-          <div className="mt-0.5 text-[13px] text-chrome-neutral-500">
-            {showAddedDate && video.addedAtInPlaylist ? (
-              <span>
-                {getString("playlist_video_added_template", formatYouTubeRelativeTime(video.addedAtInPlaylist))}
-              </span>
-            ) : (
-              <>
-                {video.viewCountText && <bdi>{video.viewCountText}</bdi>}
-                {video.viewCountText && publishedText && <span className="mx-1">•</span>}
-                {publishedText && <bdi>{publishedText}</bdi>}
-              </>
+        {isSearchRow ? (
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5 pt-0.5">
+            <h3
+              onClick={play}
+              {...tabClickProps}
+              dir="auto"
+              className="line-clamp-2 cursor-pointer text-base font-medium leading-snug text-chrome-neutral-100 transition-colors hover:text-[var(--color-primary)]"
+            >
+              {displayTitle}
+            </h3>
+            <div className="text-[13px] tabular-nums text-chrome-neutral-400">
+              {video.viewCountText && <bdi>{video.viewCountText}</bdi>}
+              {video.viewCountText && publishedText && <span className="mx-1">•</span>}
+              {publishedText && <bdi>{publishedText}</bdi>}
+            </div>
+            <button
+              type="button"
+              onClick={(e) => { void handleChannelNavigate(e); }}
+              className="flex min-w-0 items-center gap-2 self-start rounded-full py-0.5 pe-1 text-start text-[13px] text-chrome-neutral-400 transition-colors hover:text-chrome-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              {isCollab ? (
+                <span className="-m-1.5 shrink-0 scale-[0.67]"><CollabAvatars collaborators={collaborators} /></span>
+              ) : (
+                <span className="h-6 w-6 shrink-0 overflow-hidden rounded-full bg-chrome-zinc-800">
+                  {resolvedAvatarUrl && <img src={resolvedAvatarUrl} alt="" className="h-full w-full object-cover" loading="lazy" />}
+                </span>
+              )}
+              <ChannelLabel name={byline} verified={video.isVerified} />
+            </button>
+            {video.snippet && (
+              <p dir="auto" className="line-clamp-2 max-w-3xl text-[13px] leading-relaxed text-chrome-neutral-400">
+                {highlightTerms(video.snippet, searchQuery).map((piece, index) =>
+                  piece.match ? <strong key={index} className="font-semibold text-chrome-neutral-200">{piece.text}</strong> : piece.text,
+                )}
+              </p>
             )}
+            {reasonLine && <p className="truncate text-[13px] text-chrome-neutral-500">{reasonLine}</p>}
+            <CardPills video={video} />
           </div>
-          {reasonLine && <p className="truncate text-[13px] text-chrome-neutral-500">{reasonLine}</p>}
-          <CardPills video={video} />
-        </div>
+        ) : (
+          <div className="flex min-w-0 flex-1 flex-col">
+            <h3
+              onClick={play}
+            {...tabClickProps}
+              style={titleClampStyle}
+              dir="auto"
+              className="cursor-pointer text-sm font-medium leading-snug text-chrome-neutral-100 transition-colors hover:text-[var(--color-primary)]"
+            >
+              {displayTitle}
+            </h3>
+            <button
+              type="button"
+              onClick={(e) => { void handleChannelNavigate(e); }}
+              className="mt-0.5 truncate text-start text-[13px] text-chrome-neutral-400 transition-colors hover:text-chrome-neutral-300"
+            >
+              <ChannelLabel name={byline} verified={video.isVerified} />
+            </button>
+            <div className="mt-0.5 text-[13px] text-chrome-neutral-500">
+              {showAddedDate && video.addedAtInPlaylist ? (
+                <span>
+                  {getString("playlist_video_added_template", formatYouTubeRelativeTime(video.addedAtInPlaylist))}
+                </span>
+              ) : (
+                <>
+                  {video.viewCountText && <bdi>{video.viewCountText}</bdi>}
+                  {video.viewCountText && publishedText && <span className="mx-1">•</span>}
+                  {publishedText && <bdi>{publishedText}</bdi>}
+                </>
+              )}
+            </div>
+            {reasonLine && <p className="truncate text-[13px] text-chrome-neutral-500">{reasonLine}</p>}
+            <CardPills video={video} />
+          </div>
+        )}
 
         <div className="relative shrink-0">
           <button
@@ -1043,7 +1089,7 @@ function VideoCardGate(props: VideoCardProps) {
     <BlockedVideoCard
       video={props.video}
       keyword={keyword}
-      listLayout={props.variant === 'list' || props.variant === 'compact'}
+      listLayout={props.variant === 'list' || props.variant === 'compact' || props.variant === 'search'}
     />
   );
 }

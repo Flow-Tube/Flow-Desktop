@@ -1,6 +1,7 @@
 import { useGridStyle } from '../../../lib/useGridColumns';
 import type { SearchCategory } from '../../../lib/useCombinedSearch';
 import { RESULT_GRID, cx } from './ResultParts';
+import type { SearchLayout } from './VideoResults';
 
 function ShimmerBlock({ className }: { className?: string }) {
   return <div className={cx('shimmer bg-surface-container-low', className)} />;
@@ -43,7 +44,26 @@ function SkeletonCardGrid({ shape, count }: { shape: 'square' | 'circle' | 'vide
   );
 }
 
-export function ResultsSkeleton({ filterType }: { filterType: SearchCategory }) {
+/** Search rows: a wide thumbnail beside the title, details and excerpt. */
+function SkeletonVideoRows({ count }: { count: number }) {
+  return (
+    <div className="flex flex-col gap-3">
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="flex items-start gap-4 px-1 py-2">
+          <ShimmerBlock className="aspect-video w-56 shrink-0 rounded-xl md:w-72 xl:w-[360px]" />
+          <div className="flex flex-1 flex-col gap-2.5 pt-1">
+            <ShimmerBlock className="h-4 w-3/4 rounded" />
+            <ShimmerBlock className="h-3 w-1/4 rounded" />
+            <ShimmerBlock className="h-3 w-1/5 rounded" />
+            <ShimmerBlock className="h-3 w-2/3 rounded" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function ResultsSkeleton({ filterType, layout }: { filterType: SearchCategory; layout: SearchLayout }) {
   switch (filterType) {
     case 'songs':
     case 'episodes':
@@ -51,7 +71,7 @@ export function ResultsSkeleton({ filterType }: { filterType: SearchCategory }) 
     case 'videos':
     case 'live':
     case 'movies':
-      return <SkeletonCardGrid shape="video" count={12} />;
+      return layout === 'list' ? <SkeletonVideoRows count={6} /> : <SkeletonCardGrid shape="video" count={12} />;
     case 'playlists':
       return <SkeletonCardGrid shape="video" count={8} />;
     case 'albums':

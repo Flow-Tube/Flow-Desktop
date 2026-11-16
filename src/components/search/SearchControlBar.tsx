@@ -1,9 +1,11 @@
 import { useRef, useState } from 'react';
-import { Music2, SlidersHorizontal, X } from 'lucide-react';
+import { LayoutGrid, List, Music2, SlidersHorizontal, X } from 'lucide-react';
 import { Chip } from '../ui/Chip';
 import { FilterSelect } from '../ui/FilterSelect';
+import { SegmentedControl } from '../ui/SegmentedControl';
 import { UnderlineTabs, type UnderlineTabGroup } from '../ui/UnderlineTabs';
 import { SearchFilterPanel } from './SearchFilterPanel';
+import type { SearchLayout } from './results/VideoResults';
 import { getString, type StringKey } from '../../lib/i18n/index';
 import { isCategoryOffered } from '../../lib/searchResults';
 import { activeFilters, SORT_OPTIONS } from '../../lib/searchFilterOptions';
@@ -21,6 +23,8 @@ interface SearchControlBarProps {
   onFiltersChange: (f: AdvancedFilters) => void;
   /** The music filters offered for this query; categories it leaves out are hidden. */
   offeredMusicFilters: string[] | null;
+  layout: SearchLayout;
+  onLayoutChange: (layout: SearchLayout) => void;
 }
 
 // Shorts second, as YouTube has it, so the tab people reach for most is never far.
@@ -50,6 +54,8 @@ export function SearchControlBar({
   filters,
   onFiltersChange,
   offeredMusicFilters,
+  layout,
+  onLayoutChange,
 }: SearchControlBarProps) {
   const shortsEnabled = useShortsEnabled();
   const musicEnabled = useMusicEnabled();
@@ -137,6 +143,18 @@ export function SearchControlBar({
 
             <div className="ms-auto flex items-center gap-2">
               <FilterSelect label={getString('search_sort_label')} value={sortBy} options={sortOptions} onChange={onSortChange} />
+              {filterType !== 'shorts' && (
+                <SegmentedControl
+                  iconOnly
+                  label={getString('search_layout_label')}
+                  value={layout}
+                  onChange={onLayoutChange}
+                  options={[
+                    { value: 'list', label: getString('search_layout_list'), icon: <List className="h-4 w-4" aria-hidden="true" /> },
+                    { value: 'grid', label: getString('search_layout_grid'), icon: <LayoutGrid className="h-4 w-4" aria-hidden="true" /> },
+                  ]}
+                />
+              )}
             </div>
           </div>
 

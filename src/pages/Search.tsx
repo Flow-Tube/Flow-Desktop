@@ -4,6 +4,9 @@ import { useCombinedSearch } from "../lib/useCombinedSearch";
 import { currentFilterState, useSearchFilterMemory } from "../lib/useSearchFilterMemory";
 import { SearchControlBar } from "../components/search/SearchControlBar";
 import { SearchResults } from "../components/search/SearchResults";
+import type { SearchLayout } from "../components/search/results/VideoResults";
+import { usePreference } from "../lib/usePreference";
+import { SETTINGS } from "../lib/settings/schema";
 
 interface SearchProps {
   onPlay: (video: VideoSummary) => void;
@@ -18,6 +21,8 @@ export function Search({ onPlay, onAddToQueue }: SearchProps) {
   const search = useCombinedSearch({ query });
   const changeFilters = useSearchFilterMemory(search, query);
   const state = currentFilterState(search);
+  const [storedLayout, setLayout] = usePreference(SETTINGS.SEARCH_RESULTS_LAYOUT);
+  const layout: SearchLayout = storedLayout === "grid" ? "grid" : "list";
 
   return (
     <div className="grow overflow-y-auto">
@@ -30,9 +35,12 @@ export function Search({ onPlay, onAddToQueue }: SearchProps) {
           filters={search.filters}
           onFiltersChange={(filters) => changeFilters({ ...state, filters })}
           offeredMusicFilters={search.offeredMusicFilters}
+          layout={layout}
+          onLayoutChange={setLayout}
         />
         <SearchResults
           search={{ ...search, setFilterType: (category) => changeFilters({ ...state, category }) }}
+          layout={layout}
           onPlayVideo={onPlay}
           onAddToQueue={onAddToQueue}
         />

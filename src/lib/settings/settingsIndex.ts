@@ -292,6 +292,7 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     { title: "settings_cache_lyrics", summary: "settings_cache_lyrics_desc", keywords: ["storage", "clear"] },
     { title: "settings_cache_network", summary: "settings_cache_network_desc", keywords: ["storage", "clear", "responses"] },
     { title: "settings_remote_signature_fallback", summary: "settings_remote_signature_fallback_desc" },
+    { title: "settings_prefer_ipv4", summary: "settings_prefer_ipv4_desc", keywords: ["ipv6", "bot", "sign in", "network"] },
     { title: "settings_enable_proxy", summary: "settings_enable_proxy_desc", keywords: ["vpn", "socks", "network"] },
     { title: "settings_proxy_protocol" },
     { title: "settings_proxy_host" },

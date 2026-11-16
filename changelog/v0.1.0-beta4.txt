@@ -276,6 +276,7 @@ SEARCH
 - Shorts strips and shelves such as "People also watched" now sit where YouTube places them among the results, and folded shelves open with Show more.
 - All opens with the top result beside the first songs. An artist there has Shuffle and Radio, which play the same queues as the artist page.
 - A channel found by your search shows its video count and verified tick, with Go to channel beside Subscribe.
+- Songs results are a numbered table with album and length columns.
 - Searching again from your history brings back the filters you used. Shorts is now its own tab, next to All.
 - New Unwatched and Watched filters, and 360, VR180, 3D and Location filters. A creator with recent uploads gets one card with their latest videos.
 

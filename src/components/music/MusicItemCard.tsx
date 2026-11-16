@@ -55,6 +55,10 @@ export type MusicItemCardProps = BaseProps &
         appendActions?: MusicMenuAction[];
         /** Replaces the whole menu, for a track that isn't on YouTube. */
         menuActions?: MusicMenuAction[];
+        /** Its place in a numbered list, shown before the artwork. */
+        position?: number;
+        /** Adds an album column, for a table with a header. */
+        showAlbum?: boolean;
       }
   );
 
@@ -536,9 +540,13 @@ function ListRow({
   menuActions: ownMenuActions,
   className,
   suspectedAi,
+  position,
+  showAlbum = false,
 }: {
   item: SongItem;
   suspectedAi: boolean;
+  position?: number;
+  showAlbum?: boolean;
   onPlay?: () => void;
   onNavigate?: () => void;
   appendActions?: MusicMenuAction[];
@@ -602,6 +610,9 @@ function ListRow({
       )}
     >
       <ColorWash active={isHighlighted} color={activeColor} radius="rounded-lg" spread="row" />
+      {position !== undefined && (
+        <span className="w-6 shrink-0 text-center text-sm tabular-nums text-chrome-neutral-500">{position}</span>
+      )}
       <div className="relative h-12 w-12 shrink-0">
         <Artwork
           src={item.thumbnail}
@@ -638,6 +649,12 @@ function ListRow({
           {subtitle && <span dir="auto" className="line-clamp-1 text-sm text-chrome-neutral-400">{subtitle}</span>}
         </span>
       </div>
+
+      {showAlbum && (
+        <span dir="auto" className="hidden w-[28%] shrink-0 truncate text-sm text-chrome-neutral-400 md:block">
+          {item.album?.name ?? ''}
+        </span>
+      )}
 
       <div className="relative h-8 w-24 shrink-0">
         <span className="absolute end-0 top-1/2 flex -translate-y-1/2 items-center gap-1.5 transition-opacity duration-200 ease-out group-hover:opacity-0">
@@ -808,6 +825,8 @@ export function MusicItemCard(props: MusicItemCardProps) {
           onNavigate={props.onNavigate}
           appendActions={props.appendActions}
           menuActions={props.menuActions}
+          position={props.position}
+          showAlbum={props.showAlbum}
           className={className}
         />
       );

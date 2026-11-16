@@ -1,373 +1,54 @@
 import React, { useState } from "react";
-import { ArchiveRestore, Upload, Check, AlertCircle, FolderHeart, Heart, History, Tv, Loader2, Brain, Database, FileText, SlidersHorizontal, StickyNote } from "lucide-react";
+import { Upload, Check, AlertCircle, FolderHeart, Heart, History, Tv, Loader2, Brain, Database, FileText, SlidersHorizontal, StickyNote } from "lucide-react";
 import { SettingsGroup } from "../components/settings/SettingsGroup";
 import { SettingItem } from "../components/settings/SettingItem";
 import { ToggleSwitch } from "../components/ui/ToggleSwitch";
-import { getSetting, setSetting, addWatchRecordsBulk } from "../lib/api/db";
-import { readBackupFile, type UnreadableReason } from "../lib/api/backup";
 import { pickFile } from "../lib/dialogs";
-import { useHistoryStore } from "../store/useHistoryStore";
-import { bootstrapFromHistory, bootstrapFromSubscriptions, importBrain } from "../lib/api/recommendation";
-import {
-  convertFlowNeuroBrainData,
-  extractFlowNeuroBrainCandidate,
-  isFlowNeuroBrainCandidate,
-} from "../lib/flowNeuroImport";
-import { useSubscriptionStore } from "../store/useSubscriptionStore";
-import { parseSubscriptionExport } from "../lib/api/youtube";
-import { getString, type StringKey } from "../lib/i18n/index";
-import {
-  extractBackupCollections,
-  importBackupCollections,
-  validateSettingsBackup,
-  type BackupCollections,
-} from "../lib/settings/backup";
-import { SETTINGS, SETTING_SCOPES, type SettingKey } from "../lib/settings/schema";
-import { setSettingValue } from "../store/useAppSettingsStore";
-import { refreshAfterRestore } from "../lib/backup/refreshAfterRestore";
-import { importFailureMessage, importReportSummary, runOtherAppImport } from "../lib/backup/otherAppImport";
+import { getString } from "../lib/i18n/index";
+import { IMPORT_EVERYTHING, IMPORT_FILE_EXTENSIONS, importFile, type ImportCounts, type ImportSelection, type ImportStage } from "../lib/backup/importFile";
 import { ImportSourceChooser } from "../components/import/ImportSourceChooser";
-import type { VideoSummary } from "../types/video";
-import type { WatchHistoryRecord } from "../types/db";
-import { isProfilesMaster, restoreMasterProfiles } from "../lib/settings/masterRestore";
-import { confirmAction } from "../lib/dialogs";
-import { profileDisplayName } from "../lib/profiles/display";
-import { useProfilesStore } from "../store/useProfilesStore";
-import { useUiStore } from "../store/useUiStore";
-import { activeProfile } from "../lib/storage/profileStorage";
-
-const UNREADABLE_MESSAGES: Record<UnreadableReason, StringKey> = {
-  too_large: "import_error_too_large",
-  no_backup: "import_error_no_backup",
-  damaged: "import_error_damaged",
-};
-
-interface ParseChannelResult { id: string; name: string; }
-interface LocalPlaylist { id: string; name: string; description?: string; tracks: VideoSummary[]; }
+import { ImportCountsList } from "../components/import/ImportCountsList";
 
 export const ImportData: React.FC = () => {
-  const [importSubs, setImportSubs] = useState(true);
-  const [importPlaylists, setImportPlaylists] = useState(true);
-  const [importHistory, setImportHistory] = useState(true);
-  const [importNeuro, setImportNeuro] = useState(true);
-  const [importSettings, setImportSettings] = useState(true);
-  const [importLikes, setImportLikes] = useState(true);
-  const [importNotes, setImportNotes] = useState(true);
-
-  const [importState, setImportState] = useState<"idle" | "reading" | "parsing" | "saving" | "success" | "error">("idle");
-  const showToast = useUiStore((state) => state.showToast);
+  const [selection, setSelection] = useState<ImportSelection>(IMPORT_EVERYTHING);
+  const [importState, setImportState] = useState<"idle" | ImportStage | "success" | "error">("idle");
   const [progress, setProgress] = useState(0);
   const [statusMessage, setStatusMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
-
-  const [subsCount, setSubsCount] = useState(0);
-  const [playlistsCount, setPlaylistsCount] = useState(0);
-  const [historyCount, setHistoryCount] = useState(0);
-  const [neuroCount, setNeuroCount] = useState(0);
-  const [settingsCount, setSettingsCount] = useState(0);
-  const [likesCount, setLikesCount] = useState(0);
-
-  const { subscribe } = useSubscriptionStore();
+  const [counts, setCounts] = useState<ImportCounts | null>(null);
 
   const handleCardClick = () => {
     if (["reading", "parsing", "saving"].includes(importState)) return;
     void pickAndImport();
   };
 
-  const extractChannelIdFromUrl = (url: string): string => {
-    if (!url) return "";
-    let id = "";
-    if (url.includes("/channel/")) { id = url.split("/channel/")[1] || ""; }
-    else if (url.includes("/@")) { id = url.split("/@")[1] || ""; }
-    else if (url.includes("/user/")) { id = url.split("/user/")[1] || ""; }
-    else { id = url; }
-    return (id.split("/")[0] || "").split("?")[0]?.trim() || "";
-  };
-
-  const parseJsonSubscriptions = (data: any): ParseChannelResult[] => {
-    const channels: ParseChannelResult[] = [];
-    let rawSubs: any[] = [];
-    if (Array.isArray(data)) { rawSubs = data; }
-    else if (data?.subscriptions && Array.isArray(data.subscriptions)) { rawSubs = data.subscriptions; }
-
-    for (const item of rawSubs) {
-      if (!item || typeof item !== "object") continue;
-      if (item.channelId && (item.channelName || item.name)) {
-        channels.push({ id: item.channelId.trim(), name: (item.channelName || item.name).trim() });
-      } else if (item.url && item.name) {
-        const id = extractChannelIdFromUrl(item.url);
-        if (id) channels.push({ id, name: item.name.trim() });
-      }
-    }
-
-    if (channels.length === 0 && data && typeof data === "object") {
-      const visited = new Set<any>();
-      const search = (obj: any) => {
-        if (!obj || typeof obj !== "object" || visited.has(obj)) return;
-        visited.add(obj);
-        if (Array.isArray(obj)) { for (const val of obj) search(val); return; }
-        const cId = obj.channelId || obj.id;
-        const cName = obj.channelName || obj.name || obj.title;
-        if (typeof cId === "string" && cId.startsWith("UC") && cId.length >= 20 && typeof cName === "string" && cName.length > 0) {
-          channels.push({ id: cId.trim(), name: cName.trim() });
-        } else { for (const key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) search(obj[key]); } }
-      };
-      search(data);
-    }
-
-    const seen = new Set<string>();
-    return channels.filter(ch => { if (seen.has(ch.id)) return false; seen.add(ch.id); return true; });
-  };
-
-  const parseJsonWatchHistory = (data: any): WatchHistoryRecord[] => {
-    if (!Array.isArray(data)) return [];
-    return data.filter((item: any) => item.titleUrl).map((item: any) => {
-      let videoId = "";
-      try { videoId = item.titleUrl.includes("v=") ? item.titleUrl.split("v=")[1]?.split("&")[0] : item.titleUrl.split("/").pop(); } catch { return null; }
-      if (!videoId || videoId.length < 10) return null;
-      return { videoId, title: item.title ? item.title.replace("Watched ", "").trim() : "Watched Video", channelName: item.subtitles?.[0]?.name || "YouTube Creator", watchDate: item.time || new Date().toISOString(), watchDurationSeconds: 0, totalDurationSeconds: 0 };
-    }).filter(Boolean) as WatchHistoryRecord[];
-  };
-
-  const parseFreeTubeWatchHistory = (text: string): WatchHistoryRecord[] => {
-    return text.split("\n").filter(l => l.trim()).map(line => {
-      try { const item = JSON.parse(line); if (!item.videoId) return null; return { videoId: item.videoId, title: item.title || "FreeTube Video", channelName: item.author || getString('settings_creator'), watchDate: item.timeWatched ? new Date(item.timeWatched).toISOString() : new Date().toISOString(), watchDurationSeconds: item.watchProgress ? Math.round((item.lengthSeconds || 0) * item.watchProgress) : 0, totalDurationSeconds: item.lengthSeconds || 0 }; } catch { return null; }
-    }).filter(Boolean) as WatchHistoryRecord[];
-  };
-
-  const parseHtmlWatchHistory = (html: string): WatchHistoryRecord[] => {
-    const records: WatchHistoryRecord[] = [];
-    const videoRegex = /href="https:\/\/www\.youtube\.com\/watch\?v=([\w-]{10,12})"[^>]*?>([^<]+)<\/a>/gi;
-    const channelRegex = /href="https:\/\/www\.youtube\.com\/channel\/([^"&\s>]+)"[^>]*?>([^<]+)<\/a>/gi;
-    const videoMatches: { index: number; id: string; title: string }[] = [];
-    const channelMatches: { index: number; name: string }[] = [];
-    let m;
-    while ((m = videoRegex.exec(html)) !== null) { if (m[1] && m[2]) videoMatches.push({ index: m.index, id: m[1], title: m[2] }); }
-    while ((m = channelRegex.exec(html)) !== null) { if (m[2]) channelMatches.push({ index: m.index, name: m[2] }); }
-    let ci = 0;
-    videoMatches.forEach((vid, i) => {
-      while (ci < channelMatches.length && (channelMatches[ci]?.index ?? 0) < vid.index) ci++;
-      const ch = channelMatches[ci];
-      records.push({ videoId: vid.id, title: vid.title, channelName: ch && (ch.index - vid.index < 1200) ? ch.name : "YouTube Creator", watchDate: new Date(Date.now() - i * 60000).toISOString(), watchDurationSeconds: 0, totalDurationSeconds: 0 });
-    });
-    return records;
-  };
-
   const pickAndImport = async () => {
-    const path = await pickFile(getString("import_select_file"), [{ name: getString("import_supported_formats_title"), extensions: ["zip", "json", "db", "xml", "opml", "csv", "txt", "html"] }]);
+    const path = await pickFile(getString("import_select_file"), [{ name: getString("import_supported_formats_title"), extensions: IMPORT_FILE_EXTENSIONS }]);
     if (!path) return;
-    setImportState("reading"); setProgress(15); setStatusMessage(getString("import_reading")); setErrorMessage("");
-    setSubsCount(0); setPlaylistsCount(0); setHistoryCount(0); setNeuroCount(0); setSettingsCount(0); setLikesCount(0);
-      try {
-        const read = await readBackupFile(path);
-        if (read.type === "unreadable") throw new Error(getString(UNREADABLE_MESSAGES[read.reason]));
-        if (read.type === "external") {
-          setImportState("saving"); setProgress(60); setStatusMessage(getString("import_writing"));
-          const outcome = await runOtherAppImport(read.kind, [path]);
-          if (outcome.type === "failed") throw new Error(importFailureMessage(outcome.reason));
-          setSubsCount(outcome.report.subscriptions);
-          setHistoryCount(outcome.report.history);
-          setPlaylistsCount(outcome.report.playlists);
-          setLikesCount(outcome.report.likes);
-          setProgress(100); setImportState("success");
-          showToast({ message: importReportSummary(outcome.report), variant: "success" });
-          return;
-        }
-        setImportState("parsing"); setProgress(40); setStatusMessage(getString("import_parsing"));
-        const text = read.type === "text" ? read.text : "{}";
-        let backupData: any = read.type === "backup" ? read.data : null;
-        if (!text?.trim()) throw new Error(getString("import_error_empty_backup"));
-        const trimmed = text.trim();
-        const isJson = trimmed.startsWith("{") || trimmed.startsWith("[");
-        const isHtml = trimmed.toLowerCase().includes("<html") || trimmed.toLowerCase().includes("<!doctype html");
-        if (isJson && !backupData) { try { backupData = JSON.parse(text); } catch { if (trimmed.includes("\n")) { backupData = { isFreeTubeHistory: true, rawText: text }; } else { throw new Error(getString("import_error_invalid_json")); } } }
-
-        setImportState("saving"); setProgress(60); setStatusMessage(getString("import_writing"));
-        let subbedCount = 0, playCount = 0, timelineCount = 0, importedSettingsCount = 0;
-
-        if (isJson && backupData && isProfilesMaster(backupData)) {
-          // Every profile in the backup: the ones not running are restored into their own
-          // databases; the running one continues through the import below.
-          setStatusMessage(getString("import_restoring_profiles"));
-          const { running, restoredElsewhere } = await restoreMasterProfiles(backupData);
-          backupData = { schemaVersion: 2, settings: running?.settings ?? {}, collections: running?.collections ?? {} };
-          if (restoredElsewhere > 0) {
-            showToast({ message: getString("import_profiles_restored", restoredElsewhere), variant: "success" });
-          }
-          void useProfilesStore.getState().load();
-        } else if (isJson && backupData?.scope === "MASTER") {
-          const profiles = useProfilesStore.getState().view;
-          const running = profiles?.profiles.find((profile) => profile.id === profiles.activeId);
-          if (profiles && running && profiles.profiles.length > 1) {
-            const proceed = await confirmAction({
-              title: getString("import_old_master_title", profileDisplayName(running)),
-              message: getString("import_old_master_body"),
-              icon: ArchiveRestore,
-              confirmLabel: getString("restore"),
-            });
-            if (!proceed) { setImportState("idle"); setProgress(0); return; }
-          }
-        }
-
-        const settingsBackup = isJson && backupData ? validateSettingsBackup(backupData) : null;
-        // Device settings (folders, proxy, quality, region) belong to the whole computer: only
-        // Default restores them, so restoring into another profile can't change them.
-        const restoresDeviceSettings = activeProfile().isDefault;
-        const settingsEntries = settingsBackup
-          ? (Object.entries(settingsBackup.settings) as [SettingKey, string][]).filter(
-              ([key]) => restoresDeviceSettings || SETTING_SCOPES[key] !== "device",
-            )
-          : [];
-        if (importSettings && settingsEntries.length > 0) {
-          setStatusMessage(getString("import_importing_settings", settingsEntries.length));
-          for (let i = 0; i < settingsEntries.length; i++) {
-            const entry = settingsEntries[i];
-            if (!entry) continue;
-            const [key, value] = entry;
-            if (await setSettingValue(key, value)) importedSettingsCount++;
-            setProgress(60 + Math.round((importedSettingsCount / settingsEntries.length) * 8));
-          }
-          setSettingsCount(importedSettingsCount);
-        }
-
-        // Flow v2 backup: restore the full-fidelity collections (watch history, brains,
-        // likes, playlists, subscriptions) through the backend sync apply pipeline. On
-        // failure fall back to the legacy fuzzy parsers below rather than aborting.
-        let restoredViaCollections = false;
-        const backupCollections = isJson && backupData ? extractBackupCollections(backupData) : null;
-        if (backupCollections) {
-          const collectionAllowed = (key: string): boolean => {
-            switch (key) {
-              case "watch_history":
-              case "recap_stats": return importHistory;
-              case "flow_neuro_brain":
-              case "music_brain": return importNeuro;
-              case "subscriptions":
-              case "subscription_channels": return importSubs;
-              case "playlists": return importPlaylists;
-              case "likes": return importLikes;
-              case "notes": return importNotes;
-              case "settings": return importSettings;
-              default: return false;
-            }
-          };
-          const selected: BackupCollections = {};
-          for (const [key, records] of Object.entries(backupCollections)) {
-            if (collectionAllowed(key)) selected[key] = records;
-          }
-          if (Object.keys(selected).length > 0) {
-            setStatusMessage(getString("import_restoring_collections"));
-            setProgress(68);
-            try {
-              const summary = await importBackupCollections(selected);
-              restoredViaCollections = true;
-              const restoredOf = (name: string) => {
-                const stat = summary.collections.find((s) => s.collection === name);
-                return stat ? stat.added + stat.updated : 0;
-              };
-              timelineCount = restoredOf("watch_history");
-              setHistoryCount(timelineCount);
-              subbedCount = restoredOf("subscription_channels") + restoredOf("subscriptions");
-              setSubsCount(subbedCount);
-              playCount = restoredOf("playlists");
-              setPlaylistsCount(playCount);
-              setLikesCount(restoredOf("likes"));
-              if (restoredOf("flow_neuro_brain") + restoredOf("music_brain") > 0) setNeuroCount(1);
-              setProgress(90);
-              await refreshAfterRestore();
-            } catch (err) {
-              console.error("Backend collection restore failed; falling back to legacy parsing", err);
-            }
-          }
-        }
-
-        let brainToImport: unknown | null = null;
-        if (isJson && backupData) brainToImport = extractFlowNeuroBrainCandidate(backupData);
-        if (importNeuro && brainToImport && isFlowNeuroBrainCandidate(brainToImport)) {
-          setStatusMessage(getString("import_importing_neuro"));
-          await importBrain(convertFlowNeuroBrainData(brainToImport));
-          setNeuroCount(1);
-        }
-
-        if (importSubs && !restoredViaCollections) {
-          let parsedSubs: ParseChannelResult[] = [];
-          if (isJson && backupData && !backupData.isFreeTubeHistory) parsedSubs = parseJsonSubscriptions(backupData);
-          else if (!isJson && !isHtml) { const arr = await parseSubscriptionExport(text); parsedSubs = arr.map(([id, name]) => ({ id, name })); }
-          if (parsedSubs.length > 0) {
-            setStatusMessage(getString("import_importing_subs", parsedSubs.length));
-            for (let i = 0; i < parsedSubs.length; i++) { const sub = parsedSubs[i]; if (sub) { await subscribe(sub.id, sub.name); subbedCount++; } setProgress(60 + Math.round((subbedCount / parsedSubs.length) * 15)); }
-            setSubsCount(subbedCount);
-            await bootstrapFromSubscriptions(parsedSubs.map((sub) => sub.name).filter(Boolean));
-          }
-        }
-
-        if (importPlaylists && !restoredViaCollections && isJson && backupData?.playlists && Array.isArray(backupData.playlists)) {
-          setStatusMessage(getString("import_restoring_playlists"));
-          const pj = await getSetting("user_playlists"); const existing: LocalPlaylist[] = pj ? JSON.parse(pj) : [];
-          const crossRefs = backupData.playlistVideos || []; const vids = backupData.videos || [];
-          const parsed: LocalPlaylist[] = backupData.playlists.map((pl: any) => {
-            const refs = crossRefs.filter((r: any) => r.playlistId === pl.id).sort((a: any, b: any) => (a.position || 0) - (b.position || 0));
-            const tracks: VideoSummary[] = refs.map((ref: any) => ({ ref, vid: vids.find((v: any) => v.id === ref.videoId) })).filter(({ vid }: any) => vid).map(({ ref, vid }: any) => ({ id: vid.id, title: vid.title, channelName: vid.channelName || getString('download_size_unknown'), thumbnailUrl: vid.thumbnailUrl || `https://i.ytimg.com/vi/${vid.id}/hqdefault.jpg`, durationSeconds: typeof vid.duration === "number" ? vid.duration : 0, publishedText: vid.uploadDate || "Uploaded recently", viewCountText: vid.viewCount ? `${vid.viewCount} views` : "Track", addedAtInPlaylist: ref.addedAt > 0 ? ref.addedAt : null }));
-            return { id: pl.id || `imported-${Date.now()}-${Math.random()}`, name: pl.name || "Imported Playlist", description: pl.description || "Imported from backup", tracks };
-          });
-          const merged = [...existing];
-          for (const np of parsed) { const ei = merged.findIndex(p => p.id === np.id || p.name === np.name); if (ei !== -1) { const ep = merged[ei]; if (ep) { const ids = new Set(ep.tracks.map(t => t.id)); ep.tracks = [...ep.tracks, ...np.tracks.filter(t => !ids.has(t.id))]; } } else { merged.push(np); } playCount++; }
-          await setSetting("user_playlists", JSON.stringify(merged));
-          setPlaylistsCount(playCount);
-        }
-
-        if (importHistory && !restoredViaCollections) {
-          let ph: WatchHistoryRecord[] = [];
-          if (isJson && backupData) { if (backupData.isFreeTubeHistory) ph = parseFreeTubeWatchHistory(backupData.rawText); else if (backupData.viewHistory && Array.isArray(backupData.viewHistory)) ph = backupData.viewHistory.map((item: any) => ({ videoId: item.videoId, title: item.title || "Watched Video", channelName: item.channelName || getString('download_size_unknown'), watchDate: typeof item.timestamp === "number" ? new Date(item.timestamp).toISOString() : new Date().toISOString(), watchDurationSeconds: item.position ? Math.round(item.position / 1000) : 0, totalDurationSeconds: item.duration ? Math.round(item.duration / 1000) : 0 })); else ph = parseJsonWatchHistory(backupData); }
-          else if (isHtml) ph = parseHtmlWatchHistory(text);
-          if (ph.length > 0) {
-            setStatusMessage(getString("import_importing_history", ph.length));
-            const valid = ph.filter(Boolean) as WatchHistoryRecord[];
-
-            const CHUNK = 500;
-            for (let i = 0; i < valid.length; i += CHUNK) {
-              const chunk = valid.slice(i, i + CHUNK);
-              await addWatchRecordsBulk(chunk);
-              timelineCount += chunk.length;
-              setProgress(75 + Math.round((timelineCount / valid.length) * 20));
-            }
-
-            await bootstrapFromHistory(valid.map((record) => ({
-              videoId: record.videoId,
-              title: record.title,
-              channelName: record.channelName ?? "",
-              channelId: record.channelId ?? null,
-              durationSeconds: record.totalDurationSeconds ?? null,
-              watchedAt: Date.parse(record.watchDate) || 0,
-              isMusic: Boolean(record.isMusic),
-            })));
-            setHistoryCount(timelineCount);
-            void useHistoryStore.getState().load(true);
-          }
-        }
-
-        // Defense against the Deep Flow restore trap: an imported active flag without its
-        // (internal, never-exported) activation timestamp would otherwise mute watch-history
-        // recording and FlowNeuro learning indefinitely.
-        await setSettingValue(SETTINGS.DEEP_FLOW_ACTIVE, "false");
-        await setSettingValue(SETTINGS.DEEP_FLOW_ACTIVATED_AT, "0");
-
-        if (subbedCount + playCount + timelineCount + importedSettingsCount === 0 && !restoredViaCollections && !(importNeuro && brainToImport)) {
-          throw new Error(getString("import_file_not_recognized"));
-        }
-
-        setProgress(100); setImportState("success");
-      } catch (err: any) { console.error("Import failure", err); setImportState("error"); setErrorMessage(err?.message || getString("import_file_not_recognized")); }
+    setErrorMessage("");
+    setCounts(null);
+    try {
+      const result = await importFile(path, selection, ({ stage, percent, message }) => {
+        setImportState(stage);
+        setProgress(percent);
+        setStatusMessage(message);
+      });
+      if (result.type === "cancelled") { setImportState("idle"); setProgress(0); return; }
+      setCounts(result.counts);
+      setImportState("success");
+    } catch (err: any) { console.error("Import failure", err); setImportState("error"); setErrorMessage(err?.message || getString("import_file_not_recognized")); }
   };
 
-  const toggleItems = [
-    { key: "settings", label: getString("import_settings"), desc: getString("import_settings_desc"), icon: <SlidersHorizontal size={16} />, checked: importSettings, toggle: () => setImportSettings(!importSettings) },
-    { key: "subs", label: getString("import_subscriptions"), desc: getString("import_subscriptions_desc"), icon: <Tv size={16} />, checked: importSubs, toggle: () => setImportSubs(!importSubs) },
-    { key: "playlists", label: getString("import_playlists"), desc: getString("import_playlists_desc"), icon: <FolderHeart size={16} />, checked: importPlaylists, toggle: () => setImportPlaylists(!importPlaylists) },
-    { key: "history", label: getString("import_watch_history"), desc: getString("import_watch_history_desc"), icon: <History size={16} />, checked: importHistory, toggle: () => setImportHistory(!importHistory) },
-    { key: "likes", label: getString("import_likes"), desc: getString("import_likes_desc"), icon: <Heart size={16} />, checked: importLikes, toggle: () => setImportLikes(!importLikes) },
-    { key: "notes", label: getString("import_notes"), desc: getString("import_notes_desc"), icon: <StickyNote size={16} />, checked: importNotes, toggle: () => setImportNotes(!importNotes) },
-    { key: "neuro", label: getString("import_neuro_profile"), desc: getString("import_neuro_profile_desc"), icon: <Brain size={16} />, checked: importNeuro, toggle: () => setImportNeuro(!importNeuro) },
+  const toggle = (key: keyof ImportSelection) => setSelection((current) => ({ ...current, [key]: !current[key] }));
+
+  const toggleItems: { key: keyof ImportSelection; label: string; desc: string; icon: React.ReactNode }[] = [
+    { key: "settings", label: getString("import_settings"), desc: getString("import_settings_desc"), icon: <SlidersHorizontal size={16} /> },
+    { key: "subscriptions", label: getString("import_subscriptions"), desc: getString("import_subscriptions_desc"), icon: <Tv size={16} /> },
+    { key: "playlists", label: getString("import_playlists"), desc: getString("import_playlists_desc"), icon: <FolderHeart size={16} /> },
+    { key: "history", label: getString("import_watch_history"), desc: getString("import_watch_history_desc"), icon: <History size={16} /> },
+    { key: "likes", label: getString("import_likes"), desc: getString("import_likes_desc"), icon: <Heart size={16} /> },
+    { key: "notes", label: getString("import_notes"), desc: getString("import_notes_desc"), icon: <StickyNote size={16} /> },
+    { key: "neuro", label: getString("import_neuro_profile"), desc: getString("import_neuro_profile_desc"), icon: <Brain size={16} /> },
   ];
 
   const formatItems = [
@@ -393,7 +74,7 @@ export const ImportData: React.FC = () => {
             <SettingsGroup title={getString("import_data_to_import")}>
               {toggleItems.map((item) => (
                 <SettingItem key={item.key} icon={item.icon} title={item.label} description={item.desc}>
-                  <ToggleSwitch checked={item.checked} onChange={item.toggle} />
+                  <ToggleSwitch checked={selection[item.key]} onChange={() => toggle(item.key)} />
                 </SettingItem>
               ))}
             </SettingsGroup>
@@ -442,14 +123,7 @@ export const ImportData: React.FC = () => {
                   <Check className="h-5 w-5 text-chrome-emerald-500" />
                 </div>
                 <h4 className="text-base font-medium text-chrome-neutral-200">{getString("import_complete")}</h4>
-                <div className="mx-auto max-w-xs space-y-1 text-xs text-chrome-neutral-400">
-                  {subsCount > 0 && <div className="flex justify-between rounded-lg bg-surface-container-high px-3 py-2"><span>{getString("import_subscriptions")}</span><span className="font-mono text-chrome-neutral-200">{subsCount}</span></div>}
-                  {playlistsCount > 0 && <div className="flex justify-between rounded-lg bg-surface-container-high px-3 py-2"><span>{getString("import_playlists")}</span><span className="font-mono text-chrome-neutral-200">{playlistsCount}</span></div>}
-                  {historyCount > 0 && <div className="flex justify-between rounded-lg bg-surface-container-high px-3 py-2"><span>{getString("import_watch_history")}</span><span className="font-mono text-chrome-neutral-200">{historyCount}</span></div>}
-                  {likesCount > 0 && <div className="flex justify-between rounded-lg bg-surface-container-high px-3 py-2"><span>{getString("import_likes")}</span><span className="font-mono text-chrome-neutral-200">{likesCount}</span></div>}
-                  {settingsCount > 0 && <div className="flex justify-between rounded-lg bg-surface-container-high px-3 py-2"><span>{getString("import_settings")}</span><span className="font-mono text-chrome-neutral-200">{settingsCount}</span></div>}
-                  {neuroCount > 0 && <div className="flex justify-between rounded-lg bg-surface-container-high px-3 py-2"><span>{getString("import_neuro_profile")}</span><span className="font-mono text-chrome-neutral-200">{getString("ok")}</span></div>}
-                </div>
+                {counts && <ImportCountsList counts={counts} />}
                 <p className="text-xs text-chrome-neutral-500">{getString("import_click_another")}</p>
               </div>
             )}

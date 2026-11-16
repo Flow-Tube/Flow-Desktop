@@ -2,6 +2,8 @@ import { useNavigate } from 'react-router-dom';
 import { VideoCard } from '../video/VideoCard';
 import { ShelfScroller } from '../ui/ShelfScroller';
 import { SubscribeButton } from '../ui/SubscribeButton';
+import { Button } from '../ui/Button';
+import { ChannelLabel } from '../video/CardMeta';
 import { upgradeAvatarUrl } from '../../lib/thumbnails';
 import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
 import { getString } from '../../lib/i18n/index';
@@ -21,7 +23,7 @@ export function SearchCreatorCard({ creator, onPlay, onAddToQueue }: SearchCreat
   const navigate = useNavigate();
   const avatar = useProxiedImageUrl(upgradeAvatarUrl(channel.avatarUrl));
   const open = () => navigate(`/channel/${channel.channelId}`);
-  const subtitle = joinIsolated([channel.handle, channel.subscriberCountText]);
+  const subtitle = joinIsolated([channel.handle, channel.subscriberCountText, channel.videoCountText]);
 
   return (
     <section className="flex flex-col gap-4 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5">
@@ -35,12 +37,17 @@ export function SearchCreatorCard({ creator, onPlay, onAddToQueue }: SearchCreat
             {avatar ? <img src={avatar} alt={channel.name} className="h-full w-full object-cover" loading="lazy" /> : null}
           </span>
           <span className="min-w-0">
-            <span dir="auto" className="line-clamp-1 text-base font-medium text-chrome-neutral-100">{channel.name}</span>
+            <span className="flex text-base font-medium text-chrome-neutral-100">
+              <ChannelLabel name={channel.name} verified={channel.isVerified} iconSize={15} />
+            </span>
             <span className="line-clamp-1 text-sm text-chrome-neutral-400">
               {subtitle || getString('search_role_channel')}
             </span>
           </span>
         </button>
+        <Button variant="tonal" size="sm" onClick={open} className="hidden sm:inline-flex">
+          {getString('search_go_to_channel')}
+        </Button>
         <SubscribeButton channelId={channel.channelId} channelName={channel.name} avatarUrl={channel.avatarUrl ?? undefined} />
       </div>
       <div className="flex flex-col gap-2">

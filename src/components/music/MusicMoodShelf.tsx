@@ -15,7 +15,7 @@ export function MusicMoodShelf({ title, moods, onOpen, onBrowse }: MusicMoodShel
   return (
     <section>
       <MusicSectionHeader title={title} onNavigate={onBrowse} />
-      <ShelfScroller className="grid auto-cols-[46%] grid-flow-col grid-rows-3 gap-2 snap-x px-3 -mx-3 pt-3 -mt-2 pb-4 sm:auto-cols-[31%] lg:auto-cols-[23.5%] xl:auto-cols-[18.8%]">
+      <ShelfScroller className="grid auto-cols-[46%] grid-flow-col grid-rows-3 gap-2 snap-x px-3 scroll-px-3 -mx-3 pt-3 -mt-2 pb-4 sm:auto-cols-[31%] lg:auto-cols-[23.5%] xl:auto-cols-[18.8%]">
         {moods.map((mood) => (
           <button
             key={`${mood.browseId}:${mood.params ?? ''}`}

@@ -61,7 +61,7 @@ export const LibraryShelf: React.FC<LibraryShelfProps> = ({
           </p>
         </div>
       ) : (
-        <ShelfScroller className="flex gap-4 snap-x px-3 -mx-3 pt-3 -mt-2 pb-4">
+        <ShelfScroller className="flex gap-4 snap-x px-3 scroll-px-3 -mx-3 pt-3 -mt-2 pb-4">
           {children}
         </ShelfScroller>
       )}

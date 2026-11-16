@@ -46,7 +46,7 @@ export const VideoShelf: React.FC<VideoShelfProps> = ({
         </div>
       ) : null}
 
-      <ShelfScroller className="flex gap-4 px-3 -mx-3 pt-3 -mt-2 pb-3 snap-x">
+      <ShelfScroller className="flex gap-4 px-3 scroll-px-3 -mx-3 pt-3 -mt-2 pb-3 snap-x">
         {videos.map((video, index) => (
           <div
             key={getVideoKey ? getVideoKey(video, index) : `${video.id}-${index}`}

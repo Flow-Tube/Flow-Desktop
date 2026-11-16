@@ -135,6 +135,8 @@ function categoryToMusicFilter(category: SearchCategory): string {
 
 type FetchMode = 'reset' | 'next';
 
+const FILTER_SETTLE_MS = 400;
+
 // --- Hook -----------------------------------------------------------------
 
 export function useCombinedSearch(
@@ -390,19 +392,27 @@ export function useCombinedSearch(
     [setNext],
   );
 
-  useEffect(() => {
-    void execute('reset');
-  }, [
+  // Filter clicks settle before searching, so picking three features sends one request, not three.
+  const settledFilters = useDebounce(filters, FILTER_SETTLE_MS);
+  const requestKey = JSON.stringify([
     debouncedQuery,
     filterType,
     sortBy,
     filters.uploadDate,
     filters.duration,
-    filters.features,
+    [...filters.features].sort(),
     exact,
     musicEnabled,
-    execute,
   ]);
+  const lastRequestRef = useRef<string | null>(null);
+  useEffect(() => {
+    // A past search restores its tab and filters together; the settled copy then catches up to
+    // what already ran.
+    if (requestKey === lastRequestRef.current) return;
+    lastRequestRef.current = requestKey;
+    void execute('reset');
+    // `requestKey` is read, not watched, so a filter change waits for `settledFilters`.
+  }, [debouncedQuery, filterType, sortBy, settledFilters, exact, musicEnabled, execute]);
 
   const fetchNextPage = useCallback(() => {
     void execute('next');
@@ -411,6 +421,7 @@ export function useCombinedSearch(
   const refetch = useCallback(() => {
     void execute('reset');
   }, [execute]);
+
 
   const searchExactly = useCallback(() => setExactQuery(queryRef.current), []);
 

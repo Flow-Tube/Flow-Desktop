@@ -58,7 +58,7 @@ export function FilterSelect<T extends string>({
         onClick={toggle}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-chrome-neutral-800 bg-surface-container-high px-3 text-sm text-neutral-00 transition-colors duration-200 ease-out hover:bg-surface-container-highest focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
+        className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-chrome-neutral-800 bg-surface-container-high px-3 text-sm text-chrome-neutral-100 transition-colors duration-200 ease-out hover:bg-surface-container-highest focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
       >
         {label && <span className="text-chrome-neutral-500">{label}:</span>}
         <span className="font-medium">{current?.label}</span>

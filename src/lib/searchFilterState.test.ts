@@ -27,6 +27,13 @@ describe("search filter state", () => {
     expect(sanitizeFilterState(null)).toBeUndefined();
   });
 
+  it("opens an old Videos search filtered to movies on the Movies tab", () => {
+    const state = sanitizeFilterState({ category: "videos", filters: { contentType: "movie", duration: "long" } });
+    expect(state?.category).toBe("movies");
+    expect(state?.filters).toEqual({ ...DEFAULT_SEARCH_FILTER_STATE.filters, duration: "long" });
+    expect(sanitizeFilterState({ category: "videos", filters: { contentType: "video" } })?.category).toBe("videos");
+  });
+
   it("drops a Shorts search only while Shorts are hidden", () => {
     const shorts = { ...DEFAULT_SEARCH_FILTER_STATE, category: "shorts" as const };
     expect(availableWith(shorts, false).category).toBe("all");

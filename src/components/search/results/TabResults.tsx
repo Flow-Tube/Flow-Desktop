@@ -9,6 +9,7 @@ import { ChannelShortsGrid } from '../../channel/ChannelGrids';
 import { SearchCorrectionLine } from '../SearchCorrectionLine';
 import { SearchCreatorCard } from '../SearchCreatorCard';
 import { getString } from '../../../lib/i18n/index';
+import { VIDEO_FILTER_CATEGORIES } from '../../../lib/searchFilterState';
 import { useGridStyle } from '../../../lib/useGridColumns';
 import type { UseCombinedSearchReturn } from '../../../lib/useCombinedSearch';
 import type { VisibleSearchResults } from '../../../lib/useVisibleSearchResults';
@@ -35,7 +36,7 @@ export function TabResults({ search, visible, actions, sentinelRef, onPlayVideo,
 
   return (
     <div className="pb-12">
-      {(filterType === 'videos' || filterType === 'live' || filterType === 'shorts') && (
+      {VIDEO_FILTER_CATEGORIES.has(filterType) && (
         <SearchCorrectionLine correction={r.correction} exact={search.exact} onSearchExactly={search.searchExactly} />
       )}
 
@@ -46,7 +47,7 @@ export function TabResults({ search, visible, actions, sentinelRef, onPlayVideo,
         </>
       )}
 
-      {filterType === 'videos' && (
+      {(filterType === 'videos' || filterType === 'movies') && (
         <div className="flex flex-col gap-8">
           {creator && <SearchCreatorCard creator={creator} onPlay={onPlayVideo} onAddToQueue={onAddToQueue} />}
           {r.channels.length > 0 && (

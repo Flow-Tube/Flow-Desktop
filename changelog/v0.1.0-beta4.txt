@@ -269,7 +269,9 @@ HOME
 - Hover Previews, in Settings > Content & UI, previews a video while you rest the pointer on its card. Frames shows still frames. Video plays it in the card, muted with captions, with buttons to unmute and turn captions off, and a bar to seek with frame previews. Clicking the card carries on from there. It is off by default, because Flow asks YouTube for each video you rest on.
 
 SEARCH
-- Searching again from your history brings back the filters you used. Shorts is now its own chip, next to All.
+- Result types are now tabs. YouTube Music's Songs, Albums, Podcasts and Episodes follow after a divider, and the tab row stays visible as you scroll.
+- Movies has its own tab, replacing the Type filter on Videos. A past search filtered to movies opens on it.
+- Searching again from your history brings back the filters you used. Shorts is now its own tab, next to All.
 - New Unwatched, Watched and Recently uploaded chips, and 360, VR180, 3D and Location filters. A creator with recent uploads gets one card with their latest videos.
 
 NOTIFICATIONS

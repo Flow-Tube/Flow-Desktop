@@ -37,6 +37,7 @@ export type SearchCategory =
   | 'playlists'
   | 'artists' // "Artists / Channels"
   | 'live'
+  | 'movies'
   | 'podcasts'
   | 'episodes';
 
@@ -52,7 +53,6 @@ export interface AdvancedFilters {
   uploadDate: 'any' | 'hour' | 'today' | 'week' | 'month' | 'year';
   /** short = under 3 min, medium = 3 to 20 min, long = over 20 min. */
   duration: 'any' | 'short' | 'medium' | 'long';
-  contentType: 'any' | 'video' | 'movie';
   /** Every selected feature must hold. */
   features: SearchFeatureFilter[];
   watchState: SearchWatchState;
@@ -282,7 +282,7 @@ export function useCombinedSearch(
           return;
         }
 
-        if (category === 'videos' || category === 'live') {
+        if (category === 'videos' || category === 'live' || category === 'movies') {
           const isLive = category === 'live';
           const pageToken = mode === 'next' ? ytTokenRef.current : null;
           const adv = filtersRef.current;
@@ -292,7 +292,7 @@ export function useCombinedSearch(
             sortBy: sortRef.current,
             uploadDate: adv.uploadDate,
             duration: adv.duration,
-            contentType: adv.contentType === 'any' ? null : adv.contentType,
+            contentType: category === 'movies' ? 'movie' : null,
             features: isLive ? ['live', ...adv.features] : adv.features,
             exact: exactRef.current,
           });
@@ -398,7 +398,6 @@ export function useCombinedSearch(
     sortBy,
     filters.uploadDate,
     filters.duration,
-    filters.contentType,
     filters.features,
     exact,
     musicEnabled,

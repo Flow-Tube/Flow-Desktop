@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { pairCreator, withWatchState, withoutAiMusic, withoutHidden, withoutShorts } from './searchResults';
+import { VIDEO_FILTER_CATEGORIES } from './searchFilterState';
 import { useShortsEnabled } from './useShortsContent';
 import { useWatchedVideoIds } from './useWatchedFilter';
 import { useAiHidesChannel, useAiListMatcher } from './aiList/useAiList';
@@ -15,7 +16,7 @@ export function useVisibleSearchResults(search: UseCombinedSearchReturn) {
   const dismissedVideoIds = useFeedActionsStore((s) => s.dismissedVideoIds);
   const blockedChannelIds = useFeedActionsStore((s) => s.blockedChannelIds);
   const shortsEnabled = useShortsEnabled();
-  const watchFilterApplies = search.filterType === 'videos' || search.filterType === 'shorts' || search.filterType === 'live';
+  const watchFilterApplies = VIDEO_FILTER_CATEGORIES.has(search.filterType);
   const watchState = watchFilterApplies ? search.filters.watchState : 'any';
   const watchedIds = useWatchedVideoIds(watchState !== 'any');
   const hidesAsAi = useAiHidesChannel();

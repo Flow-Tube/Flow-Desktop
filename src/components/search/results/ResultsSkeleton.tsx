@@ -50,6 +50,7 @@ export function ResultsSkeleton({ filterType }: { filterType: SearchCategory }) 
       return <SkeletonRows count={10} />;
     case 'videos':
     case 'live':
+    case 'movies':
       return <SkeletonCardGrid shape="video" count={12} />;
     case 'playlists':
       return <SkeletonCardGrid shape="video" count={8} />;

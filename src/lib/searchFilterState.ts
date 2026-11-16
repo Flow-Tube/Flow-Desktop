@@ -10,7 +10,6 @@ export interface SearchFilterState {
 export const DEFAULT_ADVANCED_FILTERS: AdvancedFilters = {
   uploadDate: "any",
   duration: "any",
-  contentType: "any",
   features: [],
   watchState: "any",
 };
@@ -28,7 +27,6 @@ export function isDefaultFilterState(state: SearchFilterState): boolean {
     state.sortBy === "relevance" &&
     filters.uploadDate === "any" &&
     filters.duration === "any" &&
-    filters.contentType === "any" &&
     filters.features.length === 0 &&
     filters.watchState === "any"
   );
@@ -37,14 +35,17 @@ export function isDefaultFilterState(state: SearchFilterState): boolean {
 /** A stored entry from an older or newer build: what is missing takes its default. */
 export function sanitizeFilterState(raw: unknown): SearchFilterState | undefined {
   if (typeof raw !== "object" || raw === null) return undefined;
-  const stored = raw as Partial<SearchFilterState>;
+  const stored = raw as { category?: SearchCategory; sortBy?: SearchSortBy; filters?: Partial<AdvancedFilters> & { contentType?: string } };
+  // Builds before the Movies tab kept movies as a Type filter on Videos.
+  const { contentType, ...filters } = stored.filters ?? {};
+  const category = stored.category === "videos" && contentType === "movie" ? "movies" : stored.category;
   return {
-    category: stored.category ?? "all",
+    category: category ?? "all",
     sortBy: stored.sortBy ?? "relevance",
     filters: {
       ...DEFAULT_ADVANCED_FILTERS,
-      ...stored.filters,
-      features: Array.isArray(stored.filters?.features) ? stored.filters.features : [],
+      ...filters,
+      features: Array.isArray(filters.features) ? filters.features : [],
     },
   };
 }
@@ -61,3 +62,6 @@ export function availableWith(state: SearchFilterState, shortsEnabled: boolean, 
     || (!musicEnabled && MUSIC_ONLY_CATEGORIES.has(state.category));
   return hidden ? { ...state, category: "all" } : state;
 }
+
+/** The tabs YouTube's video search answers, where the upload, length, feature and watched filters apply. */
+export const VIDEO_FILTER_CATEGORIES: ReadonlySet<SearchCategory> = new Set(["videos", "shorts", "live", "movies"]);

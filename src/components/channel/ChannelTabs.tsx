@@ -1,6 +1,7 @@
 import React from "react";
 import { X } from "lucide-react";
 import { SearchInput } from "../ui/SearchInput";
+import { UnderlineTabs } from "../ui/UnderlineTabs";
 import { getString, type StringKey } from "../../lib/i18n/index";
 import type { ChannelTab } from "../../types/video";
 
@@ -43,24 +44,17 @@ export const ChannelTabs: React.FC<ChannelTabsProps> = ({
   <div className="sticky top-0 z-40 w-full border-b border-chrome-neutral-800 bg-background">
     <div className="mx-auto px-4 sm:px-6 lg:px-8">
       <div className="flex h-14 items-center justify-between gap-4 overflow-x-auto">
-        <div className="flex h-full items-center space-x-8">
-          {tabs.map((tab) => {
-            const isActive = activeKind === tab.kind;
-            return (
-              <button
-                key={tab.kind}
-                type="button"
-                onClick={() => onTabChange(tab)}
-                className={`relative h-full whitespace-nowrap py-6 text-sm font-semibold transition-colors ${
-                  isActive ? "text-[var(--color-primary)]" : "text-chrome-neutral-400 hover:text-chrome-neutral-100"
-                }`}
-              >
-                {tabLabel(tab)}
-                {isActive && <div className="absolute bottom-0 start-0 end-0 h-0.5 bg-[var(--color-primary)]" />}
-              </button>
-            );
-          })}
-        </div>
+        <UnderlineTabs
+          fill
+          className="min-w-0"
+          label={getString("channel_tabs_label")}
+          groups={[{ key: "tabs", tabs: tabs.map((tab) => ({ key: tab.kind, label: tabLabel(tab) })) }]}
+          active={activeKind}
+          onChange={(kind) => {
+            const tab = tabs.find((candidate) => candidate.kind === kind);
+            if (tab) onTabChange(tab);
+          }}
+        />
 
         <div className="flex shrink-0 items-center gap-1">
           <SearchInput

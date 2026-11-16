@@ -14,6 +14,11 @@ import type {
   VideoSummary,
 } from '../types/video';
 
+/** The destination a link to Explore asks for (`/explore?d=gaming`), if it is one. */
+export function exploreDestinationFrom(value: string | null): ExploreDestinationId | undefined {
+  return EXPLORE_DESTINATIONS.find((destination) => destination.id === value)?.id;
+}
+
 export const EXPLORE_DESTINATIONS: { id: ExploreDestinationId; labelKey: StringKey }[] = [
   { id: 'live', labelKey: 'explore_category_live' },
   { id: 'gaming', labelKey: 'explore_category_gaming' },
@@ -54,8 +59,8 @@ const pageCache = new Map<string, { page: ExplorePage; at: number }>();
  * Explore's destinations, as Flow for Android shows them: a destination's shelves, its category
  * tabs (News has several), and a shelf's full grid behind "See all", paged on demand.
  */
-export function useExplore() {
-  const [destination, setDestination] = useState<ExploreDestinationId>('live');
+export function useExplore(initialDestination: ExploreDestinationId = 'live') {
+  const [destination, setDestination] = useState<ExploreDestinationId>(initialDestination);
   const [tab, setTab] = useState<ExploreTab | null>(null);
   const [page, setPage] = useState<ExplorePage | null>(null);
   const [loading, setLoading] = useState(true);

@@ -279,6 +279,8 @@ SEARCH
 - Songs results are a numbered table with album and length columns.
 - Past searches in the search box show the filters they bring back, such as Videos · This week, and Show all lists the rest of your history. Tab puts a suggestion in the box so you can keep typing.
 - A pasted YouTube or YouTube Music link shows what Enter will open. A link Flow can't open says so, and Enter searches for it as text.
+- The search page with nothing typed shows your recent searches with their filters, Explore's categories, and YouTube Music's moods and genres.
+- A failed search says why, such as a bot check or a dropped connection, and has Retry, as does a page of results that failed to load. When filters leave nothing, they show beside Clear filters.
 - Searching again from your history brings back the filters you used. Shorts is now its own tab, next to All.
 - New Unwatched and Watched filters, and 360, VR180, 3D and Location filters. A creator with recent uploads gets one card with their latest videos.
 

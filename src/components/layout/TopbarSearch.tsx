@@ -20,7 +20,7 @@ import { useMusicEnabled } from '../../lib/useMusicContent';
 import { useSearchHistoryStore, useVisibleSearchHistory } from '../../store/useSearchHistoryStore';
 import { useSettingsSearchStore } from '../../store/useSettingsSearchStore';
 import type { SearchFilterState } from '../../lib/searchFilterState';
-import { useUiStore } from '../../store/useUiStore';
+import { useRunSearch } from '../../lib/useRunSearch';
 
 const SHORTCUT_LABEL = IS_MACOS_RUNTIME ? '⌘K' : 'Ctrl K';
 
@@ -33,11 +33,11 @@ export function TopbarSearch() {
   const setSettingsQuery = useSettingsSearchStore((s) => s.setQuery);
   const clearSettingsQuery = useSettingsSearchStore((s) => s.clearQuery);
 
-  const setSearchQuery = useUiStore((s) => s.setSearchQuery);
   const region = useAppSettingsStore((s) => s.values[SETTINGS.TRENDING_REGION]);
   const history = useVisibleSearchHistory();
   const suggestionsEnabled = useAppSettingsStore((s) => s.values[SETTINGS.SEARCH_SUGGESTIONS_ENABLED] !== 'false');
   const recordSearch = useSearchHistoryStore((s) => s.record);
+  const runSearch = useRunSearch();
   const removeSearch = useSearchHistoryStore((s) => s.remove);
   const clearHistory = useSearchHistoryStore((s) => s.clear);
   const playQueue = useMusicPlayerStore((s) => s.playQueue);
@@ -75,6 +75,12 @@ export function TopbarSearch() {
   const panelVisible = !isSettingsPage && open && (rows.length > 0 || isUnsupportedLink(text));
   const currentValue = isSettingsPage ? settingsQuery : text;
 
+  // The box shows the search on screen, including one run from elsewhere or reached with Back.
+  const shownQuery = location.pathname === '/search' ? new URLSearchParams(location.search).get('q') ?? '' : null;
+  useEffect(() => {
+    if (shownQuery !== null) setText(shownQuery);
+  }, [shownQuery]);
+
   // A changed row set invalidates whatever row the keyboard was on.
   useEffect(() => setActiveKey(null), [rows]);
 
@@ -111,11 +117,9 @@ export function TopbarSearch() {
   };
 
   const runTextSearch = (query: string, searchFilters?: SearchFilterState) => {
-    recordSearch(query);
     setText(query);
-    setSearchQuery(query);
     close();
-    navigate(`/search?q=${encodeURIComponent(query)}`, searchFilters ? { state: { searchFilters } } : undefined);
+    runSearch(query, searchFilters);
   };
 
   const pick = (row: SuggestionRow) => {

@@ -7,7 +7,8 @@ import { IconButton } from '../components/ui/IconButton';
 import { Select } from '../components/ui/Select';
 import { VideoGrid } from '../components/video/VideoGrid';
 import { getString } from '../lib/i18n/index';
-import { EXPLORE_DESTINATIONS, shelvesWithShorts, useExplore } from '../lib/useExplore';
+import { EXPLORE_DESTINATIONS, exploreDestinationFrom, shelvesWithShorts, useExplore } from '../lib/useExplore';
+import { useSearchParams } from 'react-router-dom';
 import { useShortsEnabled, videosWithShorts } from '../lib/useShortsContent';
 import { useInfiniteScroll } from '../lib/useInfiniteScroll';
 import { REGION_OPTIONS } from '../lib/regionOptions';
@@ -22,7 +23,8 @@ type ExploreCategoriesProps = {
 const SHELF_PREVIEW = 8;
 
 export default function ExploreCategories({ onPlay, onAddToQueue }: ExploreCategoriesProps) {
-  const explore = useExplore();
+  const [searchParams] = useSearchParams();
+  const explore = useExplore(exploreDestinationFrom(searchParams.get('d')));
   const { page, loading, error, seeAll, region } = explore;
   const shortsEnabled = useShortsEnabled();
   const shelves = useMemo(() => shelvesWithShorts(page?.shelves ?? [], shortsEnabled), [page, shortsEnabled]);

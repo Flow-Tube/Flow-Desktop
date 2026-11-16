@@ -3,6 +3,7 @@ import { Loader2 } from 'lucide-react';
 import { ChannelCard } from '../../channel/ChannelCard';
 import { VideoGrid } from '../../video/VideoGrid';
 import { getString } from '../../../lib/i18n/index';
+import { Button } from '../../ui/Button';
 import type { PlaylistItem } from '../../../types/music';
 import type { PlaylistSummary, SearchChannel, SearchShelf, VideoSummary } from '../../../types/video';
 
@@ -82,11 +83,19 @@ export function VideoShelves({
   );
 }
 
-/** The point that loads the next page once it scrolls into view, with a spinner while it loads. */
-export function LoadMore({ sentinelRef, loading }: { sentinelRef: Ref<HTMLDivElement>; loading: boolean }) {
+/** The point that loads the next page once it scrolls into view, a spinner while it loads, and Retry when it failed. */
+export function LoadMore({ sentinelRef, loading, failed, onRetry }: { sentinelRef: Ref<HTMLDivElement>; loading: boolean; failed: boolean; onRetry: () => void }) {
   return (
     <>
       <div ref={sentinelRef} className="h-10" />
+      {failed && !loading && (
+        <div className="flex items-center justify-center gap-3 border-t border-outline-variant py-4 text-sm text-chrome-neutral-400">
+          {getString('search_more_failed')}
+          <Button variant="tonal" size="sm" onClick={onRetry}>
+            {getString('player_error_retry')}
+          </Button>
+        </div>
+      )}
       {loading && (
         <div className="flex items-center justify-center py-6 text-chrome-neutral-500">
           <Loader2 className="h-5 w-5 animate-spin" />

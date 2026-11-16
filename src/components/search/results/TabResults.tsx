@@ -32,7 +32,9 @@ export function TabResults({ search, visible, actions, sentinelRef, layout, onPl
   const wideGridStyle = useGridStyle();
   const { creator, results: r } = visible;
   const { filterType } = search;
-  const more = <LoadMore sentinelRef={sentinelRef} loading={search.isFetchingNextPage} />;
+  const more = (
+    <LoadMore sentinelRef={sentinelRef} loading={search.isFetchingNextPage} failed={Boolean(search.error)} onRetry={search.fetchNextPage} />
+  );
 
   return (
     <div className="pb-12">

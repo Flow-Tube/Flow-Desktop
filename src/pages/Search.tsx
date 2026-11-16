@@ -4,6 +4,7 @@ import { useCombinedSearch } from "../lib/useCombinedSearch";
 import { currentFilterState, useSearchFilterMemory } from "../lib/useSearchFilterMemory";
 import { SearchControlBar } from "../components/search/SearchControlBar";
 import { SearchResults } from "../components/search/SearchResults";
+import { SearchHome } from "../components/search/SearchHome";
 import type { SearchLayout } from "../components/search/results/VideoResults";
 import { usePreference } from "../lib/usePreference";
 import { SETTINGS } from "../lib/settings/schema";
@@ -27,23 +28,30 @@ export function Search({ onPlay, onAddToQueue }: SearchProps) {
   return (
     <div className="grow overflow-y-auto">
       <div className="mx-auto w-full max-w-400 px-8 pb-20">
-        <SearchControlBar
-          filterType={search.filterType}
-          onFilterChange={(category) => changeFilters({ ...state, category })}
-          sortBy={search.sortBy}
-          onSortChange={(sortBy) => changeFilters({ ...state, sortBy })}
-          filters={search.filters}
-          onFiltersChange={(filters) => changeFilters({ ...state, filters })}
-          offeredMusicFilters={search.offeredMusicFilters}
-          layout={layout}
-          onLayoutChange={setLayout}
-        />
-        <SearchResults
-          search={{ ...search, setFilterType: (category) => changeFilters({ ...state, category }) }}
-          layout={layout}
-          onPlayVideo={onPlay}
-          onAddToQueue={onAddToQueue}
-        />
+        {query.trim() ? (
+          <>
+            <SearchControlBar
+              filterType={search.filterType}
+              onFilterChange={(category) => changeFilters({ ...state, category })}
+              sortBy={search.sortBy}
+              onSortChange={(sortBy) => changeFilters({ ...state, sortBy })}
+              filters={search.filters}
+              onFiltersChange={(filters) => changeFilters({ ...state, filters })}
+              offeredMusicFilters={search.offeredMusicFilters}
+              layout={layout}
+              onLayoutChange={setLayout}
+            />
+            <SearchResults
+              search={{ ...search, setFilterType: (category) => changeFilters({ ...state, category }) }}
+              layout={layout}
+              onFiltersChange={(filters) => changeFilters({ ...state, filters })}
+              onPlayVideo={onPlay}
+              onAddToQueue={onAddToQueue}
+            />
+          </>
+        ) : (
+          <SearchHome />
+        )}
       </div>
     </div>
   );

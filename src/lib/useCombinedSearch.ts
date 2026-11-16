@@ -5,7 +5,7 @@ import {
   searchMusicContinuation,
   searchMusicTyped,
 } from './api/music';
-import { getBackendErrorMessage } from './api/errors';
+import { normalizeBackendError, type BackendApiError } from './api/errors';
 import { useDebounce } from './useDebounce';
 import {
   bucketMusicSections,
@@ -81,9 +81,13 @@ export interface UseCombinedSearchReturn {
   exact: boolean;
   searchExactly: () => void;
   isLoading: boolean;
+  /** The query or filters changed and their search hasn't been sent yet. */
+  isSettling: boolean;
   isFetchingNextPage: boolean;
   hasNextPage: boolean;
   error: string | null;
+  /** The failure's `AppError` kind ("botCheckRequired", "rateLimited", "network", …). */
+  errorKind: string | null;
   fetchNextPage: () => void;
   refetch: () => void;
 }
@@ -152,7 +156,8 @@ export function useCombinedSearch(
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingNextPage, setIsFetchingNextPage] = useState(false);
   const [hasNextPage, setHasNextPage] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<BackendApiError | null>(null);
+  const setError = useCallback((reason: unknown) => setFailure(reason === null ? null : normalizeBackendError(reason)), []);
   // The music filters YouTube Music offered, and the query it offered them for.
   const [offered, setOffered] = useState<{ query: string; filters: string[] } | null>(null);
 
@@ -217,6 +222,7 @@ export function useCombinedSearch(
         fetchingRef.current = false;
       } else {
         fetchingRef.current = true;
+        setError(null);
         setIsFetchingNextPage(true);
       }
 
@@ -251,7 +257,7 @@ export function useCombinedSearch(
           );
 
           if (ytRes.status === 'rejected' && (!music || musicRes.status === 'rejected')) {
-            setError(getBackendErrorMessage(ytRes.reason));
+            setError(ytRes.reason);
           }
           return;
         }
@@ -367,7 +373,7 @@ export function useCombinedSearch(
           );
 
           if ((!music || musicR.status === 'rejected') && ytR.status === 'rejected') {
-            setError(getBackendErrorMessage(ytR.reason));
+            setError(ytR.reason);
           }
           return;
         }
@@ -380,7 +386,7 @@ export function useCombinedSearch(
         const b = bucketMusicSections(res.sections);
         setResults(mergeMusicBucket(emptyResults(), category, b));
       } catch (err) {
-        if (alive()) setError(getBackendErrorMessage(err));
+        if (alive()) setError(err);
       } finally {
         if (alive()) {
           setIsLoading(false);
@@ -389,7 +395,7 @@ export function useCombinedSearch(
         }
       }
     },
-    [setNext],
+    [setNext, setError],
   );
 
   // Filter clicks settle before searching, so picking three features sends one request, not three.
@@ -405,6 +411,8 @@ export function useCombinedSearch(
     musicEnabled,
   ]);
   const lastRequestRef = useRef<string | null>(null);
+  const filtersKey = (f: AdvancedFilters) => JSON.stringify([f.uploadDate, f.duration, [...f.features].sort()]);
+  const isSettling = query.trim() !== debouncedQuery || filtersKey(filters) !== filtersKey(settledFilters);
   useEffect(() => {
     // A past search restores its tab and filters together; the settled copy then catches up to
     // what already ran.
@@ -445,9 +453,11 @@ export function useCombinedSearch(
     exact,
     searchExactly,
     isLoading,
+    isSettling,
     isFetchingNextPage,
     hasNextPage,
-    error,
+    error: failure?.message ?? null,
+    errorKind: failure?.kind ?? null,
     fetchNextPage,
     refetch,
   };

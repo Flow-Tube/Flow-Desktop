@@ -18,6 +18,20 @@ import type {
 } from '../types/music';
 import type { AiListMatcher } from './aiList/matcher';
 
+/** A block among the video results: after the video with this id, or before them all when null. */
+export interface Placed {
+  afterId: string | null;
+  /** Its place among the blocks of its page, in the order they arrived. */
+  blockIndex?: number;
+}
+
+export type PlacedShelf = SearchShelf & Placed;
+
+export interface PlacedShortsShelf extends Placed {
+  title: string | null;
+  shorts: ShortVideoSummary[];
+}
+
 export type TopResult =
   | { kind: 'artist'; item: ArtistItem }
   | { kind: 'channel'; item: SearchChannel }
@@ -33,8 +47,10 @@ export interface CombinedSearchResults {
   channels: SearchChannel[];
   /** Shorts from the results' Shorts grids. */
   shorts: ShortVideoSummary[];
+  /** The same Shorts, strip by strip, where YouTube put them among the videos. */
+  shortsShelves: PlacedShortsShelf[];
   /** "Latest from …" and other titled runs of videos. */
-  shelves: SearchShelf[];
+  shelves: PlacedShelf[];
   /** Playlists from a YouTube playlist search, beside the YouTube Music ones in `playlists`. */
   videoPlaylists: PlaylistSummary[];
   albums: AlbumItem[];
@@ -95,6 +111,9 @@ export function withoutHidden(results: CombinedSearchResults, hidden: SearchExcl
     live: visible(results.live),
     shorts: visible(results.shorts),
     channels: results.channels.filter((channel) => !hidesChannel(channel.channelId, channel.handle)),
+    shortsShelves: results.shortsShelves
+      .map((shelf) => ({ ...shelf, shorts: visible(shelf.shorts) }))
+      .filter((shelf) => shelf.shorts.length > 0),
     shelves: results.shelves
       .map((shelf) => ({ ...shelf, videos: visible(shelf.videos) }))
       .filter((shelf) => shelf.videos.length > 0),
@@ -118,6 +137,9 @@ export function withWatchState(
     videos: kept(results.videos),
     live: kept(results.live),
     shorts: kept(results.shorts),
+    shortsShelves: results.shortsShelves
+      .map((shelf) => ({ ...shelf, shorts: kept(shelf.shorts) }))
+      .filter((shelf) => shelf.shorts.length > 0),
     shelves: results.shelves
       .map((shelf) => ({ ...shelf, videos: kept(shelf.videos) }))
       .filter((shelf) => shelf.videos.length > 0),
@@ -132,6 +154,7 @@ export function withoutShorts(results: CombinedSearchResults): CombinedSearchRes
   return {
     ...results,
     shorts: [],
+    shortsShelves: [],
     videos: longForm(results.videos),
     live: longForm(results.live),
     shelves: results.shelves
@@ -180,6 +203,7 @@ export function emptyResults(): CombinedSearchResults {
     live: [],
     channels: [],
     shorts: [],
+    shortsShelves: [],
     shelves: [],
     videoPlaylists: [],
     albums: [],
@@ -237,13 +261,43 @@ export function dedupe<T>(items: T[], key: (item: T) => string): T[] {
   });
 }
 
-/** The YouTube side of a page of results, as the result sections hold it. */
-export function videoSections(response: SearchVideosResponse) {
+const asShort = (short: Omit<ShortVideoSummary, 'type'>): ShortVideoSummary => ({ ...short, type: 'short' });
+
+/** What earlier pages already showed, for a page that continues them. */
+export interface EarlierPages {
+  lastVideoId: string | null;
+  videoIds: ReadonlySet<string>;
+  shortIds: ReadonlySet<string>;
+}
+
+/**
+ * The YouTube side of a page of results, as the result sections hold it. Each shelf is tied to the
+ * last new video before it: a video an earlier page already showed keeps its old place, so a shelf
+ * tied to it would jump up the list. One with no new video before it follows the earlier pages.
+ * Shorts an earlier strip showed are left out, and strips left empty go.
+ */
+export function videoSections(response: SearchVideosResponse, earlier?: EarlierPages) {
+  const items = response.items;
+  const anchor = (afterIndex?: number): string | null => {
+    for (let index = Math.min(afterIndex ?? items.length, items.length) - 1; index >= 0; index -= 1) {
+      const id = items[index]?.id;
+      if (id && !earlier?.videoIds.has(id)) return id;
+    }
+    return earlier?.lastVideoId ?? null;
+  };
   return {
-    videos: response.items,
+    videos: items,
     channels: response.channels ?? [],
-    shorts: (response.shorts ?? []).map((short): ShortVideoSummary => ({ ...short, type: 'short' })),
-    shelves: response.shelves ?? [],
+    shorts: (response.shorts ?? []).map(asShort),
+    shortsShelves: (response.shortsShelves ?? [])
+      .map((shelf): PlacedShortsShelf => ({
+        title: shelf.title ?? null,
+        shorts: shelf.shorts.filter((short) => !earlier?.shortIds.has(short.id)).map(asShort),
+        afterId: anchor(shelf.afterIndex),
+        blockIndex: shelf.blockIndex,
+      }))
+      .filter((shelf) => shelf.shorts.length > 0),
+    shelves: (response.shelves ?? []).map((shelf): PlacedShelf => ({ ...shelf, afterId: anchor(shelf.afterIndex) })),
     videoPlaylists: (response.playlists ?? []).map((playlist): PlaylistSummary => ({ ...playlist, type: 'playlist' })),
     correction: response.correction ?? null,
   };
@@ -319,4 +373,34 @@ export function isCategoryOffered(category: string, offered: string[] | null): b
   const filters = OFFERABLE[category];
   if (!filters || !offered || offered.length === 0) return true;
   return filters.some((filter) => offered.includes(filter));
+}
+
+/** A run of videos between two blocks, or one of the blocks. */
+export type PlacedRow<B> = { kind: 'videos'; videos: VideoSummary[] } | { kind: 'block'; block: B };
+
+/**
+ * Lays blocks out among the videos the way YouTube ordered them. `order` is every video id as it
+ * arrived, before any filtering, so a block whose video is hidden keeps its place after the one
+ * before it.
+ */
+export function placeAmongVideos<B extends Placed>(order: string[], videos: VideoSummary[], blocks: B[]): PlacedRow<B>[] {
+  const rank = new Map(order.map((id, index) => [id, index]));
+  const positionOf = (block: B) => {
+    if (block.afterId === null) return 0;
+    const at = rank.get(block.afterId);
+    if (at === undefined) return videos.length;
+    return videos.filter((video) => (rank.get(video.id) ?? Infinity) <= at).length;
+  };
+  const placed = blocks
+    .map((block, index) => ({ block, index, position: positionOf(block) }))
+    .sort((a, b) => a.position - b.position || (a.block.blockIndex ?? a.index) - (b.block.blockIndex ?? b.index));
+  const rows: PlacedRow<B>[] = [];
+  let from = 0;
+  for (const { block, position } of placed) {
+    if (position > from) rows.push({ kind: 'videos', videos: videos.slice(from, position) });
+    rows.push({ kind: 'block', block });
+    from = Math.max(from, position);
+  }
+  if (from < videos.length) rows.push({ kind: 'videos', videos: videos.slice(from) });
+  return rows;
 }

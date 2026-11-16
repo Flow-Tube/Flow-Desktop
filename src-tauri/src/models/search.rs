@@ -49,6 +49,24 @@ pub struct SearchChannel {
 pub struct SearchShelf {
     pub title: String,
     pub videos: Vec<VideoSummary>,
+    /// How many of the page's `items` came before it, so it can sit where the site put it.
+    pub after_index: usize,
+    /// How many videos the site shows before "Show more", when it folds the shelf.
+    pub collapsed_count: Option<usize>,
+    /// Its place among the page's shelves and strips, in the order the site sent them.
+    pub block_index: usize,
+}
+
+/// A strip of Shorts inside the results.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchShortsShelf {
+    pub title: Option<String>,
+    pub shorts: Vec<ShortVideoSummary>,
+    /// How many of the page's `items` came before it.
+    pub after_index: usize,
+    /// Its place among the page's shelves and strips, in the order the site sent them.
+    pub block_index: usize,
 }
 
 /// The site's spelling correction: results already shown for `query` (with a
@@ -88,7 +106,9 @@ pub struct SearchVideosResponse {
     pub source: String,
     pub channels: Vec<SearchChannel>,
     pub playlists: Vec<PlaylistSummary>,
+    /// Every Short on the page, from all its strips.
     pub shorts: Vec<ShortVideoSummary>,
+    pub shorts_shelves: Vec<SearchShortsShelf>,
     pub shelves: Vec<SearchShelf>,
     pub correction: Option<SearchCorrection>,
 }

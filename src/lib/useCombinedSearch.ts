@@ -298,18 +298,25 @@ export function useCombinedSearch(
           });
           if (!alive()) return;
 
-          const page = videoSections(res);
           ytTokenRef.current = res.nextPageToken ?? null;
           setNext(Boolean(res.nextPageToken));
           setResults((prev) => {
             if (mode === 'next') {
               const key = isLive ? 'live' : 'videos';
+              const page = videoSections(res, {
+                lastVideoId: prev[key][prev[key].length - 1]?.id ?? null,
+                videoIds: new Set(prev[key].map((video) => video.id)),
+                shortIds: new Set(prev.shorts.map((short) => short.id)),
+              });
               return {
                 ...prev,
                 [key]: dedupe([...prev[key], ...page.videos], (v) => v.id),
                 shorts: dedupe([...prev.shorts, ...page.shorts], (v) => v.id),
+                shortsShelves: [...prev.shortsShelves, ...page.shortsShelves],
+                shelves: [...prev.shelves, ...page.shelves],
               };
             }
+            const page = videoSections(res);
             return isLive
               ? { ...emptyResults(), live: page.videos, correction: page.correction }
               : { ...emptyResults(), ...page };

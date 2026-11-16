@@ -8,13 +8,15 @@ use crate::api::innertube::json::thumbnail::{largest_url, normalize_youtube_imag
 use crate::api::innertube::renderers::lockup::{lockup_item, related_to_video};
 use crate::api::innertube::renderers::video::video_from_renderer;
 use crate::errors::{AppError, AppResult};
-use crate::models::channel::PlaylistSummary;
+use crate::models::channel::{PlaylistSummary, ShortVideoSummary};
 use crate::models::search::{
-    SearchChannel, SearchCorrection, SearchShelf, SearchSuggestion, SearchVideosRequest,
-    SearchVideosResponse, SuggestionEntity,
+    SearchChannel, SearchCorrection, SearchShelf, SearchShortsShelf, SearchSuggestion,
+    SearchVideosRequest, SearchVideosResponse, SuggestionEntity,
 };
+use crate::models::video::VideoSummary;
 use base64::Engine;
 use serde_json::Value;
+use std::collections::HashSet;
 
 fn custom_url_encode(s: &str) -> String {
     let mut encoded = String::new();
@@ -203,59 +205,113 @@ fn correction(renderer: &Value, applied: bool) -> Option<SearchCorrection> {
     })
 }
 
-fn read_items(items: &[Value], page: &mut SearchVideosResponse) {
-    for item in items {
-        if let Some(inner) = item["itemSectionRenderer"]["contents"].as_array() {
-            read_items(inner, page);
-        } else if let Some(video) = item.get("videoRenderer").and_then(video_from_renderer) {
-            page.items.push(video);
-        } else if let Some(channel) = item.get("channelRenderer").and_then(search_channel) {
-            page.channels.push(channel);
-        } else if let Some(lockup) = item.get("lockupViewModel").and_then(lockup_item) {
-            if lockup.item_type == "video" {
-                page.items.push(related_to_video(lockup));
-            } else if let Some(playlist_id) = lockup.playlist_id.clone() {
-                page.playlists.push(PlaylistSummary {
-                    id: playlist_id,
-                    title: lockup.title,
-                    thumbnail_url: lockup.thumbnail_url,
-                    video_count_text: lockup.view_count_text,
-                });
+/// A page as it is read: duplicates are dropped as they arrive, so a shelf's
+/// position counts only the videos that stay.
+struct PageReader {
+    page: SearchVideosResponse,
+    seen_items: HashSet<String>,
+    seen_shorts: HashSet<String>,
+    blocks: usize,
+}
+
+impl PageReader {
+    fn next_block(&mut self) -> usize {
+        self.blocks += 1;
+        self.blocks - 1
+    }
+
+    fn push_video(&mut self, video: VideoSummary) {
+        if self.seen_items.insert(video.id.clone()) {
+            self.page.items.push(video);
+        }
+    }
+
+    fn push_shorts(
+        &mut self,
+        title: Option<String>,
+        found: impl Iterator<Item = ShortVideoSummary>,
+    ) {
+        let shorts: Vec<_> = found
+            .filter(|short| self.seen_shorts.insert(short.id.clone()))
+            .collect();
+        if shorts.is_empty() {
+            return;
+        }
+        self.page.shorts.extend(shorts.iter().cloned());
+        let block_index = self.next_block();
+        self.page.shorts_shelves.push(SearchShortsShelf {
+            title,
+            shorts,
+            after_index: self.page.items.len(),
+            block_index,
+        });
+    }
+
+    fn read(&mut self, items: &[Value]) {
+        for item in items {
+            if let Some(inner) = item["itemSectionRenderer"]["contents"].as_array() {
+                self.read(inner);
+            } else if let Some(video) = item.get("videoRenderer").and_then(video_from_renderer) {
+                self.push_video(video);
+            } else if let Some(channel) = item.get("channelRenderer").and_then(search_channel) {
+                self.page.channels.push(channel);
+            } else if let Some(lockup) = item.get("lockupViewModel").and_then(lockup_item) {
+                if lockup.item_type == "video" {
+                    self.push_video(related_to_video(lockup));
+                } else if let Some(playlist_id) = lockup.playlist_id.clone() {
+                    self.page.playlists.push(PlaylistSummary {
+                        id: playlist_id,
+                        title: lockup.title,
+                        thumbnail_url: lockup.thumbnail_url,
+                        video_count_text: lockup.view_count_text,
+                    });
+                }
+            } else if let Some(shelf) = item.get("shelfRenderer") {
+                self.read_shelf(shelf);
+            } else if let Some(grid) = item.get("gridShelfViewModel") {
+                let title = text_of(&grid["header"]["sectionHeaderViewModel"]["headline"]);
+                let shorts = grid["contents"].as_array().into_iter().flatten();
+                self.push_shorts(title, shorts.filter_map(short_video_summary_from_item));
+            } else if let Some(shelf) = item.get("reelShelfRenderer") {
+                let shorts = shelf["items"].as_array().into_iter().flatten();
+                self.push_shorts(
+                    text_of(&shelf["title"]),
+                    shorts.filter_map(short_video_summary_from_item),
+                );
+            } else if let Some(renderer) = item.get("showingResultsForRenderer") {
+                self.page.correction = correction(renderer, true).or(self.page.correction.take());
+            } else if let Some(renderer) = item.get("didYouMeanRenderer") {
+                self.page.correction = correction(renderer, false).or(self.page.correction.take());
+            } else if self.page.next_page_token.is_none() {
+                self.page.next_page_token = continuation_token(item);
             }
-        } else if let Some(shelf) = item.get("shelfRenderer") {
-            let content = &shelf["content"];
-            let videos: Vec<_> = content["verticalListRenderer"]["items"]
-                .as_array()
-                .or_else(|| content["horizontalListRenderer"]["items"].as_array())
-                .into_iter()
-                .flatten()
-                .filter_map(|entry| entry.get("videoRenderer").and_then(video_from_renderer))
-                .collect();
-            if let Some(title) = text_of(&shelf["title"]).filter(|_| !videos.is_empty()) {
-                page.shelves.push(SearchShelf { title, videos });
-            }
-        } else if let Some(grid) = item.get("gridShelfViewModel") {
-            page.shorts.extend(
-                grid["contents"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .filter_map(short_video_summary_from_item),
-            );
-        } else if let Some(shelf) = item.get("reelShelfRenderer") {
-            page.shorts.extend(
-                shelf["items"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .filter_map(short_video_summary_from_item),
-            );
-        } else if let Some(renderer) = item.get("showingResultsForRenderer") {
-            page.correction = correction(renderer, true).or(page.correction.take());
-        } else if let Some(renderer) = item.get("didYouMeanRenderer") {
-            page.correction = correction(renderer, false).or(page.correction.take());
-        } else if page.next_page_token.is_none() {
-            page.next_page_token = continuation_token(item);
+        }
+    }
+
+    fn read_shelf(&mut self, renderer: &Value) {
+        let content = &renderer["content"];
+        let list = &content["verticalListRenderer"];
+        let videos: Vec<_> = list["items"]
+            .as_array()
+            .or_else(|| content["horizontalListRenderer"]["items"].as_array())
+            .into_iter()
+            .flatten()
+            .filter_map(|entry| entry.get("videoRenderer").and_then(video_from_renderer))
+            .collect();
+        if let Some(title) = text_of(&renderer["title"]).filter(|_| !videos.is_empty()) {
+            let collapsed_count = list["collapsedItemCount"]
+                .as_u64()
+                .or_else(|| list["collapsedItemCount"].as_str()?.parse().ok())
+                .and_then(|count| usize::try_from(count).ok())
+                .filter(|count| *count > 0 && *count < videos.len());
+            let block_index = self.next_block();
+            self.page.shelves.push(SearchShelf {
+                title,
+                videos,
+                after_index: self.page.items.len(),
+                collapsed_count,
+                block_index,
+            });
         }
     }
 }
@@ -263,16 +319,21 @@ fn read_items(items: &[Value], page: &mut SearchVideosResponse) {
 /// A page of search results: the first, or a continuation.
 #[must_use]
 pub fn parse_innertube_search(val: &Value) -> SearchVideosResponse {
-    let mut page = SearchVideosResponse {
-        source: "innertube".to_string(),
-        ..SearchVideosResponse::default()
+    let mut reader = PageReader {
+        page: SearchVideosResponse {
+            source: "innertube".to_string(),
+            ..SearchVideosResponse::default()
+        },
+        seen_items: HashSet::new(),
+        seen_shorts: HashSet::new(),
+        blocks: 0,
     };
     if let Some(sections) =
         val["contents"]["twoColumnSearchResultsRenderer"]["primaryContents"]["sectionListRenderer"]
             ["contents"]
             .as_array()
     {
-        read_items(sections, &mut page);
+        reader.read(sections);
     }
     for key in ["onResponseReceivedCommands", "onResponseReceivedActions"] {
         for command in val[key].as_array().into_iter().flatten() {
@@ -282,15 +343,11 @@ pub fn parse_innertube_search(val: &Value) -> SearchVideosResponse {
                     command["reloadContinuationItemsCommand"]["continuationItems"].as_array()
                 });
             if let Some(items) = items {
-                read_items(items, &mut page);
+                reader.read(items);
             }
         }
     }
-    let mut seen = std::collections::HashSet::new();
-    page.items.retain(|video| seen.insert(video.id.clone()));
-    let mut seen = std::collections::HashSet::new();
-    page.shorts.retain(|short| seen.insert(short.id.clone()));
-    page
+    reader.page
 }
 
 impl InnertubeClient {
@@ -503,6 +560,68 @@ mod tests {
             page.items.is_empty(),
             "shelf videos and Shorts stay out of the video list"
         );
+    }
+
+    #[test]
+    fn shelves_and_shorts_strips_keep_their_place_among_the_videos() {
+        let video = |id: &str| serde_json::json!({ "videoRenderer": { "videoId": id, "title": { "runs": [{ "text": id }] } } });
+        let short = |id: &str| {
+            serde_json::json!({ "shortsLockupViewModel": {
+            "onTap": { "innertubeCommand": { "reelWatchEndpoint": { "videoId": id } } },
+            "overlayMetadata": { "primaryText": { "content": id } }
+        } })
+        };
+        let val = serde_json::json!({
+            "contents": { "twoColumnSearchResultsRenderer": { "primaryContents": {
+                "sectionListRenderer": { "contents": [{ "itemSectionRenderer": { "contents": [
+                    video("video000001"),
+                    video("video000002"),
+                    { "gridShelfViewModel": {
+                        "header": { "sectionHeaderViewModel": { "headline": { "content": "Shorts" } } },
+                        "contents": [short("short000001"), short("short000002")]
+                    } },
+                    video("video000002"),
+                    video("video000003"),
+                    { "shelfRenderer": {
+                        "title": { "simpleText": "People also watched" },
+                        "content": { "verticalListRenderer": {
+                            "collapsedItemCount": 2,
+                            "items": [video("shelf000001"), video("shelf000002"), video("shelf000003")]
+                        } }
+                    } },
+                    { "reelShelfRenderer": { "items": [short("short000002"), short("short000003")] } }
+                ] } }] }
+            } } }
+        });
+        let page = parse_innertube_search(&val);
+        let ids: Vec<_> = page.items.iter().map(|v| v.id.as_str()).collect();
+        assert_eq!(ids, ["video000001", "video000002", "video000003"]);
+        assert_eq!(page.shorts_shelves.len(), 2);
+        assert_eq!(page.shorts_shelves[0].after_index, 2);
+        assert_eq!(page.shorts_shelves[0].title.as_deref(), Some("Shorts"));
+        let second: Vec<_> = page.shorts_shelves[1]
+            .shorts
+            .iter()
+            .map(|s| s.id.as_str())
+            .collect();
+        assert_eq!(
+            second,
+            ["short000003"],
+            "a Short shown once is not repeated"
+        );
+        assert_eq!(page.shorts.len(), 3);
+        assert_eq!(
+            page.shelves[0].after_index, 3,
+            "the repeated video does not count"
+        );
+        assert_eq!(page.shelves[0].collapsed_count, Some(2));
+        let order: Vec<_> = [
+            page.shorts_shelves[0].block_index,
+            page.shelves[0].block_index,
+            page.shorts_shelves[1].block_index,
+        ]
+        .into();
+        assert_eq!(order, [0, 1, 2], "blocks keep the order they arrived in");
     }
 
     #[test]

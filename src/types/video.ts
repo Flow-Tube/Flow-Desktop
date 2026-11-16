@@ -361,6 +361,22 @@ export interface SearchChannel {
 export interface SearchShelf {
   title: string;
   videos: VideoSummary[];
+  /** How many of its page's videos came before it. */
+  afterIndex?: number;
+  /** How many videos show before "Show more", when YouTube folds the shelf. */
+  collapsedCount?: number | null;
+  /** Its place among its page's shelves and strips, in the order they arrived. */
+  blockIndex?: number;
+}
+
+/** A strip of Shorts inside the results. */
+export interface SearchShortsShelf {
+  title?: string | null;
+  shorts: Omit<ShortVideoSummary, "type">[];
+  /** How many of its page's videos came before it. */
+  afterIndex: number;
+  /** Its place among its page's shelves and strips, in the order they arrived. */
+  blockIndex?: number;
 }
 
 /** One autocomplete row; well-known people, places and things carry a knowledge card. */
@@ -391,6 +407,8 @@ export interface SearchVideosResponse {
   playlists?: Omit<PlaylistSummary, "type">[];
   shorts?: Omit<ShortVideoSummary, "type">[];
   shelves?: SearchShelf[];
+  /** Each Shorts strip on its own; `shorts` holds all of them. */
+  shortsShelves?: SearchShortsShelf[];
   correction?: SearchCorrection | null;
 }
 

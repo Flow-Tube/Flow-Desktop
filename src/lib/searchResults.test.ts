@@ -6,6 +6,7 @@ import {
   isCategoryOffered,
   pairCreator,
   pickTopResult,
+  placeAmongVideos,
   videoSections,
   withWatchState,
   withoutAiMusic,
@@ -19,7 +20,28 @@ import type { SearchChannel, VideoSummary } from '../types/video';
 
 const channel = (channelId: string): SearchChannel => ({ channelId, name: channelId, isVerified: false });
 
+const v = (id: string): VideoSummary => ({ id, title: id, channelName: 'C' });
+
 describe('videoSections', () => {
+  it('ties each shelf to the video before it, or to the previous page for one that opens it', () => {
+    const sections = videoSections(
+      {
+        items: [v('a'), v('b')],
+        source: 'innertube',
+        shelves: [
+          { title: 'First', videos: [v('x')], afterIndex: 0 },
+          { title: 'Middle', videos: [v('y')], afterIndex: 1 },
+          { title: 'Past the end', videos: [v('z')], afterIndex: 9 },
+        ],
+        shortsShelves: [{ title: null, shorts: [{ id: 's', title: 's' }], afterIndex: 2 }],
+      },
+      { lastVideoId: 'last-of-page-one', videoIds: new Set(), shortIds: new Set() },
+    );
+    expect(sections.shelves.map((shelf) => shelf.afterId)).toEqual(['last-of-page-one', 'a', 'b']);
+    expect(sections.shortsShelves[0]).toMatchObject({ afterId: 'b', title: null });
+    expect(sections.shortsShelves[0]?.shorts[0]?.type).toBe('short');
+  });
+
   it('tags Shorts and playlists for the cards that render them', () => {
     const sections = videoSections({
       items: [],
@@ -80,8 +102,8 @@ describe('withoutHidden', () => {
     live: [video('c', 'UCblocked')],
     channels: [{ channelId: 'UCblocked' }, { channelId: 'UCok' }],
     shelves: [
-      { title: 'gone', videos: [video('d', 'UCblocked')] },
-      { title: 'kept', videos: [video('e', 'UCok')] },
+      { title: 'gone', videos: [video('d', 'UCblocked')], afterId: null },
+      { title: 'kept', videos: [video('e', 'UCok')], afterId: null },
     ],
   } as CombinedSearchResults;
   const hidden = { videoIds: new Set(['dismissed']), channelIds: new Set(['UCblocked']) };
@@ -107,7 +129,7 @@ describe('withWatchState', () => {
     ...emptyResults(),
     videos: [video('seen'), video('new')],
     channels: [{ channelId: 'UC1', name: 'A', isVerified: false }],
-    shelves: [{ title: 'Latest', videos: [video('seen')] }],
+    shelves: [{ title: 'Latest', videos: [video('seen')], afterId: null }],
   };
   const watched = new Set(['seen']);
 
@@ -137,7 +159,7 @@ describe('withoutShorts', () => {
       ...emptyResults(),
       shorts: [{ ...video('s', true), type: 'short' as const }],
       videos: [video('s2', true), video('v', false)],
-      shelves: [{ title: 'Reels', videos: [video('s3', true)] }],
+      shelves: [{ title: 'Reels', videos: [video('s3', true)], afterId: null }],
     });
     expect(out.shorts).toEqual([]);
     expect(out.videos.map((v) => v.id)).toEqual(['v']);
@@ -148,7 +170,7 @@ describe('withoutShorts', () => {
 describe('pairCreator', () => {
   const channel = { channelId: 'UC1', name: 'Creator', isVerified: false };
   const upload = { id: 'v', title: 'v', channelName: 'Creator', channelId: 'UC1' };
-  const uploads = { title: 'Latest from Creator', videos: [upload] };
+  const uploads = { title: 'Latest from Creator', videos: [upload], afterId: null };
 
   it('joins a channel and its own shelf into one card', () => {
     const { creator, results } = pairCreator({
@@ -164,7 +186,7 @@ describe('pairCreator', () => {
   });
 
   it('leaves a shelf of several channels alone', () => {
-    const mixed = { title: 'People also watched', videos: [{ ...upload, channelId: 'UC2' }] };
+    const mixed = { title: 'People also watched', videos: [{ ...upload, channelId: 'UC2' }], afterId: null };
     const input = { ...emptyResults(), channels: [channel], shelves: [mixed] };
     expect(pairCreator(input)).toEqual({ creator: null, results: input });
   });
@@ -212,5 +234,52 @@ describe('withoutAiMusic', () => {
     expect(withoutAiMusic(clean, ai)).toBe(clean);
     const listed: CombinedSearchResults = { ...emptyResults(), songs: [song('a', AI)] };
     expect(withoutAiMusic(listed, AI_LIST_MATCHER_NONE)).toBe(listed);
+  });
+});
+
+describe('videoSections on a later page', () => {
+  it('skips videos and Shorts the earlier pages showed', () => {
+    const sections = videoSections(
+      {
+        items: [v('new1'), v('seen'), v('new2')],
+        source: 'innertube',
+        shelves: [{ title: 'After a repeat', videos: [v('x')], afterIndex: 2 }],
+        shortsShelves: [
+          { title: null, shorts: [{ id: 'old', title: 'old' }, { id: 'fresh', title: 'fresh' }], afterIndex: 0 },
+          { title: null, shorts: [{ id: 'old', title: 'old' }], afterIndex: 3 },
+        ],
+      },
+      { lastVideoId: 'end-of-page-one', videoIds: new Set(['seen']), shortIds: new Set(['old']) },
+    );
+    expect(sections.shelves[0]?.afterId).toBe('new1');
+    expect(sections.shortsShelves.map((shelf) => shelf.shorts.map((short) => short.id))).toEqual([['fresh']]);
+    expect(sections.shortsShelves[0]?.afterId).toBe('end-of-page-one');
+  });
+});
+
+describe('placeAmongVideos', () => {
+  const block = (name: string, afterId: string | null) => ({ name, afterId });
+  const shape = (rows: ReturnType<typeof placeAmongVideos<ReturnType<typeof block>>>) =>
+    rows.map((row) => (row.kind === 'videos' ? row.videos.map((video) => video.id).join('') : `[${row.block.name}]`));
+
+  it('puts each block after its video, in arrival order', () => {
+    const order = ['a', 'b', 'c', 'd'];
+    const rows = placeAmongVideos(order, order.map(v), [block('shorts', 'b'), block('top', null), block('posts', 'b')]);
+    expect(shape(rows)).toEqual(['[top]', 'ab', '[shorts]', '[posts]', 'cd']);
+  });
+
+  it('keeps a block in place when the video before it is filtered out', () => {
+    const rows = placeAmongVideos(['a', 'b', 'c'], [v('a'), v('c')], [block('shelf', 'b')]);
+    expect(shape(rows)).toEqual(['a', '[shelf]', 'c']);
+  });
+
+  it('orders blocks at the same place the way they arrived', () => {
+    const rows = placeAmongVideos(['a'], [v('a')], [{ ...block('second', 'a'), blockIndex: 1 }, { ...block('first', 'a'), blockIndex: 0 }]);
+    expect(shape(rows)).toEqual(['a', '[first]', '[second]']);
+  });
+
+  it('sends a block whose video it never saw to the end', () => {
+    const rows = placeAmongVideos(['a'], [v('a')], [block('shelf', 'gone')]);
+    expect(shape(rows)).toEqual(['a', '[shelf]']);
   });
 });

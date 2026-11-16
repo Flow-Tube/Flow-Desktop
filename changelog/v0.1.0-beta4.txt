@@ -159,6 +159,7 @@ MUSIC
 - The Wavy seek bar is now Android's Squiggly: a wave that moves while music plays and flattens when it pauses, with a round thumb that grows while dragged.
 - The mini player and the full music player are now one card, as on Android. Dragging the mini player up grows it wider and taller into the player, with the bar stretching across its top until the player takes over, and dragging the open player down, or swiping down with two fingers on its cover or background, shrinks it back. It opens with a small stretch and lands with a small bounce.
 - Drag the mini player down past half its height, or flick it down, to close it. Swipe left and Swipe right in Settings > Music can play the next or previous song or close it with a sideways drag or two-finger swipe. Both are off at first on this computer.
+- Shelves on the Music page no longer start slightly scrolled. The first card sits fully in view with no back arrow until you scroll, as on the Library page.
 
 PLAYER
 - Live chat and chat replay beside a video can be closed. Show chat brings it back, as does the chat button on the player, which now works outside fullscreen too.

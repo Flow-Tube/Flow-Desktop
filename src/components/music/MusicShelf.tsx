@@ -74,7 +74,7 @@ export function MusicShelf<T>({
         />
       )}
 
-      <ShelfScroller className="flex snap-x gap-6 px-3 -mx-3 pt-3 -mt-2 pb-6">
+      <ShelfScroller className="flex snap-x gap-6 px-3 scroll-px-3 -mx-3 pt-3 -mt-2 pb-6">
         {loading
           ? Array.from({ length: skeletonCount }).map((_, i) => (
               <ShelfSkeleton key={i} shape={skeletonShape} />

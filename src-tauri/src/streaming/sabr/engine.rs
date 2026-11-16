@@ -224,7 +224,7 @@ impl SabrEngine {
             None => (String::new(), selected.audio.itag),
         };
 
-        let client = crate::api::app_proxy::with_app_proxy(reqwest::Client::builder())
+        let client = crate::api::app_proxy::with_app_network(reqwest::Client::builder())
             .pool_idle_timeout(Duration::from_secs(60))
             .build()
             .unwrap_or_default();

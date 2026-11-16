@@ -1,6 +1,6 @@
-use crate::api::app_proxy;
 use crate::api::innertube::core::{locale, remote_decoder};
 use crate::api::innertube::extractors::audio_preference;
+use crate::api::{app_proxy, ip_family};
 use crate::commands::linked::err as linked_err;
 use crate::db::settings;
 use crate::db::watch_history::{self, WatchHistoryRecord};
@@ -228,7 +228,7 @@ pub async fn set_setting(
 }
 
 /// Settings the backend acts on itself, applied at startup and whenever saved.
-pub(crate) const BACKEND_SETTINGS: [&str; 10] = [
+pub(crate) const BACKEND_SETTINGS: [&str; 11] = [
     remote_decoder::SETTING_KEY,
     audio_preference::STABLE_VOLUME_SETTING,
     locale::CONTENT_LANGUAGE_SETTING,
@@ -239,10 +239,11 @@ pub(crate) const BACKEND_SETTINGS: [&str; 10] = [
     app_proxy::PORT_SETTING,
     app_proxy::USERNAME_SETTING,
     app_proxy::PASSWORD_SETTING,
+    ip_family::PREFER_IPV4_SETTING,
 ];
 
 pub(crate) fn apply_backend_setting(key: &str, value: Option<&str>) {
-    if app_proxy::apply_setting(key, value) {
+    if app_proxy::apply_setting(key, value) || ip_family::apply_setting(key, value) {
         return;
     }
     let enabled = value.is_some_and(|value| value.eq_ignore_ascii_case("true"));

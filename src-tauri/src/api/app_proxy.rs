@@ -1,4 +1,6 @@
 //! The proxy the user set in Settings, for every client that reaches the internet.
+//! [`with_app_network`] is the one place those clients are built through, so it also
+//! installs the Prefer IPv4 resolver from [`super::ip_family`].
 //!
 //! Each client asks [`route`] for every new connection, so one built before the
 //! saved proxy loaded, or before the user changed it, still follows it. Devices on
@@ -58,9 +60,11 @@ pub fn apply_setting(key: &str, value: Option<&str>) -> bool {
     true
 }
 
-/// Sends a client's connections through the proxy in force at the time.
-pub fn with_app_proxy(builder: ClientBuilder) -> ClientBuilder {
-    builder.proxy(Proxy::custom(route))
+/// Sends a client's connections through the proxy and address family in force at the time.
+pub fn with_app_network(builder: ClientBuilder) -> ClientBuilder {
+    builder
+        .proxy(Proxy::custom(route))
+        .dns_resolver(super::ip_family::FamilyResolver)
 }
 
 fn route(destination: &Url) -> Option<Url> {
@@ -265,7 +269,9 @@ mod tests {
     // One test, because the settings are process-wide.
     #[tokio::test]
     async fn a_client_built_before_the_setting_follows_it() {
-        let client = with_app_proxy(reqwest::Client::builder()).build().unwrap();
+        let client = with_app_network(reqwest::Client::builder())
+            .build()
+            .unwrap();
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port().to_string();
         for (key, value) in [

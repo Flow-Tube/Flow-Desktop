@@ -82,7 +82,7 @@ impl Transport {
     }
 
     pub fn builder(&self) -> ClientBuilder {
-        let builder = crate::api::app_proxy::with_app_proxy(Client::builder())
+        let builder = crate::api::app_proxy::with_app_network(Client::builder())
             .tls_backend_rustls()
             .redirect(redirect::Policy::none())
             .user_agent(concat!("FlowDesktop/", env!("CARGO_PKG_VERSION")))

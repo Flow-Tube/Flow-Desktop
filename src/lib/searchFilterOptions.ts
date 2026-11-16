@@ -1,5 +1,21 @@
 import { getString, type StringKey } from './i18n/index';
-import type { AdvancedFilters, SearchFeatureFilter, SearchSortBy, SearchWatchState } from './useCombinedSearch';
+import { joinIsolated } from './direction';
+import type { SearchFilterState } from './searchFilterState';
+import type { AdvancedFilters, SearchCategory, SearchFeatureFilter, SearchSortBy, SearchWatchState } from './useCombinedSearch';
+
+export const CATEGORY_LABEL_KEYS: Record<SearchCategory, StringKey> = {
+  all: 'search_cat_all',
+  shorts: 'search_cat_shorts',
+  videos: 'search_cat_videos',
+  live: 'search_cat_live',
+  movies: 'search_cat_movies',
+  playlists: 'search_cat_playlists',
+  artists: 'search_cat_artists',
+  songs: 'search_cat_songs',
+  albums: 'search_cat_albums',
+  podcasts: 'search_cat_podcasts',
+  episodes: 'search_cat_episodes',
+};
 
 export interface FilterOption<T extends string> {
   value: T;
@@ -77,4 +93,16 @@ export function activeFilters(filters: AdvancedFilters): ActiveFilter[] {
     active.push({ key: 'watch', label: labelOf(WATCH_OPTIONS, filters.watchState), without: (f) => ({ ...f, watchState: 'any' }) });
   }
   return active;
+}
+
+/** "Videos · This week · 4K": what a past search narrowed to; empty for a plain search. */
+export function filterSummary(state: SearchFilterState): string {
+  return joinIsolated(
+    [
+      state.category !== 'all' && getString(CATEGORY_LABEL_KEYS[state.category]),
+      state.sortBy !== 'relevance' && labelOf(SORT_OPTIONS, state.sortBy),
+      ...activeFilters(state.filters).map((filter) => filter.label),
+    ],
+    ' · ',
+  );
 }

@@ -277,6 +277,8 @@ SEARCH
 - All opens with the top result beside the first songs. An artist there has Shuffle and Radio, which play the same queues as the artist page.
 - A channel found by your search shows its video count and verified tick, with Go to channel beside Subscribe.
 - Songs results are a numbered table with album and length columns.
+- Past searches in the search box show the filters they bring back, such as Videos · This week, and Show all lists the rest of your history. Tab puts a suggestion in the box so you can keep typing.
+- A pasted YouTube or YouTube Music link shows what Enter will open. A link Flow can't open says so, and Enter searches for it as text.
 - Searching again from your history brings back the filters you used. Shorts is now its own tab, next to All.
 - New Unwatched and Watched filters, and 360, VR180, 3D and Location filters. A creator with recent uploads gets one card with their latest videos.
 

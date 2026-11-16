@@ -5,14 +5,14 @@ import { SearchSuggestionsPanel, suggestionOptionId } from '../search/SearchSugg
 import { resolveChannelId } from '../../lib/api/youtube';
 import { getString } from '../../lib/i18n/index';
 import { IS_MACOS_RUNTIME } from '../../lib/platform';
-import { buildSuggestionColumns, type SuggestionRow } from '../../lib/searchSuggestions';
+import { buildSuggestionColumns, isUnsupportedLink, type SuggestionRow } from '../../lib/searchSuggestions';
 import { useAiListMatcher } from '../../lib/aiList/useAiList';
 import { withoutAiMusic } from '../../lib/aiList/music';
 import { SETTINGS } from '../../lib/settings/schema';
 import { prefetchStreamInfo } from '../../lib/streamResolution';
 import { useSearchSuggestions } from '../../lib/useSearchSuggestions';
 import { FOCUS_SEARCH_EVENT } from '../../lib/windowEvents';
-import { channelRoute, parseYoutubeUrl, routeForYoutubeUrl } from '../../lib/youtubeUrl';
+import { channelRoute, parseYoutubeUrl, routeForYoutubeUrl, type ParsedYoutubeUrl } from '../../lib/youtubeUrl';
 import { useAppSettingsStore } from '../../store/useAppSettingsStore';
 import { useMusicHiddenFilter } from '../../store/useMusicActionsStore';
 import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
@@ -48,6 +48,7 @@ export function TopbarSearch() {
   const [open, setOpen] = useState(false);
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [resolving, setResolving] = useState(false);
+  const [allHistory, setAllHistory] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -66,11 +67,12 @@ export function TopbarSearch() {
         suggestions,
         musicItems: withoutAiMusic(musicItems, ai),
         isHiddenSong,
+        allHistory,
       }),
-    [isSettingsPage, text, history, suggestions, musicItems, isHiddenSong, ai],
+    [isSettingsPage, text, history, suggestions, musicItems, isHiddenSong, ai, allHistory],
   );
   const rows = useMemo(() => [...columns.main, ...columns.side], [columns]);
-  const panelVisible = !isSettingsPage && open && rows.length > 0;
+  const panelVisible = !isSettingsPage && open && (rows.length > 0 || isUnsupportedLink(text));
   const currentValue = isSettingsPage ? settingsQuery : text;
 
   // A changed row set invalidates whatever row the keyboard was on.
@@ -104,6 +106,7 @@ export function TopbarSearch() {
   const close = () => {
     setOpen(false);
     setActiveKey(null);
+    setAllHistory(false);
     inputRef.current?.blur();
   };
 
@@ -118,6 +121,11 @@ export function TopbarSearch() {
   const pick = (row: SuggestionRow) => {
     if (row.kind === 'history') return runTextSearch(row.query, useSearchHistoryStore.getState().filtersOf(row.query));
     if (row.kind === 'query') return runTextSearch(row.text);
+    if (row.kind === 'more') {
+      setAllHistory(true);
+      return;
+    }
+    if (row.kind === 'link') return void openLink(row.parsed, text.trim());
     recordSearch(text);
     close();
     const item = row.item;
@@ -164,6 +172,30 @@ export function TopbarSearch() {
     }
   };
 
+  /** Opens what a pasted link points at; false when it can't, so the text is searched instead. */
+  const openLink = async (parsed: ParsedYoutubeUrl, query: string): Promise<boolean> => {
+    const route = routeForYoutubeUrl(parsed);
+    if (route) {
+      if (parsed.kind === 'video' || parsed.kind === 'short') prefetchStreamInfo(parsed.videoId);
+      close();
+      navigate(route);
+      return true;
+    }
+    if (parsed.kind !== 'resolveChannel') return false;
+    // Handle / custom URLs have no channel id; the backend resolves it.
+    setResolving(true);
+    try {
+      const channelId = await resolveChannelId(parsed.url);
+      close();
+      navigate(channelRoute(channelId, parsed.music));
+    } catch {
+      runTextSearch(parsed.query || query);
+    } finally {
+      setResolving(false);
+    }
+    return true;
+  };
+
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (isSettingsPage) {
@@ -175,29 +207,7 @@ export function TopbarSearch() {
 
     // A pasted YouTube / YT-Music URL opens the target directly instead of searching.
     const parsed = parseYoutubeUrl(query);
-    if (parsed) {
-      const route = routeForYoutubeUrl(parsed);
-      if (route) {
-        if (parsed.kind === 'video' || parsed.kind === 'short') prefetchStreamInfo(parsed.videoId);
-        close();
-        navigate(route);
-        return;
-      }
-      if (parsed.kind === 'resolveChannel') {
-        // Handle / custom URLs have no channel id; the backend resolves it.
-        setResolving(true);
-        try {
-          const channelId = await resolveChannelId(parsed.url);
-          close();
-          navigate(channelRoute(channelId, parsed.music));
-        } catch {
-          runTextSearch(parsed.query || query);
-        } finally {
-          setResolving(false);
-        }
-        return;
-      }
-    }
+    if (parsed && (await openLink(parsed, query))) return;
     runTextSearch(query);
   };
 
@@ -229,6 +239,12 @@ export function TopbarSearch() {
     }
     const active = rows[index];
     if (!active) return;
+    // Tab puts a highlighted search in the box to keep typing; otherwise it moves focus as usual.
+    if (event.key === 'Tab' && !event.shiftKey && (active.kind === 'query' || active.kind === 'history')) {
+      event.preventDefault();
+      fill(active.kind === 'query' ? active.text : active.query);
+      return;
+    }
     // Enter on a highlighted row runs it; otherwise the form submits what was typed.
     if (event.key === 'Enter') {
       event.preventDefault();
@@ -310,6 +326,7 @@ export function TopbarSearch() {
           onFill={fill}
           onRemoveHistory={removeSearch}
           onClearHistory={clearHistory}
+          unsupportedLink={isUnsupportedLink(text)}
         />
       ) : null}
     </div>

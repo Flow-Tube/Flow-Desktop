@@ -2,6 +2,8 @@ import { getString } from "./i18n/index";
 import type { SearchSuggestion, SuggestionEntity } from "../types/video";
 import type { YTItem } from "../types/music";
 import type { SearchHistoryEntry } from "../store/useSearchHistoryStore";
+import type { SearchFilterState } from "./searchFilterState";
+import { parseYoutubeUrl, routeForYoutubeUrl, type ParsedYoutubeUrl } from "./youtubeUrl";
 import { joinIsolated } from "./direction";
 
 export const HISTORY_WHEN_EMPTY = 8;
@@ -13,7 +15,11 @@ export const MAX_MUSIC_ROWS = 5;
 export type SuggestedMusicItem = Extract<YTItem, { type: "song" | "album" | "artist" | "playlist" }>;
 
 export type SuggestionRow =
-  | { kind: "history"; key: string; query: string }
+  | { kind: "history"; key: string; query: string; filters?: SearchFilterState }
+  /** "Show all": the rest of the history, under an empty box. */
+  | { kind: "more"; key: string; count: number }
+  /** A pasted link Flow opens directly. */
+  | { kind: "link"; key: string; parsed: ParsedYoutubeUrl }
   | { kind: "query"; key: string; text: string; entity: SuggestionEntity | null }
   | { kind: "music"; key: string; item: SuggestedMusicItem };
 
@@ -58,24 +64,31 @@ export function buildSuggestionColumns({
   suggestions,
   musicItems,
   isHiddenSong,
+  allHistory = false,
 }: {
   query: string;
   history: SearchHistoryEntry[];
+  /** Lists every past search under an empty box, after "Show all". */
+  allHistory?: boolean;
   suggestions: SearchSuggestion[];
   musicItems: YTItem[];
   isHiddenSong?: (item: Extract<YTItem, { type: "song" }>) => boolean;
 }): SuggestionColumns {
   const q = query.trim();
+  const filtersOf = new Map(history.map((entry) => [entry.query, entry.filters]));
+  const historyRow = (past: string): SuggestionRow => ({ kind: "history", key: `history:${past}`, query: past, filters: filtersOf.get(past) });
   if (!q) {
-    return {
-      main: matchHistory(history, "", HISTORY_WHEN_EMPTY).map((past) => ({ kind: "history", key: `history:${past}`, query: past })),
-      side: [],
-    };
+    const main = matchHistory(history, "", allHistory ? history.length : HISTORY_WHEN_EMPTY).map(historyRow);
+    if (main.length < history.length) main.push({ kind: "more", key: "history:more", count: history.length });
+    return { main, side: [] };
   }
+
+  const link = linkSuggestion(q);
+  if (link) return { main: [link, { kind: "query", key: `query:${q}`, text: q, entity: null }], side: [] };
 
   const pastQueries = matchHistory(history, q, HISTORY_WHEN_TYPING);
   const shown = new Set(pastQueries.map(lower));
-  const main: SuggestionRow[] = pastQueries.map((past) => ({ kind: "history", key: `history:${past}`, query: past }));
+  const main: SuggestionRow[] = pastQueries.map(historyRow);
   for (const suggestion of suggestions) {
     if (main.length >= pastQueries.length + MAX_QUERY_ROWS) break;
     if (shown.has(lower(suggestion.text))) continue;
@@ -144,4 +157,41 @@ export function musicItemShape(item: SuggestedMusicItem): "circle" | "square" | 
 
 export function musicItemImage(item: SuggestedMusicItem): string | null {
   return item.thumbnail || null;
+}
+
+// Only text that is plainly a web address, so a search such as "node.js/express" draws no warning.
+const URL_LIKE = /^(https?:\/\/|www\.)\S+$/i;
+
+/** A YouTube or YouTube Music link Flow can open, as a suggestion row. */
+export function linkSuggestion(text: string): SuggestionRow | null {
+  const parsed = parseYoutubeUrl(text);
+  if (!parsed) return null;
+  if (parsed.kind !== "resolveChannel" && !routeForYoutubeUrl(parsed)) return null;
+  return { kind: "link", key: "link", parsed };
+}
+
+/** Text that looks like a web address Flow can't open, so Enter will only search for it. */
+export function isUnsupportedLink(text: string): boolean {
+  const q = text.trim();
+  return URL_LIKE.test(q) && !linkSuggestion(q);
+}
+
+/** What opening a pasted link does, for its suggestion row. */
+export function linkLabel(parsed: ParsedYoutubeUrl): string {
+  switch (parsed.kind) {
+    case "video":
+      return getString("search_link_open_video");
+    case "short":
+      return getString("search_link_open_short");
+    case "playlist":
+    case "musicPlaylist":
+      return getString("search_link_open_playlist");
+    case "musicAlbum":
+      return getString("search_link_open_album");
+    case "musicArtist":
+      return getString("search_action_open_artist");
+    case "channel":
+    case "resolveChannel":
+      return getString("search_link_open_channel");
+  }
 }

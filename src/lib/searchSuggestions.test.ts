@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildSuggestionColumns,
   HISTORY_WHEN_EMPTY,
+  isUnsupportedLink,
   matchHistory,
   musicItemShape,
   musicItemSubtitle,
@@ -42,10 +43,10 @@ describe("matchHistory", () => {
 });
 
 describe("buildSuggestionColumns", () => {
-  it("shows only recent searches for an empty box", () => {
+  it("shows only recent searches for an empty box, then Show all", () => {
     const many = history(...Array.from({ length: 12 }, (_, i) => `q${i}`));
     const columns = buildSuggestionColumns({ query: " ", history: many, suggestions: [suggestion("x")], musicItems: [artist] });
-    expect(columns.main.map((row) => row.kind)).toEqual(Array(HISTORY_WHEN_EMPTY).fill("history"));
+    expect(columns.main.map((row) => row.kind)).toEqual([...Array(HISTORY_WHEN_EMPTY).fill("history"), "more"]);
     expect(columns.side).toEqual([]);
   });
 
@@ -94,5 +95,39 @@ describe("music item labels", () => {
     const unattributed = { ...video, artists: [{ name: "Video", id: null }] };
     expect(musicItemSubtitle(unattributed)).toBe(joinIsolated([getString("search_kind_video")]));
     expect(musicItemShape(artist as Extract<YTItem, { type: "artist" }>)).toBe("circle");
+  });
+});
+
+describe("history and links", () => {
+  const filtered = { category: "videos" as const, sortBy: "relevance" as const, filters: { uploadDate: "week" as const, duration: "any" as const, features: ["4k" as const], watchState: "any" as const } };
+
+  it("carries each past search's filters, and offers the rest of a long history", () => {
+    const entries = [{ query: "sourdough", at: 3, filters: filtered }, ...history(...Array.from({ length: HISTORY_WHEN_EMPTY + 2 }, (_, i) => `q${i}`))];
+    const { main } = buildSuggestionColumns({ query: "", history: entries, suggestions: [], musicItems: [] });
+    expect(main[0]).toMatchObject({ kind: "history", query: "sourdough", filters: filtered });
+    expect(main).toHaveLength(HISTORY_WHEN_EMPTY + 1);
+    expect(main[main.length - 1]).toMatchObject({ kind: "more", count: entries.length });
+    const all = buildSuggestionColumns({ query: "", history: entries, suggestions: [], musicItems: [], allHistory: true });
+    expect(all.main).toHaveLength(entries.length);
+  });
+
+  it("offers to open a pasted link, and to search for it instead", () => {
+    const { main, side } = buildSuggestionColumns({
+      query: "https://youtu.be/dQw4w9WgXcQ",
+      history: [],
+      suggestions: [suggestion("never")],
+      musicItems: [],
+    });
+    expect(main.map((row) => row.kind)).toEqual(["link", "query"]);
+    expect(side).toEqual([]);
+  });
+
+  it("tells a link Flow can't open from plain text", () => {
+    expect(isUnsupportedLink("https://example.com/watch")).toBe(true);
+    expect(isUnsupportedLink("www.example.com/page")).toBe(true);
+    expect(isUnsupportedLink("node.js/express")).toBe(false);
+    expect(isUnsupportedLink("3.5/10")).toBe(false);
+    expect(isUnsupportedLink("https://www.youtube.com/watch?v=dQw4w9WgXcQ")).toBe(false);
+    expect(isUnsupportedLink("lofi beats")).toBe(false);
   });
 });

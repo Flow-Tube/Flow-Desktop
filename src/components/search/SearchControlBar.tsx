@@ -6,9 +6,9 @@ import { SegmentedControl } from '../ui/SegmentedControl';
 import { UnderlineTabs, type UnderlineTabGroup } from '../ui/UnderlineTabs';
 import { SearchFilterPanel } from './SearchFilterPanel';
 import type { SearchLayout } from './results/VideoResults';
-import { getString, type StringKey } from '../../lib/i18n/index';
+import { getString } from '../../lib/i18n/index';
 import { isCategoryOffered } from '../../lib/searchResults';
-import { activeFilters, SORT_OPTIONS } from '../../lib/searchFilterOptions';
+import { activeFilters, CATEGORY_LABEL_KEYS, SORT_OPTIONS } from '../../lib/searchFilterOptions';
 import { useShortsEnabled } from '../../lib/useShortsContent';
 import { useMusicEnabled } from '../../lib/useMusicContent';
 import { DEFAULT_ADVANCED_FILTERS, MUSIC_ONLY_CATEGORIES, VIDEO_FILTER_CATEGORIES } from '../../lib/searchFilterState';
@@ -28,22 +28,8 @@ interface SearchControlBarProps {
 }
 
 // Shorts second, as YouTube has it, so the tab people reach for most is never far.
-const YOUTUBE_TABS: { key: SearchCategory; labelKey: StringKey }[] = [
-  { key: 'all', labelKey: 'search_cat_all' },
-  { key: 'shorts', labelKey: 'search_cat_shorts' },
-  { key: 'videos', labelKey: 'search_cat_videos' },
-  { key: 'live', labelKey: 'search_cat_live' },
-  { key: 'movies', labelKey: 'search_cat_movies' },
-  { key: 'playlists', labelKey: 'search_cat_playlists' },
-  { key: 'artists', labelKey: 'search_cat_artists' },
-];
-
-const MUSIC_TABS: { key: SearchCategory; labelKey: StringKey }[] = [
-  { key: 'songs', labelKey: 'search_cat_songs' },
-  { key: 'albums', labelKey: 'search_cat_albums' },
-  { key: 'podcasts', labelKey: 'search_cat_podcasts' },
-  { key: 'episodes', labelKey: 'search_cat_episodes' },
-];
+const YOUTUBE_TABS: SearchCategory[] = ['all', 'shorts', 'videos', 'live', 'movies', 'playlists', 'artists'];
+const MUSIC_TABS: SearchCategory[] = ['songs', 'albums', 'podcasts', 'episodes'];
 
 /** The result tabs, and under the video tabs the filters, sort and layout. */
 export function SearchControlBar({
@@ -72,8 +58,8 @@ export function SearchControlBar({
     if (MUSIC_ONLY_CATEGORIES.has(key) && !musicEnabled) return false;
     return key === filterType || isCategoryOffered(key, offeredMusicFilters);
   };
-  const tabs = (list: typeof YOUTUBE_TABS) =>
-    list.filter((tab) => shown(tab.key)).map((tab) => ({ key: tab.key, label: getString(tab.labelKey) }));
+  const tabs = (list: SearchCategory[]) =>
+    list.filter(shown).map((key) => ({ key, label: getString(CATEGORY_LABEL_KEYS[key]) }));
   const groups: UnderlineTabGroup<SearchCategory>[] = [
     { key: 'youtube', tabs: tabs(YOUTUBE_TABS) },
     {

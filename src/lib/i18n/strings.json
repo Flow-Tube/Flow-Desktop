@@ -2077,6 +2077,7 @@
   "donations_crypto_label": "Cryptocurrency",
   "donations_crypto_hint": "Scan a QR code with a compatible wallet, or copy the address. Always verify the address and network before sending.",
   "donations_network_label": "Network",
+  "donations_address_label": "Address",
   "donations_copy_address": "Copy address",
   "donations_address_copied": "Address copied to clipboard",
   "donations_copy_failed": "Could not copy address",

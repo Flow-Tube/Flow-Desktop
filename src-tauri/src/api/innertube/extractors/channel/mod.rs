@@ -6,7 +6,7 @@ mod about;
 mod filters;
 mod header;
 mod items;
-mod posts;
+pub(crate) mod posts;
 mod tabs;
 
 use std::collections::HashMap;

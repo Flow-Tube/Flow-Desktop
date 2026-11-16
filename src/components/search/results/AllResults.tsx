@@ -4,6 +4,7 @@ import { MusicShelf } from '../../music/MusicShelf';
 import { ArtistCard } from '../../music/ArtistCard';
 import { PlaylistCard } from '../../video/PlaylistCard';
 import { ShortsShelf } from '../../shelf/ShortsShelf';
+import { PostShelf } from '../../shelf/PostShelf';
 import { SearchCorrectionLine } from '../SearchCorrectionLine';
 import { SearchCreatorCard } from '../SearchCreatorCard';
 import { getString } from '../../../lib/i18n/index';
@@ -76,6 +77,10 @@ export function AllResults({ search, visible, actions, onPlayVideo, onAddToQueue
       )}
 
       <ShortsShelf title={getString('search_section_shorts')} shorts={r.shorts} onPlay={onPlayVideo} />
+
+      {r.postShelves.map((shelf, index) => (
+        <PostShelf key={`posts:${shelf.posts[0]?.id ?? index}`} title={shelf.title ?? getString('search_section_posts')} posts={shelf.posts} />
+      ))}
 
       <VideoShelves shelves={r.shelves} onPlay={onPlayVideo} onAddToQueue={onAddToQueue} />
 

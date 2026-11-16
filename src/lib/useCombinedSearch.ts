@@ -322,6 +322,7 @@ export function useCombinedSearch(
                 shorts: dedupe([...prev.shorts, ...page.shorts], (v) => v.id),
                 shortsShelves: [...prev.shortsShelves, ...page.shortsShelves],
                 shelves: [...prev.shelves, ...page.shelves],
+                postShelves: [...prev.postShelves, ...page.postShelves],
               };
             }
             const page = videoSections(res);

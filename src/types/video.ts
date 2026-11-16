@@ -369,6 +369,16 @@ export interface SearchShelf {
   blockIndex?: number;
 }
 
+/** A run of community posts inside the results. */
+export interface SearchPostShelf {
+  title?: string | null;
+  posts: PostSummary[];
+  /** How many of its page's videos came before it. */
+  afterIndex: number;
+  /** Its place among its page's shelves and strips, in the order they arrived. */
+  blockIndex?: number;
+}
+
 /** A strip of Shorts inside the results. */
 export interface SearchShortsShelf {
   title?: string | null;
@@ -409,6 +419,8 @@ export interface SearchVideosResponse {
   shelves?: SearchShelf[];
   /** Each Shorts strip on its own; `shorts` holds all of them. */
   shortsShelves?: SearchShortsShelf[];
+  /** Community posts, a strip at a time. */
+  postShelves?: SearchPostShelf[];
   correction?: SearchCorrection | null;
 }
 
@@ -500,6 +512,8 @@ export interface PostSummary {
   type: "post";
   id: string;
   authorName: string;
+  /** The author's channel, so a blocked channel's posts stay hidden. */
+  authorChannelId?: string | null;
   authorAvatar?: string | null;
   textContent?: string | null;
   attachment?: PostAttachment | null;

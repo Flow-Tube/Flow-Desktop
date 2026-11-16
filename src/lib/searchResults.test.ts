@@ -283,3 +283,18 @@ describe('placeAmongVideos', () => {
     expect(shape(rows)).toEqual(['a', '[shelf]']);
   });
 });
+
+describe('post strips', () => {
+  it('leave out posts by a blocked channel, and strips left empty', () => {
+    const post = (id: string, authorChannelId: string | null) => ({ type: 'post' as const, id, authorName: id, authorChannelId });
+    const results = {
+      ...emptyResults(),
+      postShelves: [
+        { title: null, afterId: null, posts: [post('p1', 'UCblocked'), post('p2', 'UCok')] },
+        { title: null, afterId: 'a', posts: [post('p3', 'UCblocked')] },
+      ],
+    };
+    const visible = withoutHidden(results, { videoIds: new Set(), channelIds: new Set(['UCblocked']) });
+    expect(visible.postShelves.map((shelf) => shelf.posts.map((p) => p.id))).toEqual([['p2']]);
+  });
+});

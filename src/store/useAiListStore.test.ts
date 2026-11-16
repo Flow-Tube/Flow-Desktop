@@ -132,6 +132,7 @@ describe("the hide paths", () => {
       live: [],
       shorts: [],
       shortsShelves: [],
+      postShelves: [],
       channels: [{ channelId: "UCdddddddddddddddddddddd", name: "s", handle: "@SlopMaker", isVerified: false }],
       shelves: [],
     } as unknown as CombinedSearchResults;

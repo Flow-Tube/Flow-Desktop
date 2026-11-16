@@ -2,16 +2,17 @@ use crate::api::http::shared_client;
 use crate::api::innertube::InnertubeClient;
 use crate::api::innertube::core::clients;
 use crate::api::innertube::core::utils::short_video_summary_from_item;
+use crate::api::innertube::extractors::channel::posts::{post, post_renderer};
 use crate::api::innertube::json::continuation::continuation_token;
 use crate::api::innertube::json::text::text_of;
 use crate::api::innertube::json::thumbnail::{largest_url, normalize_youtube_image_url};
 use crate::api::innertube::renderers::lockup::{lockup_item, related_to_video};
 use crate::api::innertube::renderers::video::video_from_renderer;
 use crate::errors::{AppError, AppResult};
-use crate::models::channel::{PlaylistSummary, ShortVideoSummary};
+use crate::models::channel::{PlaylistSummary, PostSummary, ShortVideoSummary};
 use crate::models::search::{
-    SearchChannel, SearchCorrection, SearchShelf, SearchShortsShelf, SearchSuggestion,
-    SearchVideosRequest, SearchVideosResponse, SuggestionEntity,
+    SearchChannel, SearchCorrection, SearchPostShelf, SearchShelf, SearchShortsShelf,
+    SearchSuggestion, SearchVideosRequest, SearchVideosResponse, SuggestionEntity,
 };
 use crate::models::video::VideoSummary;
 use base64::Engine;
@@ -247,10 +248,37 @@ impl PageReader {
         });
     }
 
+    fn push_posts(&mut self, title: Option<String>, posts: Vec<PostSummary>) {
+        if posts.is_empty() {
+            return;
+        }
+        let after_index = self.page.items.len();
+        let latest_block = self.blocks.checked_sub(1);
+        // Posts that arrive one by one, with nothing at all between them, read as one strip.
+        if title.is_none()
+            && let Some(last) = self.page.post_shelves.last_mut()
+            && last.title.is_none()
+            && last.after_index == after_index
+            && Some(last.block_index) == latest_block
+        {
+            last.posts.extend(posts);
+            return;
+        }
+        let block_index = self.next_block();
+        self.page.post_shelves.push(SearchPostShelf {
+            title,
+            posts,
+            after_index,
+            block_index,
+        });
+    }
+
     fn read(&mut self, items: &[Value]) {
         for item in items {
             if let Some(inner) = item["itemSectionRenderer"]["contents"].as_array() {
                 self.read(inner);
+            } else if let Some(found) = post_renderer(item).and_then(post) {
+                self.push_posts(None, vec![found]);
             } else if let Some(video) = item.get("videoRenderer").and_then(video_from_renderer) {
                 self.push_video(video);
             } else if let Some(channel) = item.get("channelRenderer").and_then(search_channel) {
@@ -266,7 +294,10 @@ impl PageReader {
                         video_count_text: lockup.view_count_text,
                     });
                 }
-            } else if let Some(shelf) = item.get("shelfRenderer") {
+            } else if let Some(shelf) = item
+                .get("shelfRenderer")
+                .or_else(|| item.get("richShelfRenderer"))
+            {
                 self.read_shelf(shelf);
             } else if let Some(grid) = item.get("gridShelfViewModel") {
                 let title = text_of(&grid["header"]["sectionHeaderViewModel"]["headline"]);
@@ -291,14 +322,41 @@ impl PageReader {
     fn read_shelf(&mut self, renderer: &Value) {
         let content = &renderer["content"];
         let list = &content["verticalListRenderer"];
-        let videos: Vec<_> = list["items"]
-            .as_array()
-            .or_else(|| content["horizontalListRenderer"]["items"].as_array())
-            .into_iter()
-            .flatten()
+        let entries: Vec<&Value> = [
+            &list["items"],
+            &content["horizontalListRenderer"]["items"],
+            &content["expandedShelfContentsRenderer"]["items"],
+            &content["gridRenderer"]["items"],
+            &renderer["items"],
+            &renderer["contents"],
+        ]
+        .into_iter()
+        .find_map(Value::as_array)
+        .into_iter()
+        .flatten()
+        // A rich shelf wraps each entry once more.
+        .map(|entry| {
+            entry
+                .get("richItemRenderer")
+                .map_or(entry, |rich| &rich["content"])
+        })
+        .collect();
+        let title = text_of(&renderer["title"]);
+
+        let posts: Vec<_> = entries
+            .iter()
+            .filter_map(|entry| post_renderer(entry).and_then(post))
+            .collect();
+        if !posts.is_empty() {
+            self.push_posts(title, posts);
+            return;
+        }
+
+        let videos: Vec<_> = entries
+            .iter()
             .filter_map(|entry| entry.get("videoRenderer").and_then(video_from_renderer))
             .collect();
-        if let Some(title) = text_of(&renderer["title"]).filter(|_| !videos.is_empty()) {
+        if let Some(title) = title.filter(|_| !videos.is_empty()) {
             let collapsed_count = list["collapsedItemCount"]
                 .as_u64()
                 .or_else(|| list["collapsedItemCount"].as_str()?.parse().ok())
@@ -622,6 +680,81 @@ mod tests {
         ]
         .into();
         assert_eq!(order, [0, 1, 2], "blocks keep the order they arrived in");
+    }
+
+    #[test]
+    fn community_posts_become_strips_in_place() {
+        let video = |id: &str| serde_json::json!({ "videoRenderer": { "videoId": id, "title": { "runs": [{ "text": id }] } } });
+        let thread = |id: &str| {
+            serde_json::json!({ "backstagePostThreadRenderer": { "post": { "backstagePostRenderer": {
+            "postId": id,
+            "authorText": { "runs": [{ "text": "Bake with Jack" }] },
+            "authorEndpoint": { "browseEndpoint": { "browseId": "UCabcdefghijklmnopqrstuv" } },
+            "contentText": { "runs": [{ "text": "Day 3 of the starter" }] }
+        } } } })
+        };
+        let val = serde_json::json!({
+            "contents": { "twoColumnSearchResultsRenderer": { "primaryContents": {
+                "sectionListRenderer": { "contents": [{ "itemSectionRenderer": { "contents": [
+                    video("video000001"),
+                    { "shelfRenderer": {
+                        "title": { "simpleText": "Latest posts" },
+                        "content": { "horizontalListRenderer": { "items": [thread("UgkxAAA"), thread("UgkxBBB")] } }
+                    } },
+                    video("video000002"),
+                    thread("UgkxCCC"),
+                    { "postRenderer": { "postId": "UgkxDDD", "authorText": { "simpleText": "Someone" } } },
+                    video("video000003")
+                ] } }] }
+            } } }
+        });
+        let page = parse_innertube_search(&val);
+        assert_eq!(page.items.len(), 3, "posts stay out of the video list");
+        assert_eq!(page.post_shelves.len(), 2);
+        let titled = &page.post_shelves[0];
+        assert_eq!(titled.title.as_deref(), Some("Latest posts"));
+        assert_eq!(titled.after_index, 1);
+        assert_eq!(titled.posts[1].id, "UgkxBBB");
+        assert_eq!(
+            titled.posts[0].author_channel_id.as_deref(),
+            Some("UCabcdefghijklmnopqrstuv")
+        );
+        let loose = &page.post_shelves[1];
+        assert_eq!(loose.title, None);
+        assert_eq!(loose.after_index, 2);
+        let ids: Vec<_> = loose.posts.iter().map(|p| p.id.as_str()).collect();
+        assert_eq!(
+            ids,
+            ["UgkxCCC", "UgkxDDD"],
+            "neighbouring posts share one strip"
+        );
+        assert!(page.shelves.is_empty());
+    }
+
+    #[test]
+    fn posts_with_a_strip_between_them_stay_apart() {
+        let thread = |id: &str| serde_json::json!({ "postRenderer": { "postId": id } });
+        let short = serde_json::json!({ "shortsLockupViewModel": {
+            "onTap": { "innertubeCommand": { "reelWatchEndpoint": { "videoId": "short000001" } } },
+            "overlayMetadata": { "primaryText": { "content": "s" } }
+        } });
+        let val = serde_json::json!({
+            "contents": { "twoColumnSearchResultsRenderer": { "primaryContents": {
+                "sectionListRenderer": { "contents": [{ "itemSectionRenderer": { "contents": [
+                    thread("UgkxAAA"),
+                    { "reelShelfRenderer": { "items": [short] } },
+                    thread("UgkxBBB")
+                ] } }] }
+            } } }
+        });
+        let page = parse_innertube_search(&val);
+        assert_eq!(page.post_shelves.len(), 2);
+        let order = [
+            page.post_shelves[0].block_index,
+            page.shorts_shelves[0].block_index,
+            page.post_shelves[1].block_index,
+        ];
+        assert_eq!(order, [0, 1, 2]);
     }
 
     #[test]

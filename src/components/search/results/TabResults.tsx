@@ -65,6 +65,7 @@ export function TabResults({ search, visible, actions, sentinelRef, layout, onPl
             order={search.results.videos.map((video) => video.id)}
             shelves={r.shelves}
             shortsShelves={r.shortsShelves}
+            postShelves={r.postShelves}
             layout={layout}
             query={search.query}
             onPlay={onPlayVideo}

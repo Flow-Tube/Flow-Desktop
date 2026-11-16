@@ -8,7 +8,7 @@ use crate::api::innertube::renderers::video::video_from_renderer;
 use crate::models::channel::{PollChoice, PostAttachment, PostSummary, QuizChoice};
 
 /// A post renderer: `backstagePostRenderer` on the Posts tab, `postRenderer` on Home.
-pub(super) fn post_renderer(node: &Value) -> Option<&Value> {
+pub(crate) fn post_renderer(node: &Value) -> Option<&Value> {
     node["backstagePostThreadRenderer"]["post"]
         .get("backstagePostRenderer")
         .or_else(|| node.get("backstagePostRenderer"))
@@ -16,7 +16,7 @@ pub(super) fn post_renderer(node: &Value) -> Option<&Value> {
 }
 
 #[must_use]
-pub(super) fn post(renderer: &Value) -> Option<PostSummary> {
+pub(crate) fn post(renderer: &Value) -> Option<PostSummary> {
     let id = renderer["postId"].as_str().filter(|id| !id.is_empty())?;
     let reply =
         &renderer["actionButtons"]["commentActionButtonsRenderer"]["replyButton"]["buttonRenderer"];
@@ -24,6 +24,10 @@ pub(super) fn post(renderer: &Value) -> Option<PostSummary> {
     Some(PostSummary {
         id: id.to_string(),
         author_name: text_of(&renderer["authorText"]).unwrap_or_default(),
+        author_channel_id: renderer["authorEndpoint"]["browseEndpoint"]["browseId"]
+            .as_str()
+            .filter(|id| id.starts_with("UC"))
+            .map(ToOwned::to_owned),
         author_avatar: largest_url(&renderer["authorThumbnail"]["thumbnails"]).map(|url| {
             url.strip_prefix("//")
                 .map_or(url.clone(), |rest| format!("https://{rest}"))

@@ -71,6 +71,9 @@ pub enum PostAttachment {
 pub struct PostSummary {
     pub id: String,
     pub author_name: String,
+    /// The author's channel, so a blocked channel's posts can be hidden.
+    #[serde(default)]
+    pub author_channel_id: Option<String>,
     pub author_avatar: Option<String>,
     pub text_content: Option<String>,
     pub attachment: Option<PostAttachment>,

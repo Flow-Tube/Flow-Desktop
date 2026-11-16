@@ -3,14 +3,18 @@ import { ChevronDown } from 'lucide-react';
 import { VideoCard } from '../../video/VideoCard';
 import { VideoGrid } from '../../video/VideoGrid';
 import { ShortsShelf } from '../../shelf/ShortsShelf';
+import { PostShelf } from '../../shelf/PostShelf';
 import { getString } from '../../../lib/i18n/index';
-import { placeAmongVideos, type PlacedShelf, type PlacedShortsShelf } from '../../../lib/searchResults';
+import { placeAmongVideos, type PlacedPostShelf, type PlacedShelf, type PlacedShortsShelf } from '../../../lib/searchResults';
 import type { VideoSummary } from '../../../types/video';
 import { ShelfHeader } from './ResultParts';
 
 export type SearchLayout = 'list' | 'grid';
 
-type Block = ({ kind: 'shelf' } & PlacedShelf) | ({ kind: 'shorts' } & PlacedShortsShelf);
+type Block =
+  | ({ kind: 'shelf' } & PlacedShelf)
+  | ({ kind: 'shorts' } & PlacedShortsShelf)
+  | ({ kind: 'posts' } & PlacedPostShelf);
 
 interface VideoResultsProps {
   videos: VideoSummary[];
@@ -18,6 +22,7 @@ interface VideoResultsProps {
   order: string[];
   shelves?: PlacedShelf[];
   shortsShelves?: PlacedShortsShelf[];
+  postShelves?: PlacedPostShelf[];
   layout: SearchLayout;
   query: string;
   onPlay: (video: VideoSummary) => void;
@@ -60,10 +65,11 @@ function VideoShelf({ shelf, ...run }: { shelf: PlacedShelf } & Pick<VideoResult
 }
 
 /** Video results with YouTube's shelves and Shorts strips where it put them. */
-export function VideoResults({ videos, order, shelves = [], shortsShelves = [], layout, query, onPlay, onAddToQueue }: VideoResultsProps) {
+export function VideoResults({ videos, order, shelves = [], shortsShelves = [], postShelves = [], layout, query, onPlay, onAddToQueue }: VideoResultsProps) {
   const blocks: Block[] = [
     ...shortsShelves.map((shelf): Block => ({ kind: 'shorts', ...shelf })),
     ...shelves.map((shelf): Block => ({ kind: 'shelf', ...shelf })),
+    ...postShelves.map((shelf): Block => ({ kind: 'posts', ...shelf })),
   ];
   const run = { layout, query, onPlay, onAddToQueue };
   return (
@@ -71,6 +77,15 @@ export function VideoResults({ videos, order, shelves = [], shortsShelves = [], 
       {placeAmongVideos(order, videos, blocks).map((row, index) => {
         if (row.kind === 'videos') return <VideoRun key={`videos:${row.videos[0]?.id ?? index}`} videos={row.videos} {...run} />;
         const block = row.block;
+        if (block.kind === 'posts') {
+          return (
+            <PostShelf
+              key={`posts:${block.posts[0]?.id ?? index}`}
+              title={block.title ?? getString('search_section_posts')}
+              posts={block.posts}
+            />
+          );
+        }
         return block.kind === 'shorts' ? (
           <ShortsShelf
             key={`shorts:${block.shorts[0]?.id ?? index}`}

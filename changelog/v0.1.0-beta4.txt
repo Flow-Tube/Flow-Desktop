@@ -281,6 +281,7 @@ SEARCH
 - A pasted YouTube or YouTube Music link shows what Enter will open. A link Flow can't open says so, and Enter searches for it as text.
 - The search page with nothing typed shows your recent searches with their filters, Explore's categories, and YouTube Music's moods and genres.
 - A failed search says why, such as a bot check or a dropped connection, and has Retry, as does a page of results that failed to load. When filters leave nothing, they show beside Clear filters.
+- Community posts in search results now show where YouTube places them, with their likes, comments and Share.
 - Searching again from your history brings back the filters you used. Shorts is now its own tab, next to All.
 - New Unwatched and Watched filters, and 360, VR180, 3D and Location filters. A creator with recent uploads gets one card with their latest videos.
 

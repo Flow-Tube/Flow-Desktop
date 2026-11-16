@@ -29,6 +29,7 @@ function hasAnyResult(r: CombinedSearchResults, hasCreator: boolean): boolean {
       r.shorts.length ||
       r.shelves.length ||
       r.shortsShelves.length ||
+      r.postShelves.length ||
       r.videoPlaylists.length ||
       r.albums.length ||
       r.playlists.length ||

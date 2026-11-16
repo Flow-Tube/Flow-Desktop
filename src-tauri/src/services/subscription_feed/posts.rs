@@ -274,6 +274,7 @@ mod tests {
         PostSummary {
             id: id.to_string(),
             author_name: "Author".to_string(),
+            author_channel_id: None,
             author_avatar: None,
             text_content: None,
             attachment: None,

@@ -1,5 +1,6 @@
 import type {
   PlaylistSummary,
+  PostSummary,
   SearchChannel,
   SearchCorrection,
   SearchShelf,
@@ -32,6 +33,11 @@ export interface PlacedShortsShelf extends Placed {
   shorts: ShortVideoSummary[];
 }
 
+export interface PlacedPostShelf extends Placed {
+  title: string | null;
+  posts: PostSummary[];
+}
+
 export type TopResult =
   | { kind: 'artist'; item: ArtistItem }
   | { kind: 'channel'; item: SearchChannel }
@@ -51,6 +57,8 @@ export interface CombinedSearchResults {
   shortsShelves: PlacedShortsShelf[];
   /** "Latest from …" and other titled runs of videos. */
   shelves: PlacedShelf[];
+  /** Community posts, where YouTube put them among the videos. */
+  postShelves: PlacedPostShelf[];
   /** Playlists from a YouTube playlist search, beside the YouTube Music ones in `playlists`. */
   videoPlaylists: PlaylistSummary[];
   albums: AlbumItem[];
@@ -117,6 +125,9 @@ export function withoutHidden(results: CombinedSearchResults, hidden: SearchExcl
     shelves: results.shelves
       .map((shelf) => ({ ...shelf, videos: visible(shelf.videos) }))
       .filter((shelf) => shelf.videos.length > 0),
+    postShelves: results.postShelves
+      .map((shelf) => ({ ...shelf, posts: shelf.posts.filter((post) => !hidesChannel(post.authorChannelId)) }))
+      .filter((shelf) => shelf.posts.length > 0),
   };
 }
 
@@ -144,6 +155,7 @@ export function withWatchState(
       .map((shelf) => ({ ...shelf, videos: kept(shelf.videos) }))
       .filter((shelf) => shelf.videos.length > 0),
     channels: keepWatched ? [] : results.channels,
+    postShelves: keepWatched ? [] : results.postShelves,
     videoPlaylists: keepWatched ? [] : results.videoPlaylists,
   };
 }
@@ -205,6 +217,7 @@ export function emptyResults(): CombinedSearchResults {
     shorts: [],
     shortsShelves: [],
     shelves: [],
+    postShelves: [],
     videoPlaylists: [],
     albums: [],
     playlists: [],
@@ -298,6 +311,12 @@ export function videoSections(response: SearchVideosResponse, earlier?: EarlierP
       }))
       .filter((shelf) => shelf.shorts.length > 0),
     shelves: (response.shelves ?? []).map((shelf): PlacedShelf => ({ ...shelf, afterId: anchor(shelf.afterIndex) })),
+    postShelves: (response.postShelves ?? []).map((shelf): PlacedPostShelf => ({
+      title: shelf.title ?? null,
+      posts: shelf.posts,
+      afterId: anchor(shelf.afterIndex),
+      blockIndex: shelf.blockIndex,
+    })),
     videoPlaylists: (response.playlists ?? []).map((playlist): PlaylistSummary => ({ ...playlist, type: 'playlist' })),
     correction: response.correction ?? null,
   };

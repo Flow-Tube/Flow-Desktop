@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::channel::{PlaylistSummary, ShortVideoSummary};
+use crate::models::channel::{PlaylistSummary, PostSummary, ShortVideoSummary};
 use crate::models::video::VideoSummary;
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -69,6 +69,18 @@ pub struct SearchShortsShelf {
     pub block_index: usize,
 }
 
+/// A run of community posts inside the results.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchPostShelf {
+    pub title: Option<String>,
+    pub posts: Vec<PostSummary>,
+    /// How many of the page's `items` came before it.
+    pub after_index: usize,
+    /// Its place among the page's shelves and strips, in the order the site sent them.
+    pub block_index: usize,
+}
+
 /// The site's spelling correction: results already shown for `query` (with a
 /// way back to `original`), or only offered as "Did you mean".
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -110,5 +122,6 @@ pub struct SearchVideosResponse {
     pub shorts: Vec<ShortVideoSummary>,
     pub shorts_shelves: Vec<SearchShortsShelf>,
     pub shelves: Vec<SearchShelf>,
+    pub post_shelves: Vec<SearchPostShelf>,
     pub correction: Option<SearchCorrection>,
 }

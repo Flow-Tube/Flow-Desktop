@@ -37,32 +37,32 @@ export function AllResults({ search, visible, actions, onPlayVideo, onAddToQueue
   return (
     <div className="flex flex-col gap-10 pb-12">
       <SearchCorrectionLine correction={r.correction} exact={search.exact} onSearchExactly={search.searchExactly} />
-      {creator && <SearchCreatorCard creator={creator} onPlay={onPlayVideo} onAddToQueue={onAddToQueue} />}
-      {r.topResult && (
-        <TopResultHero
-          top={r.topResult}
-          onPlaySong={actions.playSong}
-          onPlayVideo={onPlayVideo}
-          onOpenAlbum={actions.openAlbum}
-          onOpenArtist={actions.openArtist}
-          onOpenChannel={actions.openChannel}
-        />
+      {(r.topResult || r.songs.length > 0) && (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)]">
+          {r.topResult && (
+            <section className={r.songs.length > 0 ? 'flex flex-col' : 'flex flex-col lg:col-span-2 lg:max-w-xl'}>
+              <ShelfHeader title={getString('search_top_result')} />
+              <TopResultHero top={r.topResult} actions={actions} onPlayVideo={onPlayVideo} />
+            </section>
+          )}
+          {r.songs.length > 0 && (
+            <section className={r.topResult ? 'flex min-w-0 flex-col' : 'flex min-w-0 flex-col lg:col-span-2'}>
+              <ShelfHeader
+                title={getString('search_section_songs')}
+                onSeeAll={() => setFilterType('songs')}
+                seeAllLabel={getString('search_see_all_songs')}
+              />
+              <div className="flex flex-col gap-1">
+                {r.songs.slice(0, 4).map((song) => (
+                  <MusicItemCard key={song.id} variant="track-list" item={song} onPlay={() => actions.playSong(song)} />
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
       )}
 
-      {r.songs.length > 0 && (
-        <section className="flex flex-col">
-          <ShelfHeader
-            title={getString('search_section_songs')}
-            onSeeAll={() => setFilterType('songs')}
-            seeAllLabel={getString('search_see_all_songs')}
-          />
-          <div className="flex flex-col gap-1">
-            {r.songs.slice(0, 4).map((song) => (
-              <MusicItemCard key={song.id} variant="track-list" item={song} onPlay={() => actions.playSong(song)} />
-            ))}
-          </div>
-        </section>
-      )}
+      {creator && <SearchCreatorCard creator={creator} onPlay={onPlayVideo} onAddToQueue={onAddToQueue} />}
 
       {r.videos.length > 0 && (
         <section className="flex flex-col">
@@ -71,7 +71,7 @@ export function AllResults({ search, visible, actions, onPlayVideo, onAddToQueue
             onSeeAll={() => setFilterType('videos')}
             seeAllLabel={getString('search_see_all_videos')}
           />
-          <VideoGrid videos={r.videos.slice(0, 8)} onPlay={onPlayVideo} onAddToQueue={onAddToQueue} />
+          <VideoGrid videos={r.videos} rows={1} onPlay={onPlayVideo} onAddToQueue={onAddToQueue} />
         </section>
       )}
 
@@ -86,7 +86,7 @@ export function AllResults({ search, visible, actions, onPlayVideo, onAddToQueue
             onSeeAll={() => setFilterType('live')}
             seeAllLabel={getString('search_see_all_live')}
           />
-          <VideoGrid videos={r.live.slice(0, 8)} onPlay={onPlayVideo} onAddToQueue={onAddToQueue} />
+          <VideoGrid videos={r.live} rows={1} onPlay={onPlayVideo} onAddToQueue={onAddToQueue} />
         </section>
       )}
 

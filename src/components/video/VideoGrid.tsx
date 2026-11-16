@@ -30,6 +30,8 @@ interface VideoGridProps {
   onLastVisibleIndex?: (index: number) => void;
   /** Marks each card with its key, for a page that keeps the card being read in place. */
   scrollAnchors?: boolean;
+  /** Shows only this many full rows, however many columns the window fits. */
+  rows?: number;
 }
 
 /**
@@ -73,6 +75,7 @@ function VideoGridComponent({
   getReasonLine,
   onLastVisibleIndex,
   scrollAnchors = false,
+  rows,
 }: VideoGridProps) {
   const gridRef = useRef<HTMLDivElement>(null);
   useFeedImpressions(gridRef, videos, trackImpressions && !loading);
@@ -83,7 +86,8 @@ function VideoGridComponent({
   const highResThumbnails = trackWidth > 0 ? thumbnailNeedsHighRes(trackWidth) : undefined;
   const gridClass = "flow-grid gap-y-8 pb-8";
 
-  const insertAfterIndex = insertAfterCard(Boolean(insertNode), columns, videos.length);
+  const shown = rows && columns > 0 ? videos.slice(0, rows * columns) : videos;
+  const insertAfterIndex = insertAfterCard(Boolean(insertNode), columns, shown.length);
 
   if (loading) {
     return (
@@ -101,7 +105,7 @@ function VideoGridComponent({
       className={gridClass}
       style={gridStyle}
     >
-      {videos.map((video, index) => {
+      {shown.map((video, index) => {
         const key = getVideoKey ? getVideoKey(video, index) : `${video.id}-${index}`;
         return (
         <Fragment key={key}>

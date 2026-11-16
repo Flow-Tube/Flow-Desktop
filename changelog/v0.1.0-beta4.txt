@@ -274,6 +274,7 @@ SEARCH
 - One Filters button holds upload date, length, features and watched, and shows how many are on. Each filter you pick shows as a chip you can remove, with Clear all beside them.
 - Videos, Live and Movies results show as rows with each video's description excerpt, your search words in bold, and its badges. Switch to the grid from the toolbar; Flow remembers which you chose.
 - Shorts strips and shelves such as "People also watched" now sit where YouTube places them among the results, and folded shelves open with Show more.
+- All opens with the top result beside the first songs. An artist there has Shuffle and Radio, which play the same queues as the artist page.
 - Searching again from your history brings back the filters you used. Shorts is now its own tab, next to All.
 - New Unwatched and Watched filters, and 360, VR180, 3D and Location filters. A creator with recent uploads gets one card with their latest videos.
 

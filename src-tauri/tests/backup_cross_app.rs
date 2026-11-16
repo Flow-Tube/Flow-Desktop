@@ -462,7 +462,10 @@ async fn seed_desktop(pool: &SqlitePool) {
 
 fn entries(path: &std::path::Path) -> BTreeMap<String, Vec<u8>> {
     let mut archive = zip::ZipArchive::new(std::fs::File::open(path).unwrap()).unwrap();
-    let names: Vec<String> = archive.file_names().map(str::to_string).collect();
+    let names: Vec<String> = archive
+        .file_names()
+        .map(|name| name.unwrap().into_owned())
+        .collect();
     names
         .into_iter()
         .map(|name| {

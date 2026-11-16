@@ -2,6 +2,7 @@
 //! master zip, a desktop zip, or a JSON file from either. Every size is bounded before anything is
 //! parsed, because a backup can come from anywhere.
 
+use std::borrow::Cow;
 use std::fs::File;
 use std::io::{self, Read, Seek};
 use std::path::Path;
@@ -245,7 +246,11 @@ fn read_archive<R: Read + Seek>(
     archive: &mut ZipArchive<R>,
     now_ms: u64,
 ) -> Result<BackupFile, ReadError> {
-    let names: Vec<String> = archive.file_names().map(str::to_string).collect();
+    let names: Vec<String> = archive
+        .file_names()
+        .filter_map(Result::ok)
+        .map(Cow::into_owned)
+        .collect();
     if archive.len() > MAX_ENTRIES {
         return Err(ReadError::TooLarge);
     }
@@ -382,7 +387,11 @@ pub fn read_backup_file(path: &Path, now_ms: u64) -> Result<BackupFile, ReadErro
     if read >= 2 && magic[..2] == *b"PK" {
         let mut archive = open_zip(path)?;
         // A Takeout archive may hold many gigabytes of video it never reads.
-        let names: Vec<String> = archive.file_names().map(str::to_string).collect();
+        let names: Vec<String> = archive
+            .file_names()
+            .filter_map(Result::ok)
+            .map(Cow::into_owned)
+            .collect();
         if let Some(kind) = other_apps_archive(&names) {
             return Ok(BackupFile::External(kind));
         }

@@ -3,6 +3,7 @@
 //! hold anything, so its size, its rows and the time spent on it are all bounded, and the tables a
 //! query names must be real tables, since a view could run whatever its author wrote.
 
+use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -52,8 +53,9 @@ pub fn copy_to_temp(source: &Path, entry_name: &str) -> Result<TempDb, ImportErr
         let suffix = format!("/{entry_name}");
         let name = archive
             .file_names()
-            .find(|name| *name == entry_name || name.ends_with(&suffix))
-            .map(str::to_string)
+            .filter_map(Result::ok)
+            .find(|name| name == entry_name || name.ends_with(&suffix))
+            .map(Cow::into_owned)
             .ok_or(ImportError::InvalidFormat)?;
         copy_bounded(archive.by_name(&name)?, &temp.path)?;
     } else {

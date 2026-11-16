@@ -534,24 +534,26 @@ jobs:
           printf '%s\n' "$NOTES" > release-notes.md
           if [[ "$PRERELEASE" == "true" ]]; then
             title="Flow Beta v${VERSION}"
-            flags=(--prerelease)
           else
             title="Flow v${VERSION}"
-            flags=()
           fi
 
+          # Installed apps read latest.json from releases/latest, which GitHub
+          # never points at a prerelease, and betas are the only releases until
+          # 0.1.0. So no tag is marked prerelease; only the title says Beta.
           # A re-run edits the release it made before.
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release edit "$TAG" --title "$title" --notes-file release-notes.md "${flags[@]}"
+            gh release edit "$TAG" --title "$title" --notes-file release-notes.md --prerelease=false
           else
-            gh release create "$TAG" --verify-tag --title "$title" --notes-file release-notes.md "${flags[@]}"
+            gh release create "$TAG" --verify-tag --title "$title" --notes-file release-notes.md --latest=false
           fi
 
-          # Packages first, latest.json last, so installs never see an update
-          # whose file isn't there yet.
+          # Packages first, latest.json last, and only then is the release made
+          # latest, so installs never see an update whose file isn't there yet.
           shopt -s extglob
           gh release upload "$TAG" upload/!(latest.json) --clobber
           gh release upload "$TAG" upload/latest.json --clobber
+          gh release edit "$TAG" --latest
 
   # Publishes flow-desktop and flow-desktop-bin for every tag, betas included,
   # since the AUR packages follow the betas until 0.1.0. The pkgver is the tag

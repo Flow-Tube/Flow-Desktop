@@ -51,6 +51,15 @@
   </requires>
 
   <releases>
+    <release version="0.1.0-beta4" date="2026-11-16" type="development">
+      <url type="details">https://github.com/Flow-Tube/Flow-Desktop/releases/tag/v0.1.0-beta4</url>
+      <description>
+        <p>Profiles, Linked devices that keep Flow Desktop and Flow for Android
+        in sync all the time, Flow Recap, playback up to 8K, a rebuilt music
+        player with Android's crossfade and lyrics, a redesigned search, notes,
+        local media folders, automatic backups and 33 app languages.</p>
+      </description>
+    </release>
     <release version="0.1.0-beta3" date="2026-10-28" type="development">
       <url type="details">https://github.com/Flow-Tube/Flow-Desktop/releases/tag/v0.1.0-beta3</url>
       <description>

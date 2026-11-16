@@ -99,7 +99,7 @@ export function AppearanceTab() {
   };
 
   return (
-    <div className="mx-auto max-w-5xl pb-10">
+    <div className="pb-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-chrome-neutral-100">{getString("settings_appearance")}</h1>

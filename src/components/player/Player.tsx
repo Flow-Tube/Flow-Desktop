@@ -7,6 +7,7 @@ import { CurrentVideoReminderButton } from "../watch/UpcomingReminderButton";
 import type { PlayerErrorInfo } from "../../lib/playerError";
 import { getString } from "../../lib/i18n/index";
 import { SUBTITLE_FONT_SCALES, usePlayerStore } from "../../store/usePlayerStore";
+import { useShallow } from "zustand/react/shallow";
 import { useSettingsStore, type SponsorBlockCategory } from "../../store/useSettingsStore";
 import type {
   AudioTrack,
@@ -57,7 +58,7 @@ import { recapSponsorSkip } from "../../lib/recap/recapQueue";
 import { longPressRate } from "../../lib/pointerGesture";
 import { isPopOutWindow } from "../../lib/api/pip";
 import { PlayerGestureOverlay } from "./gesture/overlay";
-import { SubtitleOverlay } from "./SubtitleOverlay";
+import { PlayerSubtitles } from "./PlayerSubtitles";
 import { isLocalCaption } from "../../lib/captionText";
 import { useSubtitleFileDrop } from "../../lib/localSubtitles";
 import { useLocalSubtitleStore, videoSubtitleState } from "../../store/useLocalSubtitleStore";
@@ -237,6 +238,8 @@ function readBufferedAheadSeconds(player: DashPlayerController): number | null {
   }
 }
 
+/** One array for every player without chapters. A new `[]` per render restarted the seek bar's effect each time. */
+const NO_CHAPTERS: VideoChapter[] = [];
 const FULLSCREEN_SETTLE_MS = 120;
 /** Video kept behind the playhead. Keeping as much behind as ahead held up to
  * two extra minutes of 1080p in memory. */
@@ -330,7 +333,7 @@ export const Player: React.FC<PlayerProps> = ({
   onRetrySource,
   sourceMode,
   className,
-  chapters = [],
+  chapters = NO_CHAPTERS,
   heatmap,
   storyboard,
   projection = null,
@@ -378,6 +381,9 @@ export const Player: React.FC<PlayerProps> = ({
   const attachedAudioIdentityRef = useRef<string | null>(null);
   const videoProgressSampleRef = useRef<{ time: number; at: number } | null>(null);
 
+  // Picked field by field, and never the playback time: a bare `usePlayerStore()` re-rendered
+  // the player, its controls and its menus on every time tick. What needs the time reads the
+  // media element, or subscribes in a leaf of its own.
   const {
     isPlaying,
     setIsPlaying,
@@ -386,7 +392,6 @@ export const Player: React.FC<PlayerProps> = ({
     setMuted,
     playbackRate,
     setPlaybackRate,
-    currentTime,
     duration,
     setCurrentTime,
     setDuration,
@@ -399,10 +404,35 @@ export const Player: React.FC<PlayerProps> = ({
     videoPlayerMode,
     enterVideoPip,
     expandVideoPlayer,
-    isVideoFullscreen: isFullscreen,
-    setIsVideoFullscreen: setIsFullscreen,
+    isFullscreen,
+    setIsFullscreen,
     setIsVideoFullscreenTransitioning,
-  } = usePlayerStore();
+  } = usePlayerStore(
+    useShallow((state) => ({
+      isPlaying: state.isPlaying,
+      setIsPlaying: state.setIsPlaying,
+      volume: state.volume,
+      muted: state.muted,
+      setMuted: state.setMuted,
+      playbackRate: state.playbackRate,
+      setPlaybackRate: state.setPlaybackRate,
+      duration: state.duration,
+      setCurrentTime: state.setCurrentTime,
+      setDuration: state.setDuration,
+      playNext: state.playNext,
+      playPrevious: state.playPrevious,
+      videoFit: state.videoFit,
+      isTheaterMode: state.isTheaterMode,
+      setIsTheaterMode: state.setIsTheaterMode,
+      sponsorBlockSegments: state.sponsorBlockSegments,
+      videoPlayerMode: state.videoPlayerMode,
+      enterVideoPip: state.enterVideoPip,
+      expandVideoPlayer: state.expandVideoPlayer,
+      isFullscreen: state.isVideoFullscreen,
+      setIsFullscreen: state.setIsVideoFullscreen,
+      setIsVideoFullscreenTransitioning: state.setIsVideoFullscreenTransitioning,
+    })),
+  );
 
   usePersistedPlayerVolume();
 
@@ -486,12 +516,14 @@ export const Player: React.FC<PlayerProps> = ({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
   const ambient = useAmbientSettings();
-  const {
-    sponsorBlockEnabled,
-    sponsorBlockActions,
-    incrementStats,
-    loadSettings
-  } = useSettingsStore();
+  const { sponsorBlockEnabled, sponsorBlockActions, incrementStats, loadSettings } = useSettingsStore(
+    useShallow((state) => ({
+      sponsorBlockEnabled: state.sponsorBlockEnabled,
+      sponsorBlockActions: state.sponsorBlockActions,
+      incrementStats: state.incrementStats,
+      loadSettings: state.loadSettings,
+    })),
+  );
   const [sbMuted, setSbMuted] = useState(false);
   const [notifyToast, setNotifyToast] = useState<{ segment: any; categoryName: string; visible: boolean } | null>(null);
   const notifyTimeoutRef = useRef<number | null>(null);
@@ -507,7 +539,6 @@ export const Player: React.FC<PlayerProps> = ({
     bufferingStartedAtRef.current = null;
     setIsBuffering(false);
   }, []);
-  const [bufferedPct, setBufferedPct] = useState(0);
   const [selectedCaptionId, setSelectedCaptionId] = useState<string>("off");
   const [selectedAudioTrackId, setSelectedAudioTrackId] = useState<string | null>(null);
   const [hasStartedPlayback, setHasStartedPlayback] = useState(false);
@@ -1254,10 +1285,10 @@ export const Player: React.FC<PlayerProps> = ({
 
   const seekBy = useCallback((delta: number) => {
     const video = videoRef.current;
-    const baseTime = video ? video.currentTime : currentTime;
+    const baseTime = video ? video.currentTime : usePlayerStore.getState().currentTime;
     seekTo(baseTime + delta);
     showSeekFeedback(delta > 0 ? "forward" : "backward", Math.abs(delta));
-  }, [currentTime, seekTo, showSeekFeedback]);
+  }, [seekTo, showSeekFeedback]);
 
 
   useEffect(() => {
@@ -1335,7 +1366,7 @@ export const Player: React.FC<PlayerProps> = ({
   const jumpChapter = useCallback((direction: 1 | -1) => {
     if (chapters.length === 0) return;
     const video = videoRef.current;
-    const time = video?.currentTime ?? currentTime;
+    const time = video?.currentTime ?? usePlayerStore.getState().currentTime;
     if (direction === 1) {
       const next = chapters.find((chapter) => chapter.startSeconds > time + 0.5);
       seekTo(next ? next.startSeconds : video?.duration ?? duration);
@@ -1343,7 +1374,7 @@ export const Player: React.FC<PlayerProps> = ({
     }
     const passed = chapters.filter((chapter) => chapter.startSeconds < time - 2);
     seekTo(passed.length > 0 ? passed[passed.length - 1]!.startSeconds : 0);
-  }, [chapters, currentTime, duration, seekTo]);
+  }, [chapters, duration, seekTo]);
 
   const windowFullscreenControllerRef = useRef<WindowFullscreenController | null>(null);
   if (!windowFullscreenControllerRef.current) {
@@ -1422,17 +1453,6 @@ export const Player: React.FC<PlayerProps> = ({
     syncNativeFullscreen,
     videoPlayerMode,
   ]);
-
-  const updateBuffered = useCallback(() => {
-    const video = videoRef.current;
-    if (!video || !Number.isFinite(video.duration) || video.duration <= 0 || video.buffered.length === 0) {
-      setBufferedPct(0);
-      return;
-    }
-
-    const bufferedEnd = video.buffered.end(video.buffered.length - 1);
-    setBufferedPct(Math.min(100, (bufferedEnd / video.duration) * 100));
-  }, []);
 
   const realignExternalAudioClock = useCallback(
     (audio: HTMLAudioElement, video: HTMLVideoElement, force: boolean) => {
@@ -2337,7 +2357,6 @@ export const Player: React.FC<PlayerProps> = ({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
-    currentTime,
     isFullscreen,
     isTheaterMode,
     muted,
@@ -2395,7 +2414,6 @@ export const Player: React.FC<PlayerProps> = ({
         }
       });
     }
-    updateBuffered();
   };
 
   const handleAudioLoadedMetadata = () => {
@@ -2515,7 +2533,6 @@ export const Player: React.FC<PlayerProps> = ({
     setDuration(nextDuration);
     onTimeUpdate?.(nextTime, nextDuration);
     if (usesExternalAudio && audio) syncExternalAudio(false);
-    updateBuffered();
   };
 
   // The root stays unclipped so the glow can leave it; what it used to clip lives in the content wrapper.
@@ -2573,7 +2590,6 @@ export const Player: React.FC<PlayerProps> = ({
         playsInline
         preload="auto"
         onLoadedMetadata={handleLoadedMetadata}
-        onProgress={updateBuffered}
         onTimeUpdate={handleTimeUpdate}
         onPlaying={() => {
           const activeVideoId = usePlayerStore.getState().currentVideo?.id;
@@ -2662,8 +2678,6 @@ export const Player: React.FC<PlayerProps> = ({
         src={src}
         isPlaying={isPlaying}
         playbackRate={playbackRate}
-        currentTime={currentTime}
-        duration={duration}
         seekFeedback={seekFeedback}
         volumeFeedback={volumeFeedback}
         qualityLabel={selectedQualityId === "auto" ? activeQualityLabel : selectedQuality?.qualityLabel}
@@ -2721,10 +2735,9 @@ export const Player: React.FC<PlayerProps> = ({
       )}
 
       {/* Modular Subtitle Overlay */}
-      <SubtitleOverlay
+      <PlayerSubtitles
         captions={captions}
         selectedCaptionId={selectedCaptionId}
-        currentTime={currentTime}
         shouldShowControls={shouldShowControls}
         offsetMs={subtitleOffsetMs}
       />
@@ -2842,7 +2855,6 @@ export const Player: React.FC<PlayerProps> = ({
         audioTracks={audioTracks}
         selectedAudioTrackId={selectedAudioTrackId}
         setSelectedAudioTrackId={setSelectedAudioTrackId}
-        bufferedPct={bufferedPct}
         muted={muted}
         setMuted={setMuted}
         isFullscreen={isFullscreen}

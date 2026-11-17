@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useLayoutEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Captions,
   ChevronLeft,
@@ -22,6 +22,7 @@ import {
   VolumeX,
 } from "lucide-react";
 import { usePlayerStore, type FullscreenPanel, type PlaybackRate } from "../../store/usePlayerStore";
+import { useShallow } from "zustand/react/shallow";
 import { useSettingsStore, type SponsorBlockCategory } from "../../store/useSettingsStore";
 import type {
   AudioTrack,
@@ -85,7 +86,6 @@ export interface FlowPlayerControlsProps {
   selectedAudioTrackId?: string | null;
   setSelectedAudioTrackId: (id: string | null) => void;
 
-  bufferedPct: number;
 
   muted: boolean;
   setMuted: React.Dispatch<React.SetStateAction<boolean>>;
@@ -163,7 +163,6 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
   audioTracks = [],
   selectedAudioTrackId,
   setSelectedAudioTrackId,
-  bufferedPct,
   muted,
   setMuted,
   isFullscreen,
@@ -189,6 +188,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
   storyboard,
   activeQualityLabel,
 }) => {
+  // Field by field: a bare `usePlayerStore()` re-rendered the controls on every time tick.
   const {
     isPlaying,
     currentVideo,
@@ -213,7 +213,33 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
     playlistContext,
     isLiveChatOpen,
     setIsLiveChatOpen,
-  } = usePlayerStore();
+  } = usePlayerStore(
+    useShallow((state) => ({
+      isPlaying: state.isPlaying,
+      currentVideo: state.currentVideo,
+      volume: state.volume,
+      playbackRate: state.playbackRate,
+      setPlaybackRate: state.setPlaybackRate,
+      duration: state.duration,
+      playNext: state.playNext,
+      playPrevious: state.playPrevious,
+      isTheaterMode: state.isTheaterMode,
+      setIsTheaterMode: state.setIsTheaterMode,
+      sponsorBlockSegments: state.sponsorBlockSegments,
+      isChaptersPanelOpen: state.isChaptersPanelOpen,
+      setIsChaptersPanelOpen: state.setIsChaptersPanelOpen,
+      isQueuePanelOpen: state.isQueuePanelOpen,
+      setIsQueuePanelOpen: state.setIsQueuePanelOpen,
+      fullscreenPanel: state.fullscreenPanel,
+      setFullscreenPanel: state.setFullscreenPanel,
+      isLiveChatAvailable: state.isLiveChatAvailable,
+      isCommentsAvailable: state.isCommentsAvailable,
+      queue: state.queue,
+      playlistContext: state.playlistContext,
+      isLiveChatOpen: state.isLiveChatOpen,
+      setIsLiveChatOpen: state.setIsLiveChatOpen,
+    })),
+  );
 
   const showNextPrevious = usePlayerButton("nextPrevious");
   const showVolume = usePlayerButton("volume");
@@ -265,7 +291,14 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
   const panelButtonClass = (panel: FullscreenPanel) =>
     cx("grid h-7 w-7 place-items-center rounded-full hover:bg-chrome-white/10", panelOpen(panel) && "bg-chrome-white/15 text-primary/90");
 
-  const { sponsorBlockColors, sponsorBlockActions, sponsorBlockEnabled, sbSubmitEnabled } = useSettingsStore();
+  const { sponsorBlockColors, sponsorBlockActions, sponsorBlockEnabled, sbSubmitEnabled } = useSettingsStore(
+    useShallow((state) => ({
+      sponsorBlockColors: state.sponsorBlockColors,
+      sponsorBlockActions: state.sponsorBlockActions,
+      sponsorBlockEnabled: state.sponsorBlockEnabled,
+      sbSubmitEnabled: state.sbSubmitEnabled,
+    })),
+  );
   const barSegments = React.useMemo(
     () => (sponsorBlockEnabled ? seekBarSegments(sponsorBlockSegments, sponsorBlockActions) : []),
     [sponsorBlockActions, sponsorBlockEnabled, sponsorBlockSegments],
@@ -315,10 +348,6 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
     return capped;
   }, [chapters, duration, isLive]);
 
-  const bufferedPctRef = useRef(bufferedPct);
-  useLayoutEffect(() => {
-    bufferedPctRef.current = bufferedPct;
-  }, [bufferedPct]);
   const animateProgress = shouldAnimateProgress(isPlaying, shouldShowControls, isScrubbing);
 
   useEffect(() => {
@@ -369,7 +398,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
         const end = parseFloat(fill.dataset.end || "0");
         setStyleIfChanged(fill, "width", `${segmentFillPercent(cur, start, end)}%`);
       }
-      const bufferedTime = (bufferedPctRef.current / 100) * dur;
+      const bufferedTime = video.buffered.length > 0 ? video.buffered.end(video.buffered.length - 1) : 0;
       for (const fill of bufferedFills) {
         const start = parseFloat(fill.dataset.start || "0");
         const end = parseFloat(fill.dataset.end || "0");
@@ -391,7 +420,9 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
 
     updateProgress();
     const source = video;
-    for (const event of PROGRESS_EVENTS) source?.addEventListener(event, updateProgress);
+    // "progress" too, so the buffered part of the bar grows while paused.
+    const events = [...PROGRESS_EVENTS, "progress"] as const;
+    for (const event of events) source?.addEventListener(event, updateProgress);
 
     let frame: number | null = null;
     if (animateProgress) {
@@ -404,7 +435,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
 
     return () => {
       if (frame !== null) cancelAnimationFrame(frame);
-      for (const event of PROGRESS_EVENTS) source?.removeEventListener(event, updateProgress);
+      for (const event of events) source?.removeEventListener(event, updateProgress);
     };
   }, [animateProgress, containerRef, duration, segments, isLive, showRemaining]);
 

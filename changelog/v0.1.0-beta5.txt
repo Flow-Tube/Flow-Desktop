@@ -12,6 +12,11 @@ LINUX
 - On NVIDIA with Wayland, Try faster graphics uses the direct GPU path with explicit sync off. The default stays on shared memory.
 - Settings > About now names the graphics path in use (GPU, GPU through shared memory, or no GPU) and why. The Linux help page explains what each one costs.
 
+PLAYER
+- The player, its controls and its menus no longer redraw several times a second while a video plays. Only the parts that show the time follow it.
+- The transcript panel redraws when the spoken line changes instead of on every tick, and a Short no longer redraws its whole surface as it plays.
+- The buffered part of the seek bar keeps growing while a video is paused.
+
 FIXES
 - Fixed hidden helper windows staying open until Flow quit when a video took too long to resolve, which made Flow use more memory the longer it ran.
 - Preparing playback for one video no longer waits behind a slow token request for another.

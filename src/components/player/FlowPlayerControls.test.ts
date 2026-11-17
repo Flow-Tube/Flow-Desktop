@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { createElement, act, createRef } from "react";
+import { createElement, act, createRef, Profiler } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -19,10 +19,8 @@ const { SETTINGS } = await import("../../lib/settings/schema");
 const host = document.createElement("div");
 let root: Root;
 
-const render = (fullscreen = false, extra: { title?: string; showFullscreenTitle?: boolean; isPopOut?: boolean } = {}) =>
-  act(() =>
-    root.render(
-      createElement(FlowPlayerControls, {
+const controls = (fullscreen = false, extra: { title?: string; showFullscreenTitle?: boolean; isPopOut?: boolean } = {}) =>
+  createElement(FlowPlayerControls, {
         ...extra,
         containerRef: createRef<HTMLDivElement>(),
         controlsVisible: true,
@@ -31,7 +29,6 @@ const render = (fullscreen = false, extra: { title?: string; showFullscreenTitle
         selectedCaptionId: "off",
         setSelectedCaptionId: () => {},
         setSelectedAudioTrackId: () => {},
-        bufferedPct: 0,
         muted: false,
         setMuted: () => {},
         isFullscreen: fullscreen,
@@ -45,9 +42,8 @@ const render = (fullscreen = false, extra: { title?: string; showFullscreenTitle
         setSettingsOpen: () => {},
         isScrubbing: false,
         setIsScrubbing: () => {},
-      }),
-    ),
-  );
+      });
+const render = (...args: Parameters<typeof controls>) => act(() => root.render(controls(...args)));
 const hasButton = (title: string) => !!host.querySelector(`button[title="${title}"]`);
 const setButton = (id: string, shown: boolean) => {
   const row = PLAYER_BUTTON_ROWS.find((candidate) => candidate.id === id)!;
@@ -196,5 +192,27 @@ describe("video title above the seek bar", () => {
   it("defaults the fullscreen switch to on", async () => {
     const { getSettingDefinition } = await import("../../lib/settings/values");
     expect(getSettingDefinition(SETTINGS.SHOW_FULLSCREEN_TITLE).defaultValue).toBe("true");
+  });
+});
+
+describe("playback time", () => {
+  // The controls draw the position from the media element. Reading the whole store made them
+  // re-render, with every menu inside them, on each of these ticks.
+  it("does not re-render the controls when the time ticks", () => {
+    let commits = 0;
+    act(() => root.render(createElement(Profiler, { id: "controls", onRender: () => (commits += 1) }, controls())));
+    commits = 0;
+    for (let tick = 1; tick <= 8; tick += 1) {
+      act(() => usePlayerStore.getState().setCurrentTime(tick * 0.25));
+    }
+    expect(commits).toBe(0);
+  });
+
+  it("still follows the fields it shows", () => {
+    let commits = 0;
+    act(() => root.render(createElement(Profiler, { id: "controls", onRender: () => (commits += 1) }, controls())));
+    commits = 0;
+    act(() => usePlayerStore.getState().setDuration(321));
+    expect(commits).toBe(1);
   });
 });

@@ -150,6 +150,8 @@ function VideoCardComponent({
   menuActions: ownMenuActions,
   searchQuery = '',
 }: VideoCardProps) {
+  // Compiled by the React Compiler pilot (vite.config.ts): a feed renders this card more than anything else.
+  "use memo";
   const navigate = useNavigate();
   const subscribe = useSubscriptionStore((s) => s.subscribe);
   const unsubscribe = useSubscriptionStore((s) => s.unsubscribe);

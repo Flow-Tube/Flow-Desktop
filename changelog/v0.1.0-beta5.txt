@@ -50,3 +50,6 @@ FIXES
 - Opening Diagnostics & logs no longer freezes the window while a week of logs is read.
 - Scrolling a feed no longer rewrites your whole recommendation profile to disk every three seconds. What a feed showed is now saved once a minute, with the next thing you watch, or when Flow closes.
 - Fixed a possible freeze after hours of use when Flow was started by a launcher that never reads its output.
+
+UNDER THE HOOD
+- A first component, the video card, is built with the React Compiler, which only compiles components that opt in.

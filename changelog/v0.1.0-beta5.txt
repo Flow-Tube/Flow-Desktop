@@ -1,0 +1,13 @@
+FLOW DESKTOP CHANGE LOG
+VERSION: 0.1.0-beta5
+DATE: 2026-11-17
+STATUS: PRE-RELEASE
+
+ABOUT
+Flow Desktop is a privacy-first YouTube and YouTube Music client - no account, no ads, no analytics, no telemetry. It is the desktop companion to Flow for Android.
+
+LINUX
+- Fixed Flow staying on a slower graphics mode after 0.1.0-beta3 moved a working computer onto one (#660). The first launch tries the fast mode once and asks whether to keep it.
+- Try faster graphics, in Settings > Appearance and in a one-time notice, restarts Flow on a faster graphics mode. If the window stays blank, Flow goes back on its own after 15 seconds.
+- On NVIDIA with Wayland, Try faster graphics uses the direct GPU path with explicit sync off. The default stays on shared memory.
+- Settings > About now names the graphics path in use (GPU, GPU through shared memory, or no GPU) and why. The Linux help page explains what each one costs.

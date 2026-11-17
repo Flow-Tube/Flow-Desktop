@@ -14,6 +14,10 @@ LINUX
 - Seeking inside the loaded part of a video, and fast quality switches, no longer make WebKitGTK restart its decoder, which could stutter.
 - Settings > About now names the graphics path in use (GPU, GPU through shared memory, or no GPU) and why. The Linux help page explains what each one costs.
 
+HOME AND RECOMMENDATIONS
+- Home no longer redraws every card each time the feed loads more or changes state. Loading a page sends only its new videos, where it used to resend the whole feed at least three times.
+- Hiding a video on Home no longer reloads every card after it.
+
 PLAYER
 - The player, its controls and its menus no longer redraw several times a second while a video plays. Only the parts that show the time follow it.
 - The transcript panel redraws when the spoken line changes instead of on every tick, and a Short no longer redraws its whole surface as it plays.

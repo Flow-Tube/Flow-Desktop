@@ -245,6 +245,19 @@ export function upgradeCommunityPostImageUrl(url: string | null | undefined): st
   return upgradeLargeGoogleImageUrl(url, 2048);
 }
 
+const AVATAR_SIZES = [48, 88, 176, 256, 512];
+
+/**
+ * The size to ask for an avatar drawn `slotPx` CSS pixels wide: the smallest of a few fixed
+ * sizes that covers it on this screen. A 36 px slot filled from a 512 px image decodes about
+ * a megabyte to show a few thousand pixels, and a feed has hundreds of them. Fixed sizes keep
+ * slots of similar width on one cached file.
+ */
+export function avatarSize(slotPx: number, pixelRatio = typeof window === "undefined" ? 1 : window.devicePixelRatio || 1): number {
+  const needed = slotPx * Math.min(3, Math.max(1, pixelRatio));
+  return AVATAR_SIZES.find((size) => size >= needed) ?? 512;
+}
+
 export function upgradeAvatarUrl(url: string | null | undefined, size = 512): string | undefined {
   if (!url?.trim()) return undefined;
   let upgraded = url.trim();

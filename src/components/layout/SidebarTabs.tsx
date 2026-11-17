@@ -9,7 +9,7 @@ import { closeOtherTabs, closeTabWithPlayback, switchToTab } from '../../lib/tab
 import { moveTabToNewWindow } from '../../lib/openTarget';
 import { sectionTitleKey } from '../../lib/useResolvedWindowTitle';
 import { watchVideoIdFromPath } from '../../lib/watchRouteSync';
-import { upgradeAvatarUrl } from '../../lib/thumbnails';
+import { upgradeAvatarUrl, avatarSize } from '../../lib/thumbnails';
 import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
 import { getString } from '../../lib/i18n/index';
 import { TabRailItem } from '../ui/TabRailItem';
@@ -31,7 +31,7 @@ function TabIconView({ icon }: { icon: TabIcon }) {
   );
   if (icon.kind === 'video') return <TabImage src={`https://i.ytimg.com/vi/${icon.videoId}/mqdefault.jpg`} round={false} />;
   if (icon.kind === 'channel') {
-    return avatar ? <TabImage src={upgradeAvatarUrl(avatar)} round /> : <SidebarNavIcon name="subscriptions" className="h-6 w-6" />;
+    return avatar ? <TabImage src={upgradeAvatarUrl(avatar, avatarSize(24))} round /> : <SidebarNavIcon name="subscriptions" className="h-6 w-6" />;
   }
   if (icon.kind === 'shorts') return <ShortsIcon className="h-6 w-6" />;
   if (icon.kind === 'search') return <Search className="h-6 w-6" strokeWidth={1.6} />;

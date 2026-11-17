@@ -23,3 +23,4 @@ PLAYER
 FIXES
 - Fixed hidden helper windows staying open until Flow quit when a video took too long to resolve, which made Flow use more memory the longer it ran.
 - Preparing playback for one video no longer waits behind a slow token request for another.
+- Fixed a possible freeze after hours of use when Flow was started by a launcher that never reads its output.

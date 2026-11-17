@@ -22,7 +22,20 @@ pub fn default_device_name() -> String {
         "linux" => "Linux",
         other => other,
     };
-    format!("Flow Desktop ({os})")
+    let host = std::env::var("COMPUTERNAME")
+        .or_else(|_| std::env::var("HOSTNAME"))
+        .ok()
+        .map(|h| h.trim().to_string())
+        .filter(|h| !h.is_empty());
+
+    let label = match (host, cfg!(debug_assertions)) {
+        (Some(host), true) => format!("{host} - {os}, Dev"),
+        (Some(host), false) => format!("{host} - {os}"),
+        (None, true) => format!("{os}, Dev"),
+        (None, false) => os.to_string(),
+    };
+
+    format!("Flow Desktop ({label})")
 }
 
 // Tests for this module live in `tests/sync_phase1.rs` (integration test) — see the note in

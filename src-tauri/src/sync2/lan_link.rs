@@ -200,15 +200,24 @@ fn field<const N: usize>(body: &Value, name: &str) -> Result<[u8; N]> {
         .ok_or(EngineError::Unexpected)
 }
 
-/// The signing key of `did` when it is a current device of the group.
-fn device_key<S: Store>(session: &Session<'_, S>, did: &str) -> Result<[u8; 32]> {
-    session
+/// The signing key of `did` when it was a device of the group in `epoch`.
+fn device_key<S: Store>(session: &Session<'_, S>, did: &str, epoch: u32) -> Result<[u8; 32]> {
+    if let Some(member) = session
         .roster()
         .members
         .get(did)
         .filter(|member| member.role == Role::Device)
-        .map(|member| member.sig)
-        .ok_or(EngineError::Removed)
+    {
+        return Ok(member.sig);
+    }
+    if let Some(sender) = session.senders().get(did).filter(|sender| {
+        sender.role == Role::Device
+            && epoch >= sender.since
+            && sender.until.is_none_or(|until| epoch <= until)
+    }) {
+        return Ok(sender.sig);
+    }
+    Err(EngineError::Removed)
 }
 
 fn did_bytes(did: &str) -> Result<[u8; 16]> {
@@ -265,7 +274,7 @@ where
         &server,
     );
     if !verify(
-        &device_key(session, &peer)?,
+        &device_key(session, &peer, epoch)?,
         &signed,
         &field::<64>(&reply, "sig")?,
     ) {
@@ -317,7 +326,7 @@ where
         .as_str()
         .ok_or(EngineError::Unexpected)?
         .to_owned();
-    let peer_key = device_key(session, &peer)?;
+    let peer_key = device_key(session, &peer, epoch)?;
     let client_nonce = field::<NONCE_SIZE>(&hello, "n")?;
     let listening = hello["p"].as_u64().and_then(|p| u16::try_from(p).ok());
     let (client, server) = (did_bytes(&peer)?, device.did);

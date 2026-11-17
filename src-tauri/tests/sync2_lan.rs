@@ -27,7 +27,9 @@ use flow_desktop_lib::sync2::linking::{
 };
 use flow_desktop_lib::sync2::live_message::{LiveMessage, Now, PlayState};
 use flow_desktop_lib::sync2::live_seal::LiveKeys;
-use flow_desktop_lib::sync2::membership::{leave_group, member_keys, new_epoch, rename_device};
+use flow_desktop_lib::sync2::membership::{
+    leave_group, member_keys, new_epoch, remove_devices, rename_device,
+};
 use flow_desktop_lib::sync2::pairing::pairing_proof;
 use flow_desktop_lib::sync2::paths::log_path;
 use flow_desktop_lib::sync2::pipe::{Pipe, listen_on};
@@ -338,6 +340,33 @@ async fn a_leaving_member_passes_its_leave_to_a_member_it_reaches() {
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
     panic!("the member never pulled the leave");
+}
+
+#[tokio::test]
+async fn a_removed_device_learns_its_removal_over_lan_and_is_shut_out() {
+    let g = group().await;
+    let (pool_a, pool_b) = (holding(&g).await, holding(&g).await);
+    let session_a = Session::open(&pool_a, HeldStore::new(pool_a.clone()), &g.a)
+        .await
+        .unwrap();
+    remove_devices(&pool_a, &session_a, &g.a, &[hex::encode(g.b.did)])
+        .await
+        .unwrap();
+
+    let port = listening(&pool_a, &g.a).await;
+
+    // Device B dials Device A over LAN. B's handshake presents epoch 0.
+    // Device A accepts the handshake for epoch 0 and serves the removal roster entry.
+    let met = meet(&pool_b, &g.b, ("127.0.0.1", port), None, &[], no_live())
+        .await
+        .unwrap();
+    assert_eq!(met.peer, hex::encode(g.a.did));
+
+    // After pulling the new roster entries from A, B sees that it has been removed.
+    assert!(matches!(
+        Session::open(&pool_b, HeldStore::new(pool_b.clone()), &g.b).await,
+        Err(EngineError::Removed)
+    ));
 }
 
 fn loopback() -> Vec<String> {

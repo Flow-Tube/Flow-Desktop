@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { Suspense, useEffect, useLayoutEffect, useRef } from 'react';
 import { getString } from '../../lib/i18n/index';
 import { Topbar } from './Topbar';
 import { Sidebar } from './Sidebar';
@@ -105,7 +105,10 @@ export function PageWrapper() {
             engages. Anything needing the real scrollport reads it from here.
           */}
           <ScrollContainerContext.Provider value={mainRef}>
-            <Outlet />
+            {/* Some pages load on first visit (see App.tsx). Their files are local, so the gap is a frame or two. */}
+            <Suspense fallback={null}>
+              <Outlet />
+            </Suspense>
           </ScrollContainerContext.Provider>
         </main>
       </div>

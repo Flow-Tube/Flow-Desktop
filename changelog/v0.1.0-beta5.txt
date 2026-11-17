@@ -35,6 +35,9 @@ PLAYER
 - Video already played is dropped from memory every 30 seconds instead of every 2 minutes.
 - The dark shade behind the player controls now covers only the bottom band they sit in, not the whole picture, so the video stays bright while the controls show and costs less to draw.
 
+DESKTOP
+- Flow starts with a smaller first script: Settings, Sync, Recap, your Persona, Extensions, Diagnostics, Import, Support and the welcome screens now load when they are first opened.
+
 DOWNLOADS
 - The Downloads page no longer redraws every saved video and song four times a second while something is downloading.
 - The download cards in the corner no longer re-measure the page on every progress update.

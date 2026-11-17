@@ -1,4 +1,4 @@
-import { useCallback, useState, useEffect } from "react";
+import { lazy, Suspense, useCallback, useState, useEffect } from "react";
 import { registerAutoBackup } from "./lib/api/backup";
 import { getString } from "./lib/i18n/index";
 import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
@@ -48,7 +48,6 @@ import Search from "./pages/Search";
 import ExploreCategories from "./pages/ExploreCategories";
 import Subscriptions from "./pages/Subscriptions";
 import History from "./pages/History";
-import RecapPage from "./pages/RecapPage";
 import Downloads from "./pages/Downloads";
 import LocalMedia from "./pages/LocalMedia";
 import Likes from "./pages/Likes";
@@ -58,18 +57,10 @@ import SavedShorts from "./pages/SavedShorts";
 import Notes from "./pages/Notes";
 import Playlists from "./pages/Playlists";
 import PlaylistDetailsPage from "./pages/PlaylistDetailsPage";
-import Settings from "./pages/Settings";
-import Sync from "./pages/Sync";
-import Donations from "./pages/Donations";
-import ImportData from "./pages/ImportData";
-import ExtensionsPage from "./pages/ExtensionsPage";
 import Channel from "./pages/Channel";
-import Diagnostics from "./pages/Diagnostics";
 import DiscoverChannels from "./pages/DiscoverChannels";
 import { Watch } from "./pages/Watch";
 import { ShortsFeed } from "./components/shorts/ShortsFeed";
-import Onboarding from "./pages/Onboarding";
-import FlowNeuroPersona from "./pages/FlowNeuroPersona";
 import { LayoutGroup } from "framer-motion";
 import { ToastHost } from "./components/layout/ToastHost";
 import { GlobalMusicAudio } from "./components/music/GlobalMusicAudio";
@@ -121,6 +112,18 @@ import { SelectionMenu } from "./components/common/SelectionMenu";
 import { APP_TITLEBAR_HEIGHT, IS_LINUX_RUNTIME } from "./lib/platform";
 import type { CSSProperties } from "react";
 import "./App.css";
+
+// Pages most sessions never open load when they are first visited. They bring the charts, the
+// QR scanner and the QR renderer with them, which the first script no longer has to parse.
+const RecapPage = lazy(() => import("./pages/RecapPage"));
+const Settings = lazy(() => import("./pages/Settings"));
+const Sync = lazy(() => import("./pages/Sync"));
+const Donations = lazy(() => import("./pages/Donations"));
+const ImportData = lazy(() => import("./pages/ImportData"));
+const ExtensionsPage = lazy(() => import("./pages/ExtensionsPage"));
+const Diagnostics = lazy(() => import("./pages/Diagnostics"));
+const Onboarding = lazy(() => import("./pages/Onboarding"));
+const FlowNeuroPersona = lazy(() => import("./pages/FlowNeuroPersona"));
 
 const windowLayoutStyle = { "--app-titlebar-height": `${APP_TITLEBAR_HEIGHT}px` } as CSSProperties;
 
@@ -236,7 +239,7 @@ function App() {
       <TitleBar />
       <div data-app-content className="relative min-h-0 flex-1">
       <Routes>
-        <Route path="/onboarding" element={<Onboarding />} />
+        <Route path="/onboarding" element={<Suspense fallback={null}><Onboarding /></Suspense>} />
         
         <Route path="/" element={<PageWrapper />}>
           <Route index element={

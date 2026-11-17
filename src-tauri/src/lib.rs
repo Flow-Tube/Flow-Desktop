@@ -629,6 +629,7 @@ pub fn run() {
                 streaming_manager.clone(),
                 proxy_listeners.images,
             ));
+            tauri::async_runtime::spawn(streaming::proxy::keep_tidy(streaming_manager.clone()));
             app.manage(streaming_manager);
             app.manage(update_support);
 

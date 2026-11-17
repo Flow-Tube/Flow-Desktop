@@ -4,8 +4,27 @@ import { proxyImageUrl } from "./api/images";
 import { proxiedImage } from "./imageProxy";
 import { useImageProxyStore } from "../store/useImageProxyStore";
 
-const proxyCache = new Map<string, string>();
+/**
+ * How long a proxied address is handed out again. The backend serves it for six hours, and
+ * one kept past that came back as a broken image for the rest of the session.
+ */
+export const PROXIED_URL_LIFETIME_MS = 5 * 60 * 60 * 1000;
+
+const proxyCache = new Map<string, { url: string; at: number }>();
 const pending = new Map<string, Promise<string>>();
+
+/** The proxied address held for `src`, unless it is old enough to have stopped working. */
+export function heldProxiedUrl(src: string, now = Date.now()): string | undefined {
+  const held = proxyCache.get(src);
+  if (!held) return undefined;
+  if (now - held.at < PROXIED_URL_LIFETIME_MS) return held.url;
+  proxyCache.delete(src);
+  return undefined;
+}
+
+export function holdProxiedUrl(src: string, url: string, now = Date.now()): void {
+  proxyCache.set(src, { url, at: now });
+}
 
 function isLoopbackUrl(url: string): boolean {
   return /^https?:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?\//i.test(url);
@@ -20,7 +39,7 @@ export function useProxiedImageUrl(src: string | null | undefined): string | und
   const [proxied, setProxied] = useState<string | undefined>(() => {
     if (!normalized) return undefined;
     if (isLoopbackUrl(normalized)) return normalized;
-    return proxyCache.get(normalized);
+    return heldProxiedUrl(normalized);
   });
 
   useEffect(() => {
@@ -33,7 +52,7 @@ export function useProxiedImageUrl(src: string | null | undefined): string | und
       return;
     }
 
-    const cached = proxyCache.get(normalized);
+    const cached = heldProxiedUrl(normalized);
     if (cached) {
       setProxied(cached);
       return;
@@ -44,7 +63,7 @@ export function useProxiedImageUrl(src: string | null | undefined): string | und
     pending.set(normalized, request);
     request
       .then((url) => {
-        proxyCache.set(normalized, url);
+        holdProxiedUrl(normalized, url);
         if (active) setProxied(url);
       })
       .catch(() => {

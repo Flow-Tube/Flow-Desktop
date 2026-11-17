@@ -42,4 +42,6 @@ DOWNLOADS
 FIXES
 - Fixed hidden helper windows staying open until Flow quit when a video took too long to resolve, which made Flow use more memory the longer it ran.
 - Preparing playback for one video no longer waits behind a slow token request for another.
+- Fixed covers and artwork turning into placeholders after Flow had been open for about six hours.
+- Flow lets go of expired stream links and of a finished video's buffer on its own every minute, where it used to wait for the next video to be opened.
 - Fixed a possible freeze after hours of use when Flow was started by a launcher that never reads its output.

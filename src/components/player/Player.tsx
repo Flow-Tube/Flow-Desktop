@@ -59,6 +59,7 @@ import { longPressRate } from "../../lib/pointerGesture";
 import { isPopOutWindow } from "../../lib/api/pip";
 import { PlayerGestureOverlay } from "./gesture/overlay";
 import { PlayerSubtitles } from "./PlayerSubtitles";
+import { webkitGtkBufferSettings } from "../../lib/dashSetup";
 import { isLocalCaption } from "../../lib/captionText";
 import { useSubtitleFileDrop } from "../../lib/localSubtitles";
 import { useLocalSubtitleStore, videoSubtitleState } from "../../store/useLocalSubtitleStore";
@@ -246,6 +247,9 @@ const FULLSCREEN_SETTLE_MS = 120;
 /** Video kept behind the playhead. Keeping as much behind as ahead held up to
  * two extra minutes of 1080p in memory. */
 const BACK_BUFFER_SECONDS = 30;
+/** How often what is further behind than that is dropped. At 120 the buffer held up to 150
+ * seconds behind the playhead between two prunes. */
+const BACK_BUFFER_PRUNE_SECONDS = 30;
 const PLAYER_LOG_MAX_CHARS = 500;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -1620,8 +1624,9 @@ export const Player: React.FC<PlayerProps> = ({
         },
         buffer: {
           fastSwitchEnabled: fastQualitySwitchEnabled(),
+          ...webkitGtkBufferSettings(),
           bufferToKeep: BACK_BUFFER_SECONDS,
-          bufferPruningInterval: 120,
+          bufferPruningInterval: BACK_BUFFER_PRUNE_SECONDS,
           bufferTimeDefault: bufferConfig.minSeconds,
           bufferTimeAtTopQuality: bufferConfig.maxSeconds,
           bufferTimeAtTopQualityLongForm: bufferConfig.maxSeconds,

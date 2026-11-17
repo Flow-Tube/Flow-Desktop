@@ -11,6 +11,7 @@ LINUX
 - Try faster graphics, in Settings > Appearance and in a one-time notice, restarts Flow on a faster graphics mode. If the window stays blank, Flow goes back on its own after 15 seconds.
 - On NVIDIA with Wayland, Try faster graphics uses the direct GPU path with explicit sync off. The default stays on shared memory.
 - Flow on Linux asks for fewer redraws: the playing bars and live dots hold still, pages and the side menu switch without a fade or slide, and the video has square corners. Ambient mode stays off on the slower graphics modes.
+- Seeking inside the loaded part of a video, and fast quality switches, no longer make WebKitGTK restart its decoder, which could stutter.
 - Settings > About now names the graphics path in use (GPU, GPU through shared memory, or no GPU) and why. The Linux help page explains what each one costs.
 
 PLAYER
@@ -19,6 +20,7 @@ PLAYER
 - The buffered part of the seek bar keeps growing while a video is paused.
 - The seek bar, the mini player bar and the music bar are redrawn only when they move by a pixel, not on every frame. On a long video that is a few times a second instead of 60 or more.
 - The mini player's bar and the seek bar's thumb are no longer animated while they are hidden.
+- Video already played is dropped from memory every 30 seconds instead of every 2 minutes.
 - The dark shade behind the player controls now covers only the bottom band they sit in, not the whole picture, so the video stays bright while the controls show and costs less to draw.
 
 FIXES

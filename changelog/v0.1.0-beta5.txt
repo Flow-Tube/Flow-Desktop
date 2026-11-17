@@ -16,6 +16,8 @@ PLAYER
 - The player, its controls and its menus no longer redraw several times a second while a video plays. Only the parts that show the time follow it.
 - The transcript panel redraws when the spoken line changes instead of on every tick, and a Short no longer redraws its whole surface as it plays.
 - The buffered part of the seek bar keeps growing while a video is paused.
+- The seek bar, the mini player bar and the music bar are redrawn only when they move by a pixel, not on every frame. On a long video that is a few times a second instead of 60 or more.
+- The mini player's bar and the seek bar's thumb are no longer animated while they are hidden.
 
 FIXES
 - Fixed hidden helper windows staying open until Flow quit when a video took too long to resolve, which made Flow use more memory the longer it ran.

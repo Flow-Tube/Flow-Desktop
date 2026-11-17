@@ -2,7 +2,14 @@ import { getString } from "../../lib/i18n/index";
 import React, { useEffect, useRef } from "react";
 import { FastForward, Pause, Play, Rewind, SkipBack, SkipForward } from "lucide-react";
 import { usePlayerStore } from "../../store/usePlayerStore";
-import { PROGRESS_EVENTS, setStyleIfChanged, shouldAnimateProgress } from "../../lib/playerProgress";
+import {
+  PROGRESS_EVENTS,
+  cssPercent,
+  setStyleIfChanged,
+  shouldAnimateProgress,
+  snapToBarPixel,
+  watchBarSteps,
+} from "../../lib/playerProgress";
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
@@ -40,24 +47,27 @@ export const MiniPlayerControls: React.FC<MiniPlayerControlsProps> = ({
   const fillRef = useRef<HTMLDivElement>(null);
   const scrubbingRef = useRef(false);
 
-  // The mini bar is always on screen, so only a paused video skips the loop.
+  // The bar fades out with the rest of the controls, so it is only drawn every frame while
+  // they show. Hidden, it follows the media events and is current when it fades back in.
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     let video = container.querySelector("video");
+    let steps = 0;
+    const stopWatchingWidth = watchBarSteps(trackRef.current, (next) => (steps = next));
     const update = () => {
       if (!video?.isConnected) video = container.querySelector("video");
       if (!video) return;
       const dur = video.duration || duration || 0;
-      const pct = dur > 0 ? clamp((video.currentTime / dur) * 100, 0, 100) : 0;
-      setStyleIfChanged(fillRef.current, "width", `${pct}%`);
+      const shown = snapToBarPixel(video.currentTime, dur, steps);
+      setStyleIfChanged(fillRef.current, "width", cssPercent(dur > 0 ? clamp((shown / dur) * 100, 0, 100) : 0));
     };
 
     update();
     const source = video;
     for (const event of PROGRESS_EVENTS) source?.addEventListener(event, update);
     let raf: number | null = null;
-    if (shouldAnimateProgress(isPlaying, true, false)) {
+    if (shouldAnimateProgress(isPlaying, shouldShowControls, false)) {
       const tick = () => {
         update();
         raf = requestAnimationFrame(tick);
@@ -66,9 +76,10 @@ export const MiniPlayerControls: React.FC<MiniPlayerControlsProps> = ({
     }
     return () => {
       if (raf !== null) cancelAnimationFrame(raf);
+      stopWatchingWidth();
       for (const event of PROGRESS_EVENTS) source?.removeEventListener(event, update);
     };
-  }, [containerRef, duration, isPlaying]);
+  }, [containerRef, duration, isPlaying, shouldShowControls]);
 
   const seekFromClientX = (clientX: number) => {
     const track = trackRef.current;

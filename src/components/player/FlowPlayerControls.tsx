@@ -43,6 +43,9 @@ import { PLAYER_MENU_OWNER_ATTR } from "../../lib/playerMenuDismiss";
 import { SponsorBlockSubmitDialog } from "./SponsorBlockSubmitDialog";
 import {
   PROGRESS_EVENTS,
+  cssPercent,
+  snapToBarPixel,
+  watchBarSteps,
   segmentFillPercent,
   setStyleIfChanged,
   setTextIfChanged,
@@ -309,8 +312,10 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
   const [submitDialogOpen, setSubmitDialogOpen] = useState(false);
   const [submitAtSeconds, setSubmitAtSeconds] = useState(0);
   const chapterPillRef = useRef<HTMLButtonElement>(null);
-  const progressBarRef = useRef<HTMLDivElement>(null);
   const playheadRef = useRef<HTMLDivElement>(null);
+  // Hovered or being dragged: the only time the thumb shows, so the only time it is moved.
+  const seekBarActiveRef = useRef(false);
+  const drawSeekBarRef = useRef<() => void>(() => {});
   const currentTimeRef = useRef<HTMLSpanElement>(null);
   const durationTimeRef = useRef<HTMLSpanElement>(null);
   const hoverPillRef = useRef<HTMLDivElement>(null);
@@ -350,6 +355,12 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
 
   const animateProgress = shouldAnimateProgress(isPlaying, shouldShowControls, isScrubbing);
 
+  // A drag can end away from the bar, where no mouseleave follows it.
+  useEffect(() => {
+    const track = containerRef.current?.querySelector("[data-progress-track]");
+    seekBarActiveRef.current = isScrubbing || Boolean(track?.matches(":hover"));
+  }, [isScrubbing, containerRef]);
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -358,11 +369,15 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
     const bufferedFills = [...container.querySelectorAll<HTMLElement>(".chapter-buffered-fill")];
     const chapterTitle = chapterPillRef.current?.querySelector<HTMLElement>(".chapter-title");
     let video = container.querySelector("video");
+    let steps = 0;
+    const stopWatchingWidth = watchBarSteps(container.querySelector("[data-progress-track]"), (next) => (steps = next));
 
     const updateProgress = () => {
       if (!video?.isConnected) video = container.querySelector("video");
       if (!video) return;
       const cur = video.currentTime;
+      // The thumb is scaled to nothing unless the bar is hovered or dragged.
+      const playhead = seekBarActiveRef.current ? playheadRef.current : null;
 
       // Live: the seekbar tracks the DVR window without jittering at the live edge.
       if (isLive) {
@@ -372,10 +387,9 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
         const atEdge = isAtLiveEdge(cur, end, timing);
         const livePct = atEdge
           ? "100%"
-          : `${Math.min(100, Math.max(0, ((cur - start) / win) * 100))}%`;
-        setStyleIfChanged(progressBarRef.current, "width", livePct);
+          : cssPercent(Math.min(100, Math.max(0, (snapToBarPixel(cur - start, win, steps) / win) * 100)));
         for (const fill of [...progressFills, ...bufferedFills]) setStyleIfChanged(fill, "width", livePct);
-        setStyleIfChanged(playheadRef.current, "left", livePct);
+        setStyleIfChanged(playhead, "left", livePct);
         setStyleIfChanged(chapterPillRef.current, "display", "none");
         // The Live button beside it already says so at the edge.
         setStyleIfChanged(timePillRef.current, "display", atEdge ? "none" : "");
@@ -389,20 +403,23 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
       setStyleIfChanged(timePillRef.current, "display", "");
 
       const dur = video.duration || duration || 0;
-      const pct = `${dur > 0 ? Math.min(100, Math.max(0, (cur / dur) * 100)) : 0}%`;
-      setStyleIfChanged(progressBarRef.current, "width", pct);
-      setStyleIfChanged(playheadRef.current, "left", pct);
+      // Every bar below is drawn from the same snapped position, so none of them is rewritten
+      // until the playhead has moved a whole device pixel.
+      const shown = snapToBarPixel(cur, dur, steps);
+      const pct = cssPercent(dur > 0 ? Math.min(100, Math.max(0, (shown / dur) * 100)) : 0);
+      setStyleIfChanged(playhead, "left", pct);
 
       for (const fill of progressFills) {
         const start = parseFloat(fill.dataset.start || "0");
         const end = parseFloat(fill.dataset.end || "0");
-        setStyleIfChanged(fill, "width", `${segmentFillPercent(cur, start, end)}%`);
+        setStyleIfChanged(fill, "width", cssPercent(segmentFillPercent(shown, start, end)));
       }
-      const bufferedTime = video.buffered.length > 0 ? video.buffered.end(video.buffered.length - 1) : 0;
+      const bufferedEnd = video.buffered.length > 0 ? video.buffered.end(video.buffered.length - 1) : 0;
+      const bufferedTime = snapToBarPixel(bufferedEnd, dur, steps);
       for (const fill of bufferedFills) {
         const start = parseFloat(fill.dataset.start || "0");
         const end = parseFloat(fill.dataset.end || "0");
-        setStyleIfChanged(fill, "width", `${segmentFillPercent(bufferedTime, start, end)}%`);
+        setStyleIfChanged(fill, "width", cssPercent(segmentFillPercent(bufferedTime, start, end)));
       }
 
       setStyleIfChanged(idleStripRef.current, "width", pct);
@@ -419,6 +436,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
     };
 
     updateProgress();
+    drawSeekBarRef.current = updateProgress;
     const source = video;
     // "progress" too, so the buffered part of the bar grows while paused.
     const events = [...PROGRESS_EVENTS, "progress"] as const;
@@ -435,6 +453,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
 
     return () => {
       if (frame !== null) cancelAnimationFrame(frame);
+      stopWatchingWidth();
       for (const event of events) source?.removeEventListener(event, updateProgress);
     };
   }, [animateProgress, containerRef, duration, segments, isLive, showRemaining]);
@@ -573,6 +592,11 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
   };
 
   const handleProgressMove = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!seekBarActiveRef.current) {
+      seekBarActiveRef.current = true;
+      // Put the thumb where the video is before it springs into view.
+      drawSeekBarRef.current();
+    }
     updateHoverPreview(event.clientX, event.currentTarget);
   };
 
@@ -605,6 +629,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
             className="group/seekbar relative flex h-6 cursor-pointer items-center"
             onMouseMove={handleProgressMove}
             onMouseLeave={() => {
+              seekBarActiveRef.current = isScrubbing;
               // During a drag the document-level pointermove owns the pill.
               if (!isScrubbing) hideHoverPreview();
             }}
@@ -676,13 +701,6 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                 );
               })}
             </div>
-
-            {/* Invisible native progress tracking width marker */}
-            <div
-              ref={progressBarRef}
-              className="absolute pointer-events-none opacity-0"
-              style={{ width: `${progressPct}%` }}
-            />
 
             {/* Playhead thumb — hidden until hover/scrub, then springs in: white knob + primary ring + soft state layer, like the mobile thumb. */}
             <div

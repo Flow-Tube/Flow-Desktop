@@ -62,8 +62,9 @@ use commands::db::{
 };
 use commands::diagnostics::{
     clear_logs, crash_report_delete, crash_report_dismiss, crash_report_read, get_graphics_mode,
-    graphics_report, linux_codec_source, log_frontend_event, logs_dir_path, read_logs,
-    reset_visitor_identity, reveal_logs_folder, set_graphics_mode, startup_render_ok,
+    graphics_report, graphics_trial_shown, keep_graphics_trial, linux_codec_source,
+    log_frontend_event, logs_dir_path, read_logs, reset_visitor_identity, reveal_logs_folder,
+    revert_graphics_trial, set_graphics_mode, start_graphics_trial, startup_render_ok,
     updates_supported,
 };
 use commands::discord::{clear_discord_presence, set_discord_presence};
@@ -424,6 +425,9 @@ pub fn run() {
                 nvidia_preset = boot_report.nvidia_preset,
                 safe_graphics = boot_report.safe_graphics,
                 graphics_mode = boot_report.mode.as_str(),
+                reason = boot_report.reason.as_str(),
+                render_path = boot_report.render_path.as_str(),
+                faster = boot_report.faster.as_str(),
                 libva_fallback,
                 "linux_startup_workarounds_applied"
             );
@@ -660,6 +664,8 @@ pub fn run() {
             if let Some(main_window) = app.get_webview_window("main") {
                 web_process::watch(&main_window);
             }
+            #[cfg(target_os = "linux")]
+            linux_startup::watch_trial(app.handle().clone());
 
             // Other platforms quit with the main window, including the pop-out,
             // unless another Flow window is still open: then it only hides.
@@ -867,6 +873,10 @@ pub fn run() {
             startup_render_ok,
             get_graphics_mode,
             set_graphics_mode,
+            start_graphics_trial,
+            graphics_trial_shown,
+            keep_graphics_trial,
+            revert_graphics_trial,
             linux_codec_source,
             graphics_report,
             updates_supported,

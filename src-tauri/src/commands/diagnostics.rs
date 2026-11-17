@@ -252,3 +252,70 @@ pub fn set_graphics_mode(app: tauri::AppHandle, mode: String) -> Result<(), Erro
     let _ = (app, mode);
     Ok(())
 }
+
+/// Restarts Flow on a faster graphics tier that the user then keeps or lets
+/// lapse (see `linux_startup`). False when there is no faster tier to try, and
+/// always on other platforms.
+#[tauri::command]
+#[must_use]
+pub fn start_graphics_trial(app: tauri::AppHandle) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        if !crate::linux_startup::request_trial(&app.config().identifier) {
+            return false;
+        }
+        crate::relaunch::request();
+        app.exit(0);
+        true
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = app;
+        false
+    }
+}
+
+/// The trial's question is on screen: starts its countdown and returns the
+/// seconds left. `None` when this launch is not a trial.
+#[tauri::command]
+#[must_use]
+pub fn graphics_trial_shown() -> Option<u64> {
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux_startup::trial_shown()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        None
+    }
+}
+
+/// Keeps the graphics tier this trial launch runs on.
+#[tauri::command]
+#[must_use]
+pub fn keep_graphics_trial(app: tauri::AppHandle) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux_startup::keep_trial(
+            &app.config().identifier,
+            &app.package_info().version.to_string(),
+        )
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = app;
+        false
+    }
+}
+
+/// Ends the trial and restarts Flow on the tier it had before.
+#[tauri::command]
+pub fn revert_graphics_trial(app: tauri::AppHandle) {
+    #[cfg(target_os = "linux")]
+    if crate::linux_startup::end_trial(&app.config().identifier) {
+        crate::relaunch::request();
+        app.exit(0);
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = app;
+}

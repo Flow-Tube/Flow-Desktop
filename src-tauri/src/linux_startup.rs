@@ -7,7 +7,9 @@
 //! every one of them costs something, so none is applied until a launch has
 //! actually failed to render, except where the failure is already known:
 //!
-//! * Tier 0 (default): nothing. Upstream defaults are the fast path.
+//! * Tier 0 (default): nothing. Upstream defaults are the fast path. On NVIDIA
+//!   with Wayland, reached only through a trial the user kept: explicit sync
+//!   off and the direct GPU path kept.
 //! * Tier 1: disable explicit sync, and move rendered frames through shared
 //!   memory instead of DMABUF (`WEBKIT_DMABUF_RENDERER_FORCE_SHM`).
 //! * Tier 2: also disable the DMABUF renderer and compositing, which is CPU
@@ -46,6 +48,18 @@
 //! launch of a version tries one tier below the remembered one, never below the
 //! NVIDIA or user floor. If that fails, the next launch climbs back.
 //!
+//! A remembered tier can also be wrong: a launch that was closed early or a
+//! page that crashed for its own reasons looks like a graphics failure. Every
+//! tier above 0 costs speed. On WebKitGTK's GTK 3 port shared memory reads the
+//! whole frame back and repaints the whole view for every frame, and tiers 2
+//! and 3 render on the CPU. So the record keeps why its tier was reached, and
+//! a tier can be tried again from below: a trial launch runs a lower tier and
+//! asks the user to keep it. A blank window can't answer, so the trial ends on
+//! a clock kept here, and Flow restarts on the tier it had. A record written
+//! before reasons existed gets one such trial by itself, the user can ask for
+//! one in Settings, and a trial nobody kept is not repeated on the same
+//! WebKitGTK.
+//!
 //! `__NV_DISABLE_EXPLICIT_SYNC` shares tier 1 rather than occupying its own rung.
 //! It is the cheapest remedy — Tauri notes it "often fixes the Wayland `Error 71`
 //! crash without a performance cost" — and it is inert outside the NVIDIA driver.
@@ -66,6 +80,15 @@ const MAX_TIER: u8 = 3;
 /// First WebKitGTK release where the DMABUF renderer is the only accelerated
 /// path and `WEBKIT_DMABUF_RENDERER_FORCE_SHM` exists.
 const SHM_TRANSPORT_SINCE: (u32, u32) = (2, 44);
+/// The record version that carries reasons and trials. An older record can hold
+/// a tier that was raised by launches that only looked like failures.
+const SCHEMA: u8 = 2;
+/// A trial launch whose page never mounts gives up after this long.
+#[cfg(target_os = "linux")]
+const TRIAL_MOUNT_SECS: u64 = 45;
+/// How long the user has to keep a trial once its question is on screen.
+#[cfg(target_os = "linux")]
+const TRIAL_KEEP_SECS: u64 = 15;
 #[cfg(target_os = "linux")]
 const SAFE_GRAPHICS_ARG: &str = "--safe-graphics";
 #[cfg(any(target_os = "linux", test))]
@@ -107,6 +130,117 @@ impl GraphicsMode {
     }
 }
 
+/// Why a launch used its tier. Kept with the remembered tier, so About and bug
+/// reports can say where it came from, and so a floor is not mistaken for a need.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TierReason {
+    Default,
+    Settings,
+    FailedLaunches,
+    CrashLoop,
+    NvidiaWayland,
+    Remembered,
+    SafeGraphicsLaunch,
+    Trial,
+    TrialKept,
+}
+
+impl TierReason {
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Default => "default",
+            Self::Settings => "settings",
+            Self::FailedLaunches => "failed-launches",
+            Self::CrashLoop => "crash-loop",
+            Self::NvidiaWayland => "nvidia-wayland",
+            Self::Remembered => "remembered",
+            Self::SafeGraphicsLaunch => "safe-graphics-launch",
+            Self::Trial => "trial",
+            Self::TrialKept => "trial-kept",
+        }
+    }
+
+    /// A floor applies itself on every launch while it holds, so the tier it
+    /// produced says nothing about what the machine needs.
+    fn is_floor(self) -> bool {
+        matches!(self, Self::Settings | Self::NvidiaWayland)
+    }
+}
+
+/// How a tier gets the page to the screen, in the words About uses.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RenderPath {
+    Gpu,
+    /// GPU rendering, with every frame read back and copied through shared memory.
+    SharedMemory,
+    Software,
+}
+
+impl RenderPath {
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Gpu => "gpu",
+            Self::SharedMemory => "shared-memory",
+            Self::Software => "software",
+        }
+    }
+
+    fn of(tier: u8, shm_transport: bool) -> Self {
+        match tier {
+            0 => Self::Gpu,
+            // Before 2.44 the DMABUF renderer was one of several accelerated paths.
+            1 if shm_transport => Self::SharedMemory,
+            1 => Self::Gpu,
+            _ => Self::Software,
+        }
+    }
+}
+
+/// What a faster-graphics trial can do for a launch.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FasterGraphics {
+    /// Nothing faster to try from this tier.
+    None,
+    /// This launch is the trial, waiting to be kept.
+    Trial,
+    /// A trial has somewhere to go, if the user asks for one.
+    Available,
+    /// Available, and the tier is not the user's own choice, so worth saying.
+    Suggested,
+}
+
+impl FasterGraphics {
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Trial => "trial",
+            Self::Available => "available",
+            Self::Suggested => "suggested",
+        }
+    }
+}
+
+/// A launch at a lower tier that only becomes the remembered one if the user
+/// keeps it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+struct Trial {
+    tier: u8,
+    /// False while it waits for the relaunch that runs it.
+    running: bool,
+}
+
+/// The last trial nobody kept, and the WebKitGTK it ran on. A newer WebKitGTK
+/// may behave differently, so it is worth another try.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+struct FailedTrial {
+    webkit: String,
+    tier: u8,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 struct StartupState {
@@ -119,6 +253,15 @@ struct StartupState {
     /// Tier the current, or last unconfirmed, launch used.
     pending_tier: u8,
     mode: GraphicsMode,
+    /// Where `good_tier` came from. `None` in a record older than [`SCHEMA`].
+    reason: Option<TierReason>,
+    /// Why the current, or last unconfirmed, launch used `pending_tier`.
+    pending_reason: Option<TierReason>,
+    /// The page kept crashing since the last confirmed render.
+    crash_looped: bool,
+    trial: Option<Trial>,
+    trial_failed: Option<FailedTrial>,
+    schema: u8,
 }
 
 /// What this machine and this launch ask for, read once before GTK starts.
@@ -135,13 +278,29 @@ impl LaunchFacts {
     }
 }
 
+/// What one launch does, decided before GTK starts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct LaunchPlan {
+    tier: u8,
+    reason: TierReason,
+    trial: bool,
+}
+
 impl StartupState {
+    fn floor(&self, facts: LaunchFacts) -> u8 {
+        // A faster tier the user kept after seeing it render outranks the preset.
+        let kept_faster = self.reason == Some(TierReason::TrialKept) && self.good_tier == Some(0);
+        u8::from(facts.nvidia_preset() && !kept_faster).max(self.mode.floor())
+    }
+
     fn choose_tier(&self, version: &str, facts: LaunchFacts) -> u8 {
         if facts.safe_graphics {
             return MAX_TIER;
         }
-        let floor = u8::from(facts.nvidia_preset()).max(self.mode.floor());
+        let floor = self.floor(facts);
         let base = match self.good_tier {
+            // Remembered only as far as the floor that produced it still reaches.
+            Some(good) if self.reason.is_some_and(TierReason::is_floor) => good.min(floor),
             Some(good) if self.good_version.as_deref() == Some(version) => good,
             Some(good) => good.saturating_sub(1),
             None => 0,
@@ -151,21 +310,202 @@ impl StartupState {
             .min(MAX_TIER)
     }
 
+    /// Call before [`Self::launched`], which counts this launch as failed until it renders.
+    fn reason_for(&self, tier: u8, facts: LaunchFacts) -> TierReason {
+        if facts.safe_graphics {
+            TierReason::SafeGraphicsLaunch
+        } else if tier == 0 {
+            TierReason::Default
+        } else if self.mode != GraphicsMode::Automatic && tier == self.mode.floor() {
+            TierReason::Settings
+        } else if self.failed_boots > 0 {
+            if self.crash_looped {
+                TierReason::CrashLoop
+            } else {
+                TierReason::FailedLaunches
+            }
+        } else if facts.nvidia_preset() && tier == 1 {
+            TierReason::NvidiaWayland
+        } else {
+            TierReason::Remembered
+        }
+    }
+
+    /// What About shows: a remembered tier is described by where it came from.
+    fn shown_reason(&self, reason: TierReason, tier: u8) -> TierReason {
+        match reason {
+            TierReason::Remembered => self.reason.unwrap_or(reason),
+            TierReason::Default if self.kept(tier) => TierReason::TrialKept,
+            other => other,
+        }
+    }
+
+    fn kept(&self, tier: u8) -> bool {
+        self.reason == Some(TierReason::TrialKept) && self.good_tier == Some(tier)
+    }
+
     /// Recorded before the webview is built, so a crash or abort is remembered.
-    fn launched(&mut self, tier: u8) {
+    fn launched(&mut self, tier: u8, reason: TierReason) {
         self.pending_tier = tier;
+        self.pending_reason = Some(reason);
         // One past MAX_TIER is enough; further crashes can't escalate.
         self.failed_boots = self.failed_boots.saturating_add(1).min(MAX_TIER + 1);
     }
 
     fn confirmed(&mut self, version: &str) {
+        let reason = self.pending_reason.unwrap_or(TierReason::Remembered);
+        if reason == TierReason::Remembered {
+            self.reason = self.reason.or(Some(reason));
+        } else if !self.kept(self.pending_tier) {
+            self.reason = Some(reason);
+        }
         self.good_tier = Some(self.pending_tier);
         self.good_version = Some(version.to_owned());
         self.failed_boots = 0;
+        self.crash_looped = false;
     }
 
     fn crash_looped(&mut self) {
         self.failed_boots = self.failed_boots.saturating_add(1).min(MAX_TIER + 1);
+        self.crash_looped = true;
+    }
+
+    /// The tier a faster-graphics trial would use from `current`, if one is
+    /// worth running: never below `floor`, and above a tier nobody kept on this
+    /// WebKitGTK.
+    fn trial_target(&self, current: u8, floor: u8, webkit: &str) -> Option<u8> {
+        let target = self
+            .trial_failed
+            .as_ref()
+            .filter(|failed| failed.webkit == webkit)
+            .map_or(floor, |failed| failed.tier.saturating_add(1).max(floor));
+        (target < current).then_some(target)
+    }
+
+    /// Queues a trial for the next launch. The user asked, so it may go below
+    /// the NVIDIA preset, but not below their own choice in Settings.
+    fn request_trial(&mut self, current: u8, webkit: &str) -> bool {
+        let Some(tier) = self.trial_target(current, self.mode.floor(), webkit) else {
+            return false;
+        };
+        self.trial = Some(Trial {
+            tier,
+            running: false,
+        });
+        true
+    }
+
+    fn keep_trial(&mut self, version: &str) {
+        let Some(trial) = self.trial.take() else {
+            return;
+        };
+        self.good_tier = Some(trial.tier);
+        self.good_version = Some(version.to_owned());
+        self.pending_tier = trial.tier;
+        self.pending_reason = Some(TierReason::TrialKept);
+        self.reason = Some(TierReason::TrialKept);
+        self.failed_boots = 0;
+        self.crash_looped = false;
+    }
+
+    fn fail_trial(&mut self, webkit: &str) {
+        if let Some(trial) = self.trial.take() {
+            self.trial_failed = Some(FailedTrial {
+                webkit: webkit.to_owned(),
+                tier: trial.tier,
+            });
+        }
+    }
+
+    /// Decides this launch and records it. A trial launch is not counted as a
+    /// failed startup: if it dies, only the trial failed.
+    fn plan_launch(&mut self, version: &str, webkit: &str, facts: LaunchFacts) -> LaunchPlan {
+        // Still running when the last launch ended: nobody kept it.
+        if self.trial.is_some_and(|trial| trial.running) {
+            self.fail_trial(webkit);
+        }
+        let requested = self.trial.take().map(|trial| trial.tier);
+        let tier = self.choose_tier(version, facts);
+        let reason = self.reason_for(tier, facts);
+
+        // An older record gets one trial of its own, on a launch that follows a
+        // confirmed render, so a tier raised by false alarms can come back down.
+        let older_record = self.schema < SCHEMA && self.failed_boots == 0;
+        if older_record {
+            self.schema = SCHEMA;
+        }
+        let trial_tier = if facts.safe_graphics {
+            None
+        } else {
+            requested.filter(|target| *target < tier).or_else(|| {
+                older_record
+                    .then(|| self.trial_target(tier, self.floor(facts), webkit))
+                    .flatten()
+            })
+        };
+
+        if let Some(tier) = trial_tier {
+            self.trial = Some(Trial {
+                tier,
+                running: true,
+            });
+            return LaunchPlan {
+                tier,
+                reason: TierReason::Trial,
+                trial: true,
+            };
+        }
+        self.launched(tier, reason);
+        LaunchPlan {
+            tier,
+            reason: self.shown_reason(reason, tier),
+            trial: false,
+        }
+    }
+
+    /// The same decision for a second launch while Flow runs, which is handed
+    /// to the running window and must leave the record alone.
+    fn peek_launch(&self, version: &str, facts: LaunchFacts) -> LaunchPlan {
+        let tier = self.choose_tier(version, facts);
+        LaunchPlan {
+            tier,
+            reason: self.shown_reason(self.reason_for(tier, facts), tier),
+            trial: false,
+        }
+    }
+
+    /// What a trial can do for `plan`. It is suggested only where a faster tier
+    /// is untried on this WebKitGTK and the current one is not the user's choice.
+    fn faster_graphics(
+        &self,
+        plan: LaunchPlan,
+        facts: LaunchFacts,
+        webkit: &str,
+    ) -> FasterGraphics {
+        if plan.trial {
+            return FasterGraphics::Trial;
+        }
+        if facts.safe_graphics
+            || self
+                .trial_target(plan.tier, self.mode.floor(), webkit)
+                .is_none()
+        {
+            return FasterGraphics::None;
+        }
+        let tried = self
+            .trial_failed
+            .as_ref()
+            .is_some_and(|failed| failed.webkit == webkit);
+        // A tier the user asked for by name is theirs to change, not news.
+        let chosen = matches!(
+            plan.reason,
+            TierReason::Settings | TierReason::SafeGraphicsLaunch
+        );
+        if tried || chosen {
+            FasterGraphics::Available
+        } else {
+            FasterGraphics::Suggested
+        }
     }
 }
 
@@ -178,25 +518,31 @@ pub struct BootReport {
     pub nvidia_preset: bool,
     pub safe_graphics: bool,
     pub mode: GraphicsMode,
+    /// Why this launch used its tier, for the About tab and bug reports.
+    pub reason: TierReason,
+    pub render_path: RenderPath,
+    pub faster: FasterGraphics,
 }
 
 #[cfg(any(target_os = "linux", test))]
 impl BootReport {
-    /// Why this launch used its tier, for the About tab and bug reports.
-    #[must_use]
-    pub fn tier_reason(self) -> &'static str {
-        if self.safe_graphics {
-            "safe-graphics-launch"
-        } else if self.tier == 0 {
-            "default"
-        } else if self.mode != GraphicsMode::Automatic && self.tier == self.mode.floor() {
-            "settings"
-        } else if self.failed_boots > 0 {
-            "failed-launches"
-        } else if self.nvidia_preset && self.tier == 1 {
-            "nvidia-wayland"
-        } else {
-            "remembered"
+    fn new(
+        state: &StartupState,
+        plan: LaunchPlan,
+        facts: LaunchFacts,
+        failed_boots: u8,
+        webkit: &str,
+        shm_transport: bool,
+    ) -> Self {
+        Self {
+            tier: plan.tier,
+            failed_boots,
+            nvidia_preset: facts.nvidia_preset(),
+            safe_graphics: facts.safe_graphics,
+            mode: state.mode,
+            reason: plan.reason,
+            render_path: RenderPath::of(plan.tier, shm_transport),
+            faster: state.faster_graphics(plan, facts, webkit),
         }
     }
 }
@@ -260,13 +606,24 @@ fn save_state(dir: &Path, state: &StartupState) {
 
 /// The variables a tier applies. Split out from [`apply_tier`] so the escalation
 /// ladder can be asserted without mutating this process's environment.
+///
+/// `nvidia` is the NVIDIA-on-Wayland machine the preset covers. It only reaches
+/// tier 0 after the user kept a trial there, and then tier 0 is Tauri's second
+/// remedy on its own: explicit sync off, the direct GPU path kept. Debian,
+/// Ubuntu and Gentoo patch their WebKitGTK to leave that path on NVIDIA, and
+/// `WEBKIT_FORCE_DMABUF_RENDERER` is their switch to stay on it.
 fn tier_vars(
     tier: u8,
     x11_available: bool,
     shm_transport: bool,
+    nvidia: bool,
 ) -> Vec<(&'static str, &'static str)> {
-    // Tier 0 deliberately yields nothing — see the module docs.
     let mut vars = Vec::new();
+    // Tier 0 otherwise yields nothing — see the module docs.
+    if tier == 0 && nvidia {
+        vars.push(("__NV_DISABLE_EXPLICIT_SYNC", "1"));
+        vars.push(("WEBKIT_FORCE_DMABUF_RENDERER", "1"));
+    }
     if tier >= 1 {
         vars.push(("__NV_DISABLE_EXPLICIT_SYNC", "1"));
         if shm_transport {
@@ -303,6 +660,21 @@ fn webkit_version() -> Option<(u32, u32)> {
         )
     };
     (major > 0).then_some((major, minor))
+}
+
+/// The loaded WebKitGTK as "2.52.6", the key a failed trial is remembered under.
+#[cfg(target_os = "linux")]
+#[must_use]
+pub fn webkit_string() -> String {
+    // SAFETY: plain getters with no arguments and no preconditions.
+    unsafe {
+        format!(
+            "{}.{}.{}",
+            webkit2gtk::ffi::webkit_get_major_version(),
+            webkit2gtk::ffi::webkit_get_minor_version(),
+            webkit2gtk::ffi::webkit_get_micro_version()
+        )
+    }
 }
 
 /// Forcing X11 without an X server leaves GTK unable to open any window. That
@@ -343,11 +715,11 @@ impl LaunchFacts {
 }
 
 #[cfg(target_os = "linux")]
-fn apply_tier(tier: u8, shm_transport: bool) {
+fn apply_tier(tier: u8, shm_transport: bool, nvidia: bool) {
     // SAFETY (every env write below): called at the very start of `run()`,
     // before the Tauri builder spawns any threads or initializes GTK/WebKitGTK.
     let x11 = x11_available(std::env::var_os("DISPLAY").as_deref());
-    for (key, value) in tier_vars(tier, x11, shm_transport) {
+    for (key, value) in tier_vars(tier, x11, shm_transport, nvidia) {
         if std::env::var_os(key).is_none() {
             unsafe { std::env::set_var(key, value) };
         }
@@ -421,6 +793,29 @@ pub fn release_launch_lock() {
     }
 }
 
+/// Where a running trial stands. The page can run while the window shows
+/// nothing, so the clock that ends an unanswered trial lives on this side.
+#[cfg(target_os = "linux")]
+#[derive(Clone, Copy)]
+enum TrialClock {
+    /// The page has not mounted yet.
+    Launching { gives_up: std::time::Instant },
+    /// Mounted, but the question is not on screen: the window may be hidden.
+    Waiting,
+    /// The question is showing.
+    Asking { reverts: std::time::Instant },
+}
+
+#[cfg(target_os = "linux")]
+static TRIAL_CLOCK: std::sync::Mutex<Option<TrialClock>> = std::sync::Mutex::new(None);
+
+#[cfg(target_os = "linux")]
+fn trial_clock() -> std::sync::MutexGuard<'static, Option<TrialClock>> {
+    TRIAL_CLOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 /// Picks and applies this launch's tier, then records the launch *before* the
 /// webview is built so a startup crash/abort is remembered. Call once, first
 /// thing in `run()` and before any GTK init.
@@ -429,50 +824,158 @@ pub fn begin(identifier: &str, version: &str) -> BootReport {
     let dir = data_dir(identifier);
     let mut state = dir.as_deref().map(load_state).unwrap_or_default();
     let facts = LaunchFacts::read();
-    let tier = state.choose_tier(version, facts);
-    apply_tier(tier, has_shm_transport(webkit_version()));
+    let webkit = webkit_string();
+    let shm_transport = has_shm_transport(webkit_version());
+    let failed_boots = state.failed_boots;
     let first_instance = dir.as_deref().is_none_or(take_launch_lock);
 
-    let report = BootReport {
-        tier,
-        failed_boots: state.failed_boots,
-        nvidia_preset: facts.nvidia_preset(),
-        safe_graphics: facts.safe_graphics,
-        mode: state.mode,
+    let plan = if first_instance {
+        state.plan_launch(version, &webkit, facts)
+    } else {
+        state.peek_launch(version, facts)
     };
+    apply_tier(plan.tier, shm_transport, facts.nvidia_preset());
+    if plan.trial {
+        *trial_clock() = Some(TrialClock::Launching {
+            gives_up: std::time::Instant::now() + std::time::Duration::from_secs(TRIAL_MOUNT_SECS),
+        });
+    }
+
+    let report = BootReport::new(&state, plan, facts, failed_boots, &webkit, shm_transport);
     let _ = BOOT_REPORT.set(report);
-    if first_instance {
-        state.launched(tier);
-        if let Some(dir) = dir {
-            save_state(&dir, &state);
-        }
+    if first_instance && let Some(dir) = dir {
+        save_state(&dir, &state);
     }
     report
 }
 
 /// Called when the web process keeps crashing after the page already rendered,
 /// so the confirmed tier is not enough on this machine. The next launch starts
-/// one tier higher, as after a launch that never rendered.
+/// one tier higher, as after a launch that never rendered. During a trial the
+/// crashes only end the trial.
 #[cfg(target_os = "linux")]
 pub fn record_crash_loop(identifier: &str) {
     let Some(dir) = data_dir(identifier) else {
         return;
     };
     let mut state = load_state(&dir);
-    state.crash_looped();
+    if trial_clock().take().is_some() {
+        state.fail_trial(&webkit_string());
+    } else {
+        state.crash_looped();
+    }
     save_state(&dir, &state);
 }
 
 /// Records that this launch rendered, so the next one starts from its tier.
-/// Invoked from the `startup_render_ok` command.
+/// Invoked from the `startup_render_ok` command. A trial launch is only
+/// remembered once the user keeps it, so there it just notes the page is up.
 #[cfg(target_os = "linux")]
 pub fn confirm_render(identifier: &str, version: &str) {
+    {
+        let mut clock = trial_clock();
+        if let Some(current) = *clock {
+            if matches!(current, TrialClock::Launching { .. }) {
+                *clock = Some(TrialClock::Waiting);
+            }
+            return;
+        }
+    }
     let Some(dir) = data_dir(identifier) else {
         return;
     };
     let mut state = load_state(&dir);
     state.confirmed(version);
     save_state(&dir, &state);
+}
+
+/// The trial's question is on screen: starts the countdown and returns the
+/// seconds left. `None` when this launch is not a trial.
+#[cfg(target_os = "linux")]
+pub fn trial_shown() -> Option<u64> {
+    let mut clock = trial_clock();
+    let now = std::time::Instant::now();
+    let reverts = match (*clock)? {
+        TrialClock::Asking { reverts } => reverts,
+        TrialClock::Launching { .. } | TrialClock::Waiting => {
+            now + std::time::Duration::from_secs(TRIAL_KEEP_SECS)
+        }
+    };
+    *clock = Some(TrialClock::Asking { reverts });
+    Some(reverts.saturating_duration_since(now).as_secs())
+}
+
+/// The user saw the trial render and kept it.
+#[cfg(target_os = "linux")]
+pub fn keep_trial(identifier: &str, version: &str) -> bool {
+    if trial_clock().take().is_none() {
+        return false;
+    }
+    let Some(dir) = data_dir(identifier) else {
+        return false;
+    };
+    let mut state = load_state(&dir);
+    state.keep_trial(version);
+    save_state(&dir, &state);
+    true
+}
+
+/// Ends a trial nobody kept. True when there was one, and Flow should restart
+/// on the tier it had before.
+#[cfg(target_os = "linux")]
+pub fn end_trial(identifier: &str) -> bool {
+    if trial_clock().take().is_none() {
+        return false;
+    }
+    if let Some(dir) = data_dir(identifier) {
+        let mut state = load_state(&dir);
+        state.fail_trial(&webkit_string());
+        save_state(&dir, &state);
+    }
+    true
+}
+
+/// Queues a faster-graphics trial for the next launch. False when this launch
+/// is already as fast as the record and Settings allow.
+#[cfg(target_os = "linux")]
+pub fn request_trial(identifier: &str) -> bool {
+    let (Some(report), Some(dir)) = (boot_report(), data_dir(identifier)) else {
+        return false;
+    };
+    let mut state = load_state(&dir);
+    if !state.request_trial(report.tier, &webkit_string()) {
+        return false;
+    }
+    write_state(&dir, &state).is_ok()
+}
+
+/// Restarts Flow on its earlier tier when a trial gets no answer in time. A
+/// blank window can't answer, and its page may still be running, so this does
+/// not wait for the page.
+#[cfg(target_os = "linux")]
+pub fn watch_trial(app: tauri::AppHandle) {
+    if trial_clock().is_none() {
+        return;
+    }
+    std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(250));
+            let deadline = match *trial_clock() {
+                None => return,
+                Some(TrialClock::Waiting) => continue,
+                Some(TrialClock::Launching { gives_up }) => gives_up,
+                Some(TrialClock::Asking { reverts }) => reverts,
+            };
+            if std::time::Instant::now() >= deadline {
+                break;
+            }
+        }
+        if end_trial(&app.config().identifier) {
+            tracing::warn!("graphics_trial_not_kept");
+            crate::relaunch::request();
+            app.exit(0);
+        }
+    });
 }
 
 #[cfg(target_os = "linux")]
@@ -493,13 +996,16 @@ pub fn set_graphics_mode(identifier: &str, mode: GraphicsMode) -> std::io::Resul
 #[cfg(test)]
 mod tests {
     use super::{
-        BootReport, GraphicsMode, LaunchFacts, LaunchLock, MAX_TIER, StartupState, drops_im_module,
-        has_shm_transport, load_state, save_state, tier_vars, try_launch_lock, x11_available,
+        BootReport, FailedTrial, FasterGraphics, GraphicsMode, LaunchFacts, LaunchLock, MAX_TIER,
+        RenderPath, SCHEMA, StartupState, TierReason, drops_im_module, has_shm_transport,
+        load_state, save_state, tier_vars, try_launch_lock, x11_available,
     };
     use std::ffi::OsStr;
 
     const V1: &str = "0.1.0-beta3";
     const V2: &str = "0.1.0-beta4";
+    const WEBKIT: &str = "2.52.6";
+    const NEWER_WEBKIT: &str = "2.54.2";
 
     /// The ladder for WebKitGTK older than 2.44.
     fn keys(tier: u8) -> Vec<&'static str> {
@@ -512,7 +1018,7 @@ mod tests {
     }
 
     fn shm_keys_if(tier: u8, shm: bool) -> Vec<&'static str> {
-        tier_vars(tier, true, shm)
+        tier_vars(tier, true, shm, false)
             .into_iter()
             .map(|(key, _)| key)
             .collect()
@@ -528,7 +1034,7 @@ mod tests {
     /// Runs one launch: pick a tier, record it, and confirm a render if `renders`.
     fn launch(state: &mut StartupState, version: &str, facts: LaunchFacts, renders: bool) -> u8 {
         let tier = state.choose_tier(version, facts);
-        state.launched(tier);
+        state.launched(tier, state.reason_for(tier, facts));
         if renders {
             state.confirmed(version);
         }
@@ -538,8 +1044,8 @@ mod tests {
     /// The point of the ladder: a machine that renders fine is left alone.
     #[test]
     fn tier_0_applies_nothing() {
-        assert!(tier_vars(0, true, false).is_empty());
-        assert!(tier_vars(0, true, true).is_empty());
+        assert!(tier_vars(0, true, false, false).is_empty());
+        assert!(tier_vars(0, true, true, false).is_empty());
     }
 
     /// Disabling the DMABUF renderer on 2.44+ disables GPU rendering outright,
@@ -598,9 +1104,9 @@ mod tests {
     #[test]
     fn the_x11_fallback_needs_an_x_server() {
         for shm in [false, true] {
-            let without_x = tier_vars(MAX_TIER, false, shm);
+            let without_x = tier_vars(MAX_TIER, false, shm, false);
             assert!(without_x.iter().all(|(key, _)| *key != "GDK_BACKEND"));
-            assert_eq!(without_x, tier_vars(2, false, shm));
+            assert_eq!(without_x, tier_vars(2, false, shm, false));
         }
     }
 
@@ -787,33 +1293,435 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
+    /// A record this build wrote: no trial of its own.
+    fn current() -> StartupState {
+        StartupState {
+            schema: SCHEMA,
+            ..StartupState::default()
+        }
+    }
+
+    /// A record from before reasons existed, remembering `tier` from `version`.
+    fn older_record(tier: u8, version: &str) -> StartupState {
+        StartupState {
+            good_tier: Some(tier),
+            good_version: Some(version.into()),
+            ..StartupState::default()
+        }
+    }
+
+    /// One real launch through `plan_launch`, confirmed if `renders` and not a trial.
+    fn start(state: &mut StartupState, facts: LaunchFacts, renders: bool) -> (u8, bool) {
+        let plan = state.plan_launch(V2, WEBKIT, facts);
+        if renders && !plan.trial {
+            state.confirmed(V2);
+        }
+        (plan.tier, plan.trial)
+    }
+
     #[test]
     fn says_why_a_launch_used_its_tier() {
-        let report = |tier, failed_boots, nvidia_preset, safe_graphics, mode| BootReport {
-            tier,
-            failed_boots,
-            nvidia_preset,
-            safe_graphics,
-            mode,
+        let reason = |state: &StartupState, facts: LaunchFacts| {
+            let tier = state.choose_tier(V1, facts);
+            state.shown_reason(state.reason_for(tier, facts), tier)
         };
-        let auto = GraphicsMode::Automatic;
-        assert_eq!(report(0, 0, false, false, auto).tier_reason(), "default");
+        let none = LaunchFacts::default();
+        assert_eq!(reason(&current(), none), TierReason::Default);
+        let safe = LaunchFacts {
+            safe_graphics: true,
+            ..none
+        };
+        assert_eq!(reason(&current(), safe), TierReason::SafeGraphicsLaunch);
+        let compatible = StartupState {
+            mode: GraphicsMode::Compatible,
+            ..current()
+        };
+        assert_eq!(reason(&compatible, none), TierReason::Settings);
+        let failed = StartupState {
+            failed_boots: 2,
+            ..compatible
+        };
+        assert_eq!(reason(&failed, none), TierReason::FailedLaunches);
         assert_eq!(
-            report(3, 0, false, true, auto).tier_reason(),
-            "safe-graphics-launch"
+            reason(&current(), nvidia_wayland()),
+            TierReason::NvidiaWayland
         );
         assert_eq!(
-            report(1, 0, false, false, GraphicsMode::Compatible).tier_reason(),
-            "settings"
+            reason(&older_record(2, V1), none),
+            TierReason::Remembered,
+            "an older record has no origin to show"
+        );
+    }
+
+    /// A remembered tier is described by what first put the machine there.
+    #[test]
+    fn a_remembered_tier_shows_where_it_came_from() {
+        let mut state = current();
+        assert_eq!(start(&mut state, LaunchFacts::default(), false), (0, false));
+        assert_eq!(start(&mut state, LaunchFacts::default(), true), (1, false));
+        let plan = state.plan_launch(V2, WEBKIT, LaunchFacts::default());
+        assert_eq!((plan.tier, plan.reason), (1, TierReason::FailedLaunches));
+    }
+
+    #[test]
+    fn a_crash_loop_is_named_as_the_reason() {
+        let mut state = current();
+        start(&mut state, LaunchFacts::default(), true);
+        state.crash_looped();
+        let plan = state.plan_launch(V2, WEBKIT, LaunchFacts::default());
+        assert_eq!((plan.tier, plan.reason), (1, TierReason::CrashLoop));
+    }
+
+    /// The beta3 bug left healthy machines on tier 2 or 3, and beta4 only took
+    /// one tier off. The first launch that can tell tries the floor instead.
+    #[test]
+    fn an_older_record_above_the_floor_gets_one_trial() {
+        let mut state = older_record(2, V2);
+        assert_eq!(start(&mut state, LaunchFacts::default(), true), (0, true));
+        assert_eq!(state.failed_boots, 0, "a trial is not a failed startup");
+        assert_eq!(state.good_tier, Some(2), "nothing is remembered until kept");
+
+        state.keep_trial(V2);
+        assert_eq!(state.reason, Some(TierReason::TrialKept));
+        for _ in 0..3 {
+            assert_eq!(start(&mut state, LaunchFacts::default(), true), (0, false));
+        }
+        assert_eq!(state.reason, Some(TierReason::TrialKept));
+    }
+
+    /// A trial that was still running when its launch ended was a blank window,
+    /// a crash or a user who went back. The old tier returns and stays.
+    #[test]
+    fn a_trial_nobody_kept_returns_to_the_old_tier_and_is_not_repeated() {
+        let mut state = older_record(2, V2);
+        assert_eq!(start(&mut state, LaunchFacts::default(), true), (0, true));
+        assert_eq!(start(&mut state, LaunchFacts::default(), true), (2, false));
+        assert_eq!(
+            state.trial_failed,
+            Some(FailedTrial {
+                webkit: WEBKIT.into(),
+                tier: 0
+            })
+        );
+        assert_eq!(start(&mut state, LaunchFacts::default(), true), (2, false));
+    }
+
+    #[test]
+    fn an_older_record_at_its_floor_is_left_alone() {
+        let mut healthy = older_record(0, V2);
+        assert_eq!(
+            start(&mut healthy, LaunchFacts::default(), true),
+            (0, false)
+        );
+        let mut nvidia = older_record(1, V2);
+        assert_eq!(start(&mut nvidia, nvidia_wayland(), true), (1, false));
+        let mut chosen = StartupState {
+            mode: GraphicsMode::Compatible,
+            ..older_record(1, V2)
+        };
+        assert_eq!(start(&mut chosen, LaunchFacts::default(), true), (1, false));
+    }
+
+    /// The last launch of an older record may have failed for real, so its
+    /// trial waits for a launch that follows a confirmed render.
+    #[test]
+    fn an_older_record_with_a_failed_launch_waits_for_a_clean_one() {
+        let mut state = StartupState {
+            failed_boots: 1,
+            ..older_record(1, V2)
+        };
+        assert_eq!(start(&mut state, LaunchFacts::default(), true), (2, false));
+        assert_eq!(start(&mut state, LaunchFacts::default(), true), (0, true));
+    }
+
+    /// Asked for in Settings: each trial nobody kept moves the next one up a
+    /// tier, until there is nothing left below the current tier.
+    #[test]
+    fn a_requested_trial_steps_up_past_tiers_nobody_kept() {
+        let mut state = StartupState {
+            reason: Some(TierReason::FailedLaunches),
+            ..older_record(2, V2)
+        };
+        state.schema = SCHEMA;
+        assert!(state.request_trial(2, WEBKIT));
+        assert_eq!(start(&mut state, LaunchFacts::default(), true), (0, true));
+        assert_eq!(start(&mut state, LaunchFacts::default(), true), (2, false));
+
+        assert!(state.request_trial(2, WEBKIT));
+        assert_eq!(start(&mut state, LaunchFacts::default(), true), (1, true));
+        state.keep_trial(V2);
+        assert_eq!(start(&mut state, LaunchFacts::default(), true), (1, false));
+        assert!(!state.request_trial(1, WEBKIT));
+    }
+
+    #[test]
+    fn a_newer_webkitgtk_is_worth_another_trial() {
+        let mut state = StartupState {
+            trial_failed: Some(FailedTrial {
+                webkit: WEBKIT.into(),
+                tier: 0,
+            }),
+            ..current()
+        };
+        assert_eq!(state.trial_target(1, 0, WEBKIT), None);
+        assert_eq!(state.trial_target(1, 0, NEWER_WEBKIT), Some(0));
+        assert!(state.request_trial(1, NEWER_WEBKIT));
+    }
+
+    #[test]
+    fn a_trial_never_goes_below_the_settings_floor() {
+        let mut state = StartupState {
+            mode: GraphicsMode::Compatible,
+            ..older_record(3, V2)
+        };
+        assert_eq!(start(&mut state, LaunchFacts::default(), true), (1, true));
+        state.keep_trial(V2);
+        assert!(!state.request_trial(1, WEBKIT));
+    }
+
+    #[test]
+    fn a_safe_graphics_launch_drops_a_waiting_trial() {
+        let mut state = older_record(2, V2);
+        state.schema = SCHEMA;
+        assert!(state.request_trial(2, WEBKIT));
+        let safe = LaunchFacts {
+            safe_graphics: true,
+            ..LaunchFacts::default()
+        };
+        assert_eq!(start(&mut state, safe, true), (MAX_TIER, false));
+        assert_eq!(state.trial, None);
+    }
+
+    /// NVIDIA on Wayland keeps shared memory by default. A trial the user asks
+    /// for goes to the direct GPU path, and keeping it lifts the preset.
+    #[test]
+    fn nvidia_reaches_the_direct_path_only_through_a_kept_trial() {
+        let mut state = current();
+        assert_eq!(start(&mut state, nvidia_wayland(), true), (1, false));
+        assert!(state.request_trial(1, WEBKIT));
+        assert_eq!(start(&mut state, nvidia_wayland(), true), (0, true));
+        state.keep_trial(V2);
+        assert_eq!(start(&mut state, nvidia_wayland(), true), (0, false));
+        assert_eq!(state.reason, Some(TierReason::TrialKept));
+        assert_eq!(
+            state.shown_reason(TierReason::Default, 0),
+            TierReason::TrialKept
+        );
+        // A later failure brings the preset back.
+        assert_eq!(start(&mut state, nvidia_wayland(), false), (0, false));
+        assert_eq!(start(&mut state, nvidia_wayland(), true), (1, false));
+        assert_eq!(start(&mut state, nvidia_wayland(), true), (1, false));
+    }
+
+    #[test]
+    fn the_nvidia_direct_path_turns_off_explicit_sync_and_keeps_dmabuf() {
+        assert_eq!(
+            tier_vars(0, true, true, true),
+            vec![
+                ("__NV_DISABLE_EXPLICIT_SYNC", "1"),
+                ("WEBKIT_FORCE_DMABUF_RENDERER", "1")
+            ]
         );
         assert_eq!(
-            report(2, 1, false, false, GraphicsMode::Compatible).tier_reason(),
-            "failed-launches"
+            tier_vars(1, true, true, true),
+            tier_vars(1, true, true, false)
         );
+    }
+
+    /// A floor applies itself. Once it is gone, the tier it produced is too.
+    #[test]
+    fn a_floor_is_not_remembered_after_it_is_lifted() {
+        let mut state = StartupState {
+            mode: GraphicsMode::Compatible,
+            ..current()
+        };
+        assert_eq!(start(&mut state, LaunchFacts::default(), true), (1, false));
+        state.mode = GraphicsMode::Automatic;
+        assert_eq!(start(&mut state, LaunchFacts::default(), true), (0, false));
+
+        let mut nvidia = current();
+        assert_eq!(start(&mut nvidia, nvidia_wayland(), true), (1, false));
+        let own_choice = LaunchFacts {
+            nvidia_wayland: true,
+            user_set_dmabuf: true,
+            ..LaunchFacts::default()
+        };
+        assert_eq!(start(&mut nvidia, own_choice, true), (0, false));
+    }
+
+    #[test]
+    fn a_failed_launch_still_climbs_from_a_floor() {
+        let mut state = StartupState {
+            mode: GraphicsMode::Compatible,
+            ..current()
+        };
+        assert_eq!(start(&mut state, LaunchFacts::default(), true), (1, false));
+        assert_eq!(start(&mut state, LaunchFacts::default(), false), (1, false));
+        assert_eq!(start(&mut state, LaunchFacts::default(), true), (2, false));
+    }
+
+    /// A second launch while Flow runs must leave the record as it is.
+    #[test]
+    fn a_second_instance_reads_without_recording() {
+        let state = older_record(2, V2);
+        let before = state.clone();
+        let plan = state.peek_launch(V2, LaunchFacts::default());
+        assert_eq!((plan.tier, plan.trial), (2, false));
+        assert_eq!(state, before);
+    }
+
+    #[test]
+    fn the_report_offers_and_suggests_a_trial_only_where_one_can_help() {
+        let report = |state: &mut StartupState, facts: LaunchFacts| {
+            let failed_boots = state.failed_boots;
+            let plan = state.plan_launch(V2, WEBKIT, facts);
+            BootReport::new(state, plan, facts, failed_boots, WEBKIT, true)
+        };
+        let healthy = report(&mut current(), LaunchFacts::default());
+        assert_eq!(healthy.faster, FasterGraphics::None);
+        assert_eq!(healthy.render_path, RenderPath::Gpu);
+
+        let nvidia = report(&mut current(), nvidia_wayland());
+        assert_eq!(nvidia.faster, FasterGraphics::Suggested);
+        assert_eq!(nvidia.render_path, RenderPath::SharedMemory);
+        assert_eq!((nvidia.tier, nvidia.failed_boots), (1, 0));
+        assert!(nvidia.nvidia_preset && !nvidia.safe_graphics);
+        assert_eq!(nvidia.mode, GraphicsMode::Automatic);
+
+        let mut safe = StartupState {
+            mode: GraphicsMode::Safe,
+            ..current()
+        };
+        let safe = report(&mut safe, LaunchFacts::default());
+        assert_eq!(safe.faster, FasterGraphics::None);
+        assert_eq!(safe.render_path, RenderPath::Software);
+
+        let mut compatible = StartupState {
+            mode: GraphicsMode::Compatible,
+            reason: Some(TierReason::Settings),
+            ..older_record(1, V2)
+        };
+        compatible.schema = SCHEMA;
+        compatible.mode = GraphicsMode::Automatic;
         assert_eq!(
-            report(1, 0, true, false, auto).tier_reason(),
-            "nvidia-wayland"
+            report(&mut compatible, LaunchFacts::default()).faster,
+            FasterGraphics::None,
+            "the floor is gone, and so is the tier"
         );
-        assert_eq!(report(2, 0, false, false, auto).tier_reason(), "remembered");
+
+        let mut tried = StartupState {
+            reason: Some(TierReason::FailedLaunches),
+            trial_failed: Some(FailedTrial {
+                webkit: WEBKIT.into(),
+                tier: 0,
+            }),
+            ..older_record(2, V2)
+        };
+        tried.schema = SCHEMA;
+        assert_eq!(
+            report(&mut tried, LaunchFacts::default()).faster,
+            FasterGraphics::Available,
+            "tier 1 is still untried, but the user is not asked again"
+        );
+
+        let mut safe_before = StartupState {
+            reason: Some(TierReason::SafeGraphicsLaunch),
+            ..older_record(MAX_TIER, V2)
+        };
+        safe_before.schema = SCHEMA;
+        assert_eq!(
+            report(&mut safe_before, LaunchFacts::default()).faster,
+            FasterGraphics::Available,
+            "a tier from Start with safe graphics is the user's to change"
+        );
+
+        let trial = report(&mut older_record(2, V2), LaunchFacts::default());
+        assert_eq!(trial.faster, FasterGraphics::Trial);
+        assert_eq!(trial.reason, TierReason::Trial);
+
+        let launched_safe = LaunchFacts {
+            safe_graphics: true,
+            ..LaunchFacts::default()
+        };
+        assert_eq!(
+            report(&mut current(), launched_safe).faster,
+            FasterGraphics::None
+        );
+    }
+
+    /// `src/lib/graphicsReport.ts` turns these names into the About line.
+    #[test]
+    fn reasons_and_render_paths_keep_the_names_the_page_knows() {
+        let names: Vec<_> = [
+            TierReason::Default,
+            TierReason::Settings,
+            TierReason::FailedLaunches,
+            TierReason::CrashLoop,
+            TierReason::NvidiaWayland,
+            TierReason::Remembered,
+            TierReason::SafeGraphicsLaunch,
+            TierReason::Trial,
+            TierReason::TrialKept,
+        ]
+        .into_iter()
+        .map(TierReason::as_str)
+        .collect();
+        assert_eq!(
+            names,
+            [
+                "default",
+                "settings",
+                "failed-launches",
+                "crash-loop",
+                "nvidia-wayland",
+                "remembered",
+                "safe-graphics-launch",
+                "trial",
+                "trial-kept"
+            ]
+        );
+        assert_eq!(RenderPath::Gpu.as_str(), "gpu");
+        assert_eq!(RenderPath::SharedMemory.as_str(), "shared-memory");
+        assert_eq!(RenderPath::Software.as_str(), "software");
+        assert_eq!(FasterGraphics::None.as_str(), "none");
+        assert_eq!(FasterGraphics::Trial.as_str(), "trial");
+        assert_eq!(FasterGraphics::Available.as_str(), "available");
+        assert_eq!(FasterGraphics::Suggested.as_str(), "suggested");
+    }
+
+    #[test]
+    fn the_render_path_follows_the_tier_and_the_webkit_version() {
+        assert_eq!(RenderPath::of(0, true), RenderPath::Gpu);
+        assert_eq!(RenderPath::of(1, true), RenderPath::SharedMemory);
+        assert_eq!(RenderPath::of(1, false), RenderPath::Gpu);
+        assert_eq!(RenderPath::of(2, true), RenderPath::Software);
+        assert_eq!(RenderPath::of(3, false), RenderPath::Software);
+    }
+
+    #[test]
+    fn a_record_from_an_older_build_loads_and_a_new_one_round_trips() {
+        let dir = std::env::temp_dir().join(format!("flow-startup-schema-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join(super::STATE_FILE),
+            r#"{"good_tier":2,"good_version":"0.1.0-beta4","failed_boots":0,"pending_tier":2,"mode":"automatic"}"#,
+        )
+        .unwrap();
+        let mut state = load_state(&dir);
+        assert_eq!(state, older_record(2, V2).with_pending(2));
+
+        assert_eq!(start(&mut state, LaunchFacts::default(), true), (0, true));
+        state.fail_trial(WEBKIT);
+        state.crash_looped();
+        save_state(&dir, &state);
+        assert_eq!(load_state(&dir), state);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    impl StartupState {
+        fn with_pending(mut self, tier: u8) -> Self {
+            self.pending_tier = tier;
+            self
+        }
     }
 }

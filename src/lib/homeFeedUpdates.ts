@@ -1,30 +1,17 @@
-import type { HomeAppend, HomeCard, HomeSnapshot, HomeStatus } from "./api/homeFeed";
+import type { HomeAppend, HomeSnapshot, HomeStatus } from "./api/homeFeed";
+import { reuseById, reuseIfSame } from "./reuseItems";
 
 // How the page takes the three kinds of change Home's backend sends (see
 // src-tauri/src/services/home_feed/mod.rs). A card that did not change keeps its object, and a
 // list that did not change keeps its array, so the memoized cards and grid skip the update.
-
-const sameJson = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right);
-
-function reuseCards(previous: HomeCard[], next: HomeCard[]): HomeCard[] {
-  const known = new Map(previous.map((card) => [card.id, card]));
-  let unchanged = previous.length === next.length;
-  const cards = next.map((card, index) => {
-    const old = known.get(card.id);
-    const kept = old && sameJson(old, card) ? old : card;
-    if (kept !== previous[index]) unchanged = false;
-    return kept;
-  });
-  return unchanged ? previous : cards;
-}
 
 /** A whole snapshot: a first load, a refresh, or cards placed or removed in the middle. */
 export function acceptSnapshot(current: HomeSnapshot, next: HomeSnapshot): HomeSnapshot {
   if (next.generation < current.generation) return current;
   return {
     ...next,
-    cards: reuseCards(current.cards, next.cards),
-    origins: sameJson(current.origins, next.origins) ? current.origins : next.origins,
+    cards: reuseById(current.cards, next.cards),
+    origins: reuseIfSame(current.origins, next.origins),
   };
 }
 

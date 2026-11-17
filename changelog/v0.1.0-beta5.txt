@@ -18,6 +18,10 @@ HOME AND RECOMMENDATIONS
 - Home no longer redraws every card each time the feed loads more or changes state. Loading a page sends only its new videos, where it used to resend the whole feed at least three times.
 - Hiding a video on Home no longer reloads every card after it.
 
+SUBSCRIPTIONS AND CHANNELS
+- Subscriptions opens on its first 120 videos and adds more as you scroll, instead of drawing up to 1500 cards at once. Coming back to the page returns to where you were.
+- While a first check of your channels runs, videos already listed are no longer redrawn with every batch.
+
 PLAYER
 - The player, its controls and its menus no longer redraw several times a second while a video plays. Only the parts that show the time follow it.
 - The transcript panel redraws when the spoken line changes instead of on every tick, and a Short no longer redraws its whole surface as it plays.

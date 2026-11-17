@@ -1,4 +1,4 @@
-import { pickAutoVideoTrack, type DashVideoTrack } from "./dashVideoTrack";
+import { pickAutoVideoTrack, type DashVideoTrack, type PlayerBox } from "./dashVideoTrack";
 import { profileStorage } from "./storage/profileStorage";
 import type { StreamVariant } from "../types/video";
 
@@ -65,13 +65,15 @@ export function pickDashStart(input: {
   tracks: DashVideoTrack[];
   preferredCodec: string;
   speedKbps: number | null;
+  /** The area Auto has to fill, when the player's size is known. */
+  box?: PlayerBox | null;
 }): DashStart {
-  const { selected, tracks, preferredCodec, speedKbps } = input;
+  const { selected, tracks, preferredCodec, speedKbps, box = null } = input;
 
   if (!selected) {
     return {
       bitrateKbps: speedKbps === null ? null : Math.floor(speedKbps / START_SPEED_MARGIN),
-      setId: pickAutoVideoTrack(tracks, preferredCodec)?.id ?? null,
+      setId: pickAutoVideoTrack(tracks, preferredCodec, box)?.id ?? null,
     };
   }
 

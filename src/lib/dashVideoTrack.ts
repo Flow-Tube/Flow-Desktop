@@ -16,23 +16,99 @@ interface RepresentationRef {
   mimeType?: string | null;
 }
 
+/** The player's picture area in device pixels: what Auto has to fill. */
+export interface PlayerBox {
+  width: number;
+  height: number;
+}
+
+type Representation = NonNullable<DashVideoTrack["bitrateList"]>[number];
+
+// On Linux most video is decoded on the processor, where each step above 1080p costs more
+// than it shows.
+const LINUX_AUTO_BOX: PlayerBox = { width: 1920, height: 1080 };
+// A picture stretched by a tenth looks the same; one size up costs about twice the decoding.
+const FILL_TOLERANCE = 0.9;
+
+/**
+ * The area Auto fills, from the player's size in CSS pixels. Null means no limit, which is
+ * the case until the player has a size. On Linux the area stops at 1080p.
+ */
+export function autoQualityBox(
+  widthPx: number,
+  heightPx: number,
+  pixelRatio: number,
+  isLinux: boolean,
+): PlayerBox | null {
+  const width = Math.round(widthPx * pixelRatio);
+  const height = Math.round(heightPx * pixelRatio);
+  if (!(width > 0) || !(height > 0)) return isLinux ? LINUX_AUTO_BOX : null;
+  if (!isLinux) return { width, height };
+  return { width: Math.min(width, LINUX_AUTO_BOX.width), height: Math.min(height, LINUX_AUTO_BOX.height) };
+}
+
+/** Whether a representation fills the box without being stretched: it reaches the side its shape meets first. */
+const fills = (representation: Representation, box: PlayerBox) =>
+  (representation.width ?? 0) >= box.width * FILL_TOLERANCE ||
+  (representation.height ?? 0) >= box.height * FILL_TOLERANCE;
+
 const isHdrTrack = (track: DashVideoTrack) => (track.id ?? "").includes("-hdr");
 
 const topHeight = (track: DashVideoTrack) =>
   Math.max(0, ...(track.bitrateList ?? []).map((representation) => representation.height ?? 0));
 
 /**
- * The set Auto climbs in: the SDR set reaching the highest resolution, so a fast
- * network isn't held back. Sets that tie go to the preferred codec, then to the
- * one that decodes most widely, so a video that tops out at 1080p stays on H.264.
+ * The set Auto climbs in: an SDR set that can fill the player, or the one reaching the
+ * highest resolution when none can or the player's size is unknown. Sets that tie go to the
+ * preferred codec, then to the one that decodes most widely, so a player that 1080p fills
+ * stays on H.264 and only a larger one moves to the VP9 or AV1 set.
  */
-export function pickAutoVideoTrack(tracks: DashVideoTrack[], preferredCodec: string): DashVideoTrack | null {
+export function pickAutoVideoTrack(
+  tracks: DashVideoTrack[],
+  preferredCodec: string,
+  box: PlayerBox | null = null,
+): DashVideoTrack | null {
   const sdr = tracks.filter((track) => !isHdrTrack(track));
   const pool = sdr.length > 0 ? sdr : tracks;
   const top = Math.max(0, ...pool.map(topHeight));
   const order = (track: DashVideoTrack) =>
     (preferredCodec !== "Auto" && codecMatches(track.codec, preferredCodec) ? 0 : 1) * 10 + codecRank(track.codec);
-  return pool.filter((track) => topHeight(track) === top).sort((left, right) => order(left) - order(right))[0] ?? null;
+  const filling = box
+    ? pool.filter((track) => (track.bitrateList ?? []).some((representation) => fills(representation, box)))
+    : [];
+  const candidates = filling.length > 0 ? filling : pool.filter((track) => topHeight(track) === top);
+  return candidates.sort((left, right) => order(left) - order(right))[0] ?? null;
+}
+
+/**
+ * The set Auto uses while a video plays. A set that already fills the player is kept, even
+ * when another would be picked from scratch: changing codec in the middle of a video is a
+ * risk that only a picture too small for the player is worth.
+ */
+export function settleAutoVideoTrack(
+  tracks: DashVideoTrack[],
+  preferredCodec: string,
+  box: PlayerBox | null,
+  currentRepresentationId: string | null,
+): DashVideoTrack | null {
+  const current = tracks.find((track) =>
+    (track.bitrateList ?? []).some((representation) => representation.id === currentRepresentationId),
+  );
+  const keeps =
+    !!current && !!box && !isHdrTrack(current) && (current.bitrateList ?? []).some((item) => fills(item, box));
+  return keeps ? current : pickAutoVideoTrack(tracks, preferredCodec, box);
+}
+
+/**
+ * The bitrate Auto may climb to in `track`, in kbps for dash.js's `maxBitrate`: that of the
+ * smallest representation that fills the player. -1, dash.js's "no limit", when none does.
+ */
+export function autoBitrateCapKbps(track: DashVideoTrack | null, box: PlayerBox | null): number {
+  if (!track || !box) return -1;
+  const smallest = (track.bitrateList ?? [])
+    .filter((representation) => fills(representation, box) && (representation.bandwidth ?? 0) > 0)
+    .sort((left, right) => (left.bandwidth ?? 0) - (right.bandwidth ?? 0))[0];
+  return smallest?.bandwidth ? Math.ceil(smallest.bandwidth / 1000) : -1;
 }
 
 /** Where to move so ABR takes over in the Auto set; null when it is already playing there. */

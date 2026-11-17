@@ -82,6 +82,10 @@ new frame all the time: the bars beside the playing song, the dot on live
 videos, the fade between pages and the side menu's slide. The video has
 square corners, and Ambient mode stays off on the two slower settings.
 
+Auto quality stops at 1080p on Linux and stays on H.264, because video is
+mostly decoded by the processor there. A quality you pick yourself is not
+limited.
+
 Flow 0.1.0-beta3 could move a working computer onto a slower setting and
 keep it there. The first launch of a newer version tries the fast path once
 for those installs, with the same question.

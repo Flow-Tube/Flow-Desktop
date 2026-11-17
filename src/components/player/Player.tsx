@@ -22,13 +22,16 @@ import { FlowPlayerControls } from "./FlowPlayerControls";
 import { MiniPlayerControls } from "./MiniPlayerControls";
 import {
   allVideoRepresentations,
+  autoBitrateCapKbps,
+  autoQualityBox,
   autoRepresentationToSwitchTo,
   droppedLastAdaptationSet,
   nearestSupportedQuality,
-  pickAutoVideoTrack,
   representationLabel,
   representationLabelWithCodec,
+  settleAutoVideoTrack,
   type DashVideoTrack,
+  type PlayerBox,
 } from "../../lib/dashVideoTrack";
 import {
   manifestVideoTracks,
@@ -244,6 +247,8 @@ const NO_CHAPTERS: VideoChapter[] = [];
 // A rounded clip makes WebKitGTK draw every video frame through a mask, so the picture is square there.
 const VIDEO_CORNERS = IS_LINUX_RUNTIME ? "rounded-none" : "rounded-xl";
 const FULLSCREEN_SETTLE_MS = 120;
+/** How long the player's size has to hold before Auto is settled for it. */
+const AUTO_RESIZE_SETTLE_MS = 400;
 /** Video kept behind the playhead. Keeping as much behind as ahead held up to
  * two extra minutes of 1080p in memory. */
 const BACK_BUFFER_SECONDS = 30;
@@ -360,6 +365,8 @@ export const Player: React.FC<PlayerProps> = ({
   const sourceSwitchingRef = useRef(false);
   const dashPlayerRef = useRef<DashPlayerController | null>(null);
   const dashReadyRef = useRef(false);
+  // The area Auto was last settled for, so a resize that changes nothing is left alone.
+  const autoBoxRef = useRef<PlayerBox | null>(null);
   const hlsPlayerRef = useRef<Hls | null>(null);
   const liveSeekedBackRef = useRef(false);
   const qualitySwitchSnapshotRef = useRef<QualitySwitchSnapshot | null>(null);
@@ -725,10 +732,17 @@ export const Player: React.FC<PlayerProps> = ({
 
     if (selectedQualityId === "auto") {
       const currentRep = player.getCurrentRepresentationForType("video");
-      const autoTrack = pickAutoVideoTrack(
+      // Auto climbs as far as fills the player and no further: a picture decoded larger than
+      // it is shown costs decoding, memory and network for nothing.
+      const box = autoQualityBox(video.clientWidth, video.clientHeight, window.devicePixelRatio || 1, IS_LINUX_RUNTIME);
+      const autoTrack = settleAutoVideoTrack(
         videoTracks,
         useAppSettingsStore.getState().values[SETTINGS.DEFAULT_VIDEO_CODEC] ?? "H.264",
+        box,
+        currentRep ? String(currentRep.id) : null,
       );
+      const maxKbps = autoBitrateCapKbps(autoTrack, box);
+      autoBoxRef.current = box;
       const autoStart = autoRepresentationToSwitchTo(autoTrack, currentRep);
       if (autoStart) {
         player.setRepresentationForTypeById("video", autoStart, false);
@@ -740,12 +754,15 @@ export const Player: React.FC<PlayerProps> = ({
               video: true,
               audio: false,
             },
+            maxBitrate: { video: maxKbps },
           },
         },
       });
       logPlayerEvent("dash-quality-auto-requested", {
         switchTime: video.currentTime,
         autoTrack: autoTrack?.id,
+        box,
+        maxKbps,
       });
 
       if (currentRep && currentRep.height) {
@@ -785,6 +802,7 @@ export const Player: React.FC<PlayerProps> = ({
               video: false,
               audio: false,
             },
+            maxBitrate: { video: -1 },
           },
         },
       });
@@ -828,6 +846,8 @@ export const Player: React.FC<PlayerProps> = ({
               video: false,
               audio: false,
             },
+            // A chosen quality is never held to the player's size.
+            maxBitrate: { video: -1 },
           },
         },
       });
@@ -857,6 +877,28 @@ export const Player: React.FC<PlayerProps> = ({
     });
   }, [logPlayerEvent, selectedQuality, selectedQualityId]);
   const applyDashQualitySelectionRef = useRef(applyDashQualitySelection);
+
+  // Fullscreen, theater mode, the mini player and a resized window change what fills the
+  // player, so Auto is settled again once the size holds still.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !isDashPlayback || selectedQualityId !== "auto" || typeof ResizeObserver === "undefined") return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const observer = new ResizeObserver(() => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        const box = autoQualityBox(video.clientWidth, video.clientHeight, window.devicePixelRatio || 1, IS_LINUX_RUNTIME);
+        const applied = autoBoxRef.current;
+        if (box?.width === applied?.width && box?.height === applied?.height) return;
+        applyDashQualitySelectionRef.current();
+      }, AUTO_RESIZE_SETTLE_MS);
+    });
+    observer.observe(video);
+    return () => {
+      if (timer) clearTimeout(timer);
+      observer.disconnect();
+    };
+  }, [isDashPlayback, selectedQualityId]);
 
   // Re-resolving would fetch the same codec and fail again, then wait out a source switch.
   const leaveFailingCodec = useCallback((reason: "decode-error" | "no-picture" = "decode-error") => {
@@ -1653,6 +1695,7 @@ export const Player: React.FC<PlayerProps> = ({
         ),
         preferredCodec: useAppSettingsStore.getState().values[SETTINGS.DEFAULT_VIDEO_CODEC] ?? "H.264",
         speedKbps,
+        box: autoQualityBox(video.clientWidth, video.clientHeight, window.devicePixelRatio || 1, IS_LINUX_RUNTIME),
       });
       if (start.bitrateKbps) {
         player.updateSettings({ streaming: { abr: { initialBitrate: { video: start.bitrateKbps } } } });

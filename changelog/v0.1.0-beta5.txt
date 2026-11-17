@@ -20,6 +20,8 @@ PLAYER
 - The buffered part of the seek bar keeps growing while a video is paused.
 - The seek bar, the mini player bar and the music bar are redrawn only when they move by a pixel, not on every frame. On a long video that is a few times a second instead of 60 or more.
 - The mini player's bar and the seek bar's thumb are no longer animated while they are hidden.
+- Auto quality now stops at the size that fills the player on your screen. Fullscreen on a 4K screen still reaches 2160p, while a small player or the mini player no longer loads and decodes a picture larger than it shows. A quality you pick yourself is never limited.
+- On Linux, Auto stays on H.264 and stops at 1080p, since video there is mostly decoded on the processor. Pick a higher quality by hand to go above it.
 - Video already played is dropped from memory every 30 seconds instead of every 2 minutes.
 - The dark shade behind the player controls now covers only the bottom band they sit in, not the whole picture, so the video stays bright while the controls show and costs less to draw.
 

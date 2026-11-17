@@ -11,3 +11,7 @@ LINUX
 - Try faster graphics, in Settings > Appearance and in a one-time notice, restarts Flow on a faster graphics mode. If the window stays blank, Flow goes back on its own after 15 seconds.
 - On NVIDIA with Wayland, Try faster graphics uses the direct GPU path with explicit sync off. The default stays on shared memory.
 - Settings > About now names the graphics path in use (GPU, GPU through shared memory, or no GPU) and why. The Linux help page explains what each one costs.
+
+FIXES
+- Fixed hidden helper windows staying open until Flow quit when a video took too long to resolve, which made Flow use more memory the longer it ran.
+- Preparing playback for one video no longer waits behind a slow token request for another.

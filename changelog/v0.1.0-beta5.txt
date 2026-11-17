@@ -18,6 +18,7 @@ PLAYER
 - The buffered part of the seek bar keeps growing while a video is paused.
 - The seek bar, the mini player bar and the music bar are redrawn only when they move by a pixel, not on every frame. On a long video that is a few times a second instead of 60 or more.
 - The mini player's bar and the seek bar's thumb are no longer animated while they are hidden.
+- The dark shade behind the player controls now covers only the bottom band they sit in, not the whole picture, so the video stays bright while the controls show and costs less to draw.
 
 FIXES
 - Fixed hidden helper windows staying open until Flow quit when a video took too long to resolve, which made Flow use more memory the longer it ran.

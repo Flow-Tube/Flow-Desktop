@@ -609,11 +609,14 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
       )}
       <div
         className={cx(
-          "pointer-events-none absolute inset-0 z-20 flex h-full w-full flex-col justify-end bg-gradient-to-t from-chrome-black/85 via-chrome-black/40 to-transparent pt-24 transition-opacity duration-200",
+          "pointer-events-none absolute inset-0 z-20 flex h-full w-full flex-col justify-end pt-24 transition-opacity duration-200",
           isTheaterMode ? "px-4 pb-3 sm:px-6 sm:pb-4 lg:px-8" : "px-3 pb-3 sm:px-5 sm:pb-4",
           shouldShowControls ? "opacity-100" : "opacity-0"
         )}
       >
+        {/* The scrim only covers the band the controls sit in. Spread over the whole player it was
+            blended into every video frame, across every pixel of the picture. */}
+        <div className="absolute inset-x-0 bottom-0 -z-10 h-56 max-h-full bg-gradient-to-t from-chrome-black/85 via-chrome-black/40 to-transparent" />
         <div
           className="pointer-events-auto"
           onClick={(event) => event.stopPropagation()}

@@ -240,6 +240,8 @@ function readBufferedAheadSeconds(player: DashPlayerController): number | null {
 
 /** One array for every player without chapters. A new `[]` per render restarted the seek bar's effect each time. */
 const NO_CHAPTERS: VideoChapter[] = [];
+// A rounded clip makes WebKitGTK draw every video frame through a mask, so the picture is square there.
+const VIDEO_CORNERS = IS_LINUX_RUNTIME ? "rounded-none" : "rounded-xl";
 const FULLSCREEN_SETTLE_MS = 120;
 /** Video kept behind the playhead. Keeping as much behind as ahead held up to
  * two extra minutes of 1080p in memory. */
@@ -2541,7 +2543,7 @@ export const Player: React.FC<PlayerProps> = ({
   const playerRootClasses = cx(
     "relative w-full outline-none",
     fillsTallerSlot ? "h-full" : "aspect-video",
-    isTheaterSurface ? "max-h-[calc(100vh-160px)] min-h-[480px] rounded-none" : "rounded-xl",
+    isTheaterSurface ? "max-h-[calc(100vh-160px)] min-h-[480px] rounded-none" : VIDEO_CORNERS,
     isFullscreen && "rounded-none",
     className
   );
@@ -2576,7 +2578,7 @@ export const Player: React.FC<PlayerProps> = ({
         className={cx(
           "absolute inset-0 z-10 overflow-hidden text-chrome-white",
           !showAmbient && "bg-chrome-black",
-          isTheaterSurface ? "flex items-center justify-center rounded-none" : "rounded-xl",
+          isTheaterSurface ? "flex items-center justify-center rounded-none" : VIDEO_CORNERS,
           isFullscreen && "rounded-none",
         )}
       >

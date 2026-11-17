@@ -77,6 +77,11 @@ restarts on a faster setting and asks whether to keep it. If the window is
 blank you cannot answer, so Flow goes back on its own after 15 seconds and
 does not try that setting again until WebKitGTK is updated.
 
+On Linux, Flow also holds a few things still that would otherwise ask for a
+new frame all the time: the bars beside the playing song, the dot on live
+videos, the fade between pages and the side menu's slide. The video has
+square corners, and Ambient mode stays off on the two slower settings.
+
 Flow 0.1.0-beta3 could move a working computer onto a slower setting and
 keep it there. The first launch of a newer version tries the fast path once
 for those installs, with the same question.

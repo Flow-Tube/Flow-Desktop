@@ -395,7 +395,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
         setStyleIfChanged(timePillRef.current, "display", atEdge ? "none" : "");
         if (!atEdge) setTextIfChanged(currentTimeRef.current, `-${formatTime(secondsBehindLive(cur, end, timing))}`);
         const dotClass = atEdge
-          ? "h-1.5 w-1.5 rounded-full bg-chrome-red-500 animate-pulse"
+          ? "live-dot h-1.5 w-1.5 rounded-full bg-chrome-red-500 animate-pulse"
           : "h-1.5 w-1.5 rounded-full bg-chrome-zinc-500";
         if (liveDotRef.current && liveDotRef.current.className !== dotClass) liveDotRef.current.className = dotClass;
         return;
@@ -859,7 +859,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                     onClick={seekToLiveEdge}
                     className="flex items-center gap-1 whitespace-nowrap rounded-full bg-chrome-black/20 px-2 py-1 text-xs font-bold uppercase tracking-wide text-chrome-white hover:bg-chrome-white/10"
                   >
-                    <span ref={liveDotRef} className="h-1.5 w-1.5 rounded-full bg-chrome-red-500 animate-pulse" />
+                    <span ref={liveDotRef} className="live-dot h-1.5 w-1.5 rounded-full bg-chrome-red-500 animate-pulse" />
                     {getString("live_badge")}
                   </button>
                 )}

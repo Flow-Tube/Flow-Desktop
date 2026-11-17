@@ -72,6 +72,26 @@ export function getGraphicsReport(): Promise<GraphicsReport | null> {
   return cached;
 }
 
+/** On a tier that copies every frame, or draws without the GPU, an effect that repaints a large area costs too much. */
+export function isSlowRenderPath(report: GraphicsReport | null): boolean {
+  return Boolean(report) && report?.renderPath !== "gpu";
+}
+
+/** False until the report says otherwise, and always off Linux. */
+export function useSlowRenderPath(): boolean {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    let active = true;
+    void getGraphicsReport().then((report) => {
+      if (active) setSlow(isSlowRenderPath(report));
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+  return slow;
+}
+
 /** GTK3 can't keep a window above others on Wayland, so pinning does nothing there. */
 export function canPinWindows(report: GraphicsReport | null): boolean {
   return !(report && report.session === "wayland" && !report.x11Backend);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canPinWindows, formatGraphics, type GraphicsReport } from "./graphicsReport";
+import { canPinWindows, formatGraphics, isSlowRenderPath, type GraphicsReport } from "./graphicsReport";
 
 const report: GraphicsReport = {
   tier: 0,
@@ -36,6 +36,18 @@ describe("formatGraphics", () => {
     expect(formatGraphics({ ...report, tier: 2, tierReason: "crash-loop", renderPath: "software" })).toContain(
       "Tier 2 (after the page kept crashing), no GPU,",
     );
+  });
+});
+
+describe("isSlowRenderPath", () => {
+  it("is false off Linux and on the GPU path", () => {
+    expect(isSlowRenderPath(null)).toBe(false);
+    expect(isSlowRenderPath(report)).toBe(false);
+  });
+
+  it("is true where frames are copied or drawn without the GPU", () => {
+    expect(isSlowRenderPath({ ...report, renderPath: "shared-memory" })).toBe(true);
+    expect(isSlowRenderPath({ ...report, renderPath: "software" })).toBe(true);
   });
 });
 

@@ -112,7 +112,7 @@ function LiveBadge({ className }: { className?: string }) {
     <div
       className={`z-10 flex items-center gap-1 rounded bg-primary px-1 py-px text-[11px] font-bold uppercase leading-tight tracking-wide text-on-primary ${className || ''}`}
     >
-      <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
+      <span className="live-dot h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
       Live
     </div>
   );

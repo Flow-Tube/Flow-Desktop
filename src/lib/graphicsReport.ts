@@ -6,6 +6,10 @@ import { isTauriEnv } from "./api/env";
 export interface GraphicsReport {
   tier: number;
   tierReason: string;
+  /** How this tier gets the page to the screen: "gpu", "shared-memory" or "software". */
+  renderPath: string;
+  /** What a faster-graphics trial can do here: "none", "trial" (this launch is one), "available" or "suggested". */
+  faster: string;
   mode: string;
   session: string;
   x11Backend: boolean;
@@ -20,19 +24,29 @@ const TIER_REASONS: Record<string, string> = {
   settings: "from Graphics compatibility in Settings",
   "failed-launches": "after launches that did not render",
   "nvidia-wayland": "NVIDIA on Wayland",
+  "crash-loop": "after the page kept crashing",
   remembered: "remembered from an earlier launch",
   "safe-graphics-launch": "--safe-graphics launch",
+  trial: "faster graphics trial",
+  "trial-kept": "kept after a faster graphics trial",
+};
+
+const RENDER_PATHS: Record<string, string> = {
+  gpu: "GPU",
+  "shared-memory": "GPU through shared memory",
+  software: "no GPU",
 };
 
 const MODES: Record<string, string> = { automatic: "Automatic", compatible: "Compatible", safe: "Safe" };
 
-/** One line for the About tab and a bug report, such as "Tier 1 (NVIDIA on Wayland), Automatic, Wayland, AppImage, WebKitGTK 2.48.3". */
+/** One line for the About tab and a bug report, such as "Tier 1 (NVIDIA on Wayland), GPU through shared memory, Automatic mode, wayland, appimage, WebKitGTK 2.48.3". */
 export function formatGraphics(report: GraphicsReport): string {
   const reason = TIER_REASONS[report.tierReason] ?? report.tierReason;
   const session = report.session || "unknown session";
   const drawnThrough = report.x11Backend && report.session !== "x11" ? `${session} drawn through X11` : session;
   return [
     `Tier ${report.tier} (${reason})`,
+    RENDER_PATHS[report.renderPath] ?? report.renderPath,
     `${MODES[report.mode] ?? report.mode} mode`,
     drawnThrough,
     report.packaging,

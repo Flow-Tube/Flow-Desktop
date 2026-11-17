@@ -20,6 +20,8 @@ import { useNotificationStore } from "./store/useNotificationStore";
 import { getOnboardingStatus } from "./lib/api/recommendation";
 import { catchUpOnce } from "./lib/linked/catchUp";
 import { useStartupHealth } from "./lib/useStartupHealth";
+import { useSlowGraphicsNotice } from "./lib/graphicsTrial";
+import { GraphicsTrialPrompt } from "./components/common/GraphicsTrialPrompt";
 import { useStartupSubscriptionRefresh } from "./lib/useStartupSubscriptionRefresh";
 import { useImageProxyBootstrap } from "./lib/useImageProxy";
 import { WATCH_LATER_PLAYLIST_ID } from "./lib/playlistLibrary";
@@ -116,7 +118,7 @@ import { usePlayOnEvents } from "./lib/live/usePlayOnEvents";
 import { IS_MAIN_WINDOW } from "./lib/appWindow";
 import { SelectionMenu } from "./components/common/SelectionMenu";
 
-import { APP_TITLEBAR_HEIGHT } from "./lib/platform";
+import { APP_TITLEBAR_HEIGHT, IS_LINUX_RUNTIME } from "./lib/platform";
 import type { CSSProperties } from "react";
 import "./App.css";
 
@@ -136,6 +138,7 @@ function App() {
 
   // Clear the Linux startup-crash sentinel as soon as the app mounts
   useStartupHealth();
+  useSlowGraphicsNotice(IS_MAIN_WINDOW && IS_LINUX_RUNTIME && location.pathname !== "/onboarding");
   useStartupSubscriptionRefresh();
   useImageProxyBootstrap();
   useTabHistoryShortcuts();
@@ -384,6 +387,7 @@ function App() {
       <UpdateManager enabled={IS_MAIN_WINDOW && location.pathname !== "/onboarding"} />
       {IS_MAIN_WINDOW && <WhosWatchingOverlay />}
       {IS_MAIN_WINDOW && location.pathname !== "/onboarding" && <CrashReportHost />}
+      {IS_MAIN_WINDOW && IS_LINUX_RUNTIME && <GraphicsTrialPrompt />}
       <ProfileSwitchOverlay />
       <NoteEditorHost />
       <KeyboardHelpHost />

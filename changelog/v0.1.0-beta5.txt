@@ -16,3 +16,4 @@ SYNC
 
 PLAYER
 - Right-click the video and choose Copy frame to put the picture on screen on the clipboard, or Save frame to keep it as a PNG named after the video and the moment (#658). The frame keeps the video's own resolution.
+- The pop-out window's title and buttons sit on dark backings, like the mini player's, so they stay readable over a bright video (#664). They also show when you reach them with the keyboard.

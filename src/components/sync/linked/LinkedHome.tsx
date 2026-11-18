@@ -29,7 +29,7 @@ export function LinkedHome({ onTask }: { onTask: (task: LinkedTask) => void }) {
     );
   }
   if (status.stopped) return <StoppedNotice reason={status.stopped} />;
-  if (status.keychainBlocked) return <KeychainBlocked />;
+  if (status.keychain) return <KeychainBlocked problem={status.keychain} />;
   if (!status.kind) {
     return (
       <SettingsGroup title={title}>

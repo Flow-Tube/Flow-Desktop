@@ -15,6 +15,9 @@ export interface RecoveryNotice {
   atMs: number;
 }
 
+/** Why the keychain didn't answer: a read waits for access, it is locked, none is running, or it failed. */
+export type KeychainProblem = "waiting" | "locked" | "unavailable" | "failed";
+
 export interface LinkedStatus {
   /** The group this device is in: on a Flow server, in a WebDAV folder, or on its devices on the network. */
   kind: "server" | "webdav" | "lan" | null;
@@ -28,8 +31,8 @@ export interface LinkedStatus {
   loginDue: boolean;
   /** The devices yet to read the login this device sent, while that change is under way. */
   loginWaiting?: string[] | null;
-  /** The keychain hasn't given this device's keys: it waits for access, or access was refused. */
-  keychainBlocked: boolean;
+  /** Why the keychain hasn't given this device's keys, if it hasn't. */
+  keychain?: KeychainProblem | null;
   recoverySaved: boolean;
   /** Words the end of a restore had to make, to show once. */
   replacedWords?: string | null;

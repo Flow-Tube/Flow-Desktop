@@ -28,7 +28,6 @@ const status = (overrides: Partial<LinkedStatus> = {}): LinkedStatus => ({
   kind: null,
   loginRefused: false,
   loginDue: false,
-  keychainBlocked: false,
   recoverySaved: true,
   recoveryNotice: null,
   recoveryDue: false,
@@ -166,7 +165,7 @@ describe("Sync page, in a group", () => {
   });
 
   it("puts a blocked keychain in place of the group", () => {
-    useLinkedDevicesStore.setState({ status: status({ kind: "server", keychainBlocked: true }) });
+    useLinkedDevicesStore.setState({ status: status({ kind: "server", keychain: "locked" }) });
     render();
     expect(host.querySelector('button[data-setting-title="Link a device"]')).toBeNull();
     expect(text()).toContain("Try again");

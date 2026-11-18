@@ -8,3 +8,8 @@ Flow Desktop is a privacy-first YouTube and YouTube Music client - no account, n
 
 BACKUPS AND IMPORT
 - Fixed Flow closing while it read a Google Takeout export with a folder named in Russian, Ukrainian, Greek, Turkish, Vietnamese, Chinese, Japanese or Korean, such as My Activity (#661).
+
+SYNC
+- Try again on the keychain card now asks the keychain again. Before, a keychain that could not be reached once, for example KDE Wallet starting after Flow, stayed unreachable until Flow restarted (#659). Last.fm's Allow access button gets the same fix.
+- The keychain card says what went wrong and what to do on your system: on Linux it names KDE Wallet and GNOME Keyring, and it mentions macOS only on a Mac.
+- Flow no longer opens the keychain at launch on a device that is in no sync group.

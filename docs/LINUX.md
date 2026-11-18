@@ -99,10 +99,13 @@ Two things Flow cannot change:
 - **X11 sessions.** There WebKitGTK copies each frame on the processor even
   on the fast path.
 
-On NVIDIA with Wayland, Flow starts on shared memory because the direct path
-fails on many driver and WebKitGTK combinations, and Debian, Ubuntu and
-Gentoo make the same choice in their WebKitGTK. Try faster graphics uses the
-direct path with explicit sync turned off.
+On NVIDIA with Wayland, Flow starts on shared memory and stays there. The
+direct GPU path fails on many driver and WebKitGTK combinations (a green
+picture where the video should be, or a crash), and Debian, Ubuntu and
+Gentoo make the same choice in their WebKitGTK. Flow also never draws without
+the GPU on NVIDIA with WebKitGTK 2.52 or later, where that crashes or leaves
+the window blank, so Safe and "Start with safe graphics" give the same result
+as Compatible there. Try faster graphics is not offered on these systems.
 
 Advanced users can set the WebKitGTK variables themselves before starting
 Flow. Your own values always win:
@@ -112,8 +115,10 @@ Flow. Your own values always win:
 - `WEBKIT_DISABLE_COMPOSITING_MODE=1` draws the page in software.
 - `WEBKIT_DMABUF_RENDERER_FORCE_SHM=1` copies frames through shared memory.
 - `GDK_BACKEND=x11` runs the window through X11 or XWayland.
-- On Debian, Ubuntu and Gentoo, `WEBKIT_FORCE_DMABUF_RENDERER=1` keeps the
-  direct GPU path on NVIDIA. Pair it with `__NV_DISABLE_EXPLICIT_SYNC=1`.
+- On NVIDIA, to try the direct GPU path yourself, start Flow with
+  `WEBKIT_DMABUF_RENDERER_FORCE_SHM=0 __NV_DISABLE_EXPLICIT_SYNC=1`, and on
+  Debian, Ubuntu and Gentoo also `WEBKIT_FORCE_DMABUF_RENDERER=1`. Play a
+  video before you rely on it.
 
 ## Video codecs
 

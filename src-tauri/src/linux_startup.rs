@@ -7,9 +7,7 @@
 //! every one of them costs something, so none is applied until a launch has
 //! actually failed to render, except where the failure is already known:
 //!
-//! * Tier 0 (default): nothing. Upstream defaults are the fast path. On NVIDIA
-//!   with Wayland, reached only through a trial the user kept: explicit sync
-//!   off and the direct GPU path kept.
+//! * Tier 0 (default): nothing. Upstream defaults are the fast path.
 //! * Tier 1: disable explicit sync, and move rendered frames through shared
 //!   memory instead of DMABUF (`WEBKIT_DMABUF_RENDERER_FORCE_SHM`).
 //! * Tier 2: also disable the DMABUF renderer and compositing, which is CPU
@@ -80,6 +78,10 @@ const MAX_TIER: u8 = 3;
 /// First WebKitGTK release where the DMABUF renderer is the only accelerated
 /// path and `WEBKIT_DMABUF_RENDERER_FORCE_SHM` exists.
 const SHM_TRANSPORT_SINCE: (u32, u32) = (2, 44);
+/// First WebKitGTK release known to fail on the NVIDIA proprietary driver once the GPU is taken
+/// away from it: 2.52 crashes as soon as a page needs a compositing layer (Ubuntu's LP #2168736)
+/// and 2.54 leaves the window black (WebKit bug 329288). A reporter's RTX 5090 showed the same.
+const NVIDIA_SOFTWARE_FAILS_SINCE: (u32, u32) = (2, 52);
 /// The record version that carries reasons and trials. An older record can hold
 /// a tier that was raised by launches that only looked like failures.
 const SCHEMA: u8 = 2;
@@ -270,11 +272,20 @@ struct LaunchFacts {
     nvidia_wayland: bool,
     user_set_dmabuf: bool,
     safe_graphics: bool,
+    /// The NVIDIA proprietary driver with a WebKitGTK that can't draw on it without the GPU.
+    software_fails: bool,
 }
 
 impl LaunchFacts {
     fn nvidia_preset(self) -> bool {
         self.nvidia_wayland && !self.user_set_dmabuf
+    }
+
+    /// The highest tier worth using. Tiers 2 and 3 turn the GPU off, and where that only
+    /// crashes or blanks the window they are no rescue: a blank window whose page still runs
+    /// counts as rendered, so a machine that climbed there would stay blank for good.
+    fn ceiling(self) -> u8 {
+        if self.software_fails { 1 } else { MAX_TIER }
     }
 }
 
@@ -287,15 +298,19 @@ struct LaunchPlan {
 }
 
 impl StartupState {
+    /// The lowest tier a launch or a trial may use: the user's choice in Settings, and shared
+    /// memory on NVIDIA with Wayland. A trial stops there too. The direct GPU path was tried on
+    /// a reporter's GTX 1060: the page drew, the video was green and the web process crashed on
+    /// close, none of which a question asked at launch could have shown.
     fn floor(&self, facts: LaunchFacts) -> u8 {
-        // A faster tier the user kept after seeing it render outranks the preset.
-        let kept_faster = self.reason == Some(TierReason::TrialKept) && self.good_tier == Some(0);
-        u8::from(facts.nvidia_preset() && !kept_faster).max(self.mode.floor())
+        u8::from(facts.nvidia_preset())
+            .max(self.mode.floor())
+            .min(facts.ceiling())
     }
 
     fn choose_tier(&self, version: &str, facts: LaunchFacts) -> u8 {
         if facts.safe_graphics {
-            return MAX_TIER;
+            return facts.ceiling();
         }
         let floor = self.floor(facts);
         let base = match self.good_tier {
@@ -307,7 +322,7 @@ impl StartupState {
         };
         base.saturating_add(self.failed_boots)
             .max(floor)
-            .min(MAX_TIER)
+            .min(facts.ceiling())
     }
 
     /// Call before [`Self::launched`], which counts this launch as failed until it renders.
@@ -316,7 +331,9 @@ impl StartupState {
             TierReason::SafeGraphicsLaunch
         } else if tier == 0 {
             TierReason::Default
-        } else if self.mode != GraphicsMode::Automatic && tier == self.mode.floor() {
+        } else if self.mode != GraphicsMode::Automatic
+            && tier == self.mode.floor().min(facts.ceiling())
+        {
             TierReason::Settings
         } else if self.failed_boots > 0 {
             if self.crash_looped {
@@ -382,10 +399,9 @@ impl StartupState {
         (target < current).then_some(target)
     }
 
-    /// Queues a trial for the next launch. The user asked, so it may go below
-    /// the NVIDIA preset, but not below their own choice in Settings.
-    fn request_trial(&mut self, current: u8, webkit: &str) -> bool {
-        let Some(tier) = self.trial_target(current, self.mode.floor(), webkit) else {
+    /// Queues a trial for the next launch, down to `floor` at the lowest.
+    fn request_trial(&mut self, current: u8, floor: u8, webkit: &str) -> bool {
+        let Some(tier) = self.trial_target(current, floor, webkit) else {
             return false;
         };
         self.trial = Some(Trial {
@@ -487,7 +503,7 @@ impl StartupState {
         }
         if facts.safe_graphics
             || self
-                .trial_target(plan.tier, self.mode.floor(), webkit)
+                .trial_target(plan.tier, self.floor(facts), webkit)
                 .is_none()
         {
             return FasterGraphics::None;
@@ -522,6 +538,8 @@ pub struct BootReport {
     pub reason: TierReason,
     pub render_path: RenderPath,
     pub faster: FasterGraphics,
+    /// The lowest tier a trial asked for later may use.
+    pub floor: u8,
 }
 
 #[cfg(any(target_os = "linux", test))]
@@ -543,6 +561,7 @@ impl BootReport {
             reason: plan.reason,
             render_path: RenderPath::of(plan.tier, shm_transport),
             faster: state.faster_graphics(plan, facts, webkit),
+            floor: state.floor(facts),
         }
     }
 }
@@ -606,24 +625,13 @@ fn save_state(dir: &Path, state: &StartupState) {
 
 /// The variables a tier applies. Split out from [`apply_tier`] so the escalation
 /// ladder can be asserted without mutating this process's environment.
-///
-/// `nvidia` is the NVIDIA-on-Wayland machine the preset covers. It only reaches
-/// tier 0 after the user kept a trial there, and then tier 0 is Tauri's second
-/// remedy on its own: explicit sync off, the direct GPU path kept. Debian,
-/// Ubuntu and Gentoo patch their WebKitGTK to leave that path on NVIDIA, and
-/// `WEBKIT_FORCE_DMABUF_RENDERER` is their switch to stay on it.
 fn tier_vars(
     tier: u8,
     x11_available: bool,
     shm_transport: bool,
-    nvidia: bool,
 ) -> Vec<(&'static str, &'static str)> {
+    // Tier 0 deliberately yields nothing — see the module docs.
     let mut vars = Vec::new();
-    // Tier 0 otherwise yields nothing — see the module docs.
-    if tier == 0 && nvidia {
-        vars.push(("__NV_DISABLE_EXPLICIT_SYNC", "1"));
-        vars.push(("WEBKIT_FORCE_DMABUF_RENDERER", "1"));
-    }
     if tier >= 1 {
         vars.push(("__NV_DISABLE_EXPLICIT_SYNC", "1"));
         if shm_transport {
@@ -642,6 +650,11 @@ fn tier_vars(
         vars.push(("GDK_BACKEND", "x11"));
     }
     vars
+}
+
+/// An unknown WebKitGTK is treated as an older one, which keeps the whole ladder.
+fn nvidia_software_fails(nvidia: bool, version: Option<(u32, u32)>) -> bool {
+    nvidia && version.is_some_and(|version| version >= NVIDIA_SOFTWARE_FAILS_SINCE)
 }
 
 fn has_shm_transport(version: Option<(u32, u32)>) -> bool {
@@ -710,16 +723,17 @@ impl LaunchFacts {
             nvidia_wayland: nvidia && wayland,
             user_set_dmabuf,
             safe_graphics,
+            software_fails: nvidia_software_fails(nvidia, webkit_version()),
         }
     }
 }
 
 #[cfg(target_os = "linux")]
-fn apply_tier(tier: u8, shm_transport: bool, nvidia: bool) {
+fn apply_tier(tier: u8, shm_transport: bool) {
     // SAFETY (every env write below): called at the very start of `run()`,
     // before the Tauri builder spawns any threads or initializes GTK/WebKitGTK.
     let x11 = x11_available(std::env::var_os("DISPLAY").as_deref());
-    for (key, value) in tier_vars(tier, x11, shm_transport, nvidia) {
+    for (key, value) in tier_vars(tier, x11, shm_transport) {
         if std::env::var_os(key).is_none() {
             unsafe { std::env::set_var(key, value) };
         }
@@ -834,7 +848,7 @@ pub fn begin(identifier: &str, version: &str) -> BootReport {
     } else {
         state.peek_launch(version, facts)
     };
-    apply_tier(plan.tier, shm_transport, facts.nvidia_preset());
+    apply_tier(plan.tier, shm_transport);
     if plan.trial {
         *trial_clock() = Some(TrialClock::Launching {
             gives_up: std::time::Instant::now() + std::time::Duration::from_secs(TRIAL_MOUNT_SECS),
@@ -943,7 +957,7 @@ pub fn request_trial(identifier: &str) -> bool {
         return false;
     };
     let mut state = load_state(&dir);
-    if !state.request_trial(report.tier, &webkit_string()) {
+    if !state.request_trial(report.tier, report.floor, &webkit_string()) {
         return false;
     }
     write_state(&dir, &state).is_ok()
@@ -998,7 +1012,7 @@ mod tests {
     use super::{
         BootReport, FailedTrial, FasterGraphics, GraphicsMode, LaunchFacts, LaunchLock, MAX_TIER,
         RenderPath, SCHEMA, StartupState, TierReason, drops_im_module, has_shm_transport,
-        load_state, save_state, tier_vars, try_launch_lock, x11_available,
+        load_state, nvidia_software_fails, save_state, tier_vars, try_launch_lock, x11_available,
     };
     use std::ffi::OsStr;
 
@@ -1018,7 +1032,7 @@ mod tests {
     }
 
     fn shm_keys_if(tier: u8, shm: bool) -> Vec<&'static str> {
-        tier_vars(tier, true, shm, false)
+        tier_vars(tier, true, shm)
             .into_iter()
             .map(|(key, _)| key)
             .collect()
@@ -1044,8 +1058,8 @@ mod tests {
     /// The point of the ladder: a machine that renders fine is left alone.
     #[test]
     fn tier_0_applies_nothing() {
-        assert!(tier_vars(0, true, false, false).is_empty());
-        assert!(tier_vars(0, true, true, false).is_empty());
+        assert!(tier_vars(0, true, false).is_empty());
+        assert!(tier_vars(0, true, true).is_empty());
     }
 
     /// Disabling the DMABUF renderer on 2.44+ disables GPU rendering outright,
@@ -1104,9 +1118,9 @@ mod tests {
     #[test]
     fn the_x11_fallback_needs_an_x_server() {
         for shm in [false, true] {
-            let without_x = tier_vars(MAX_TIER, false, shm, false);
+            let without_x = tier_vars(MAX_TIER, false, shm);
             assert!(without_x.iter().all(|(key, _)| *key != "GDK_BACKEND"));
-            assert_eq!(without_x, tier_vars(2, false, shm, false));
+            assert_eq!(without_x, tier_vars(2, false, shm));
         }
     }
 
@@ -1443,15 +1457,15 @@ mod tests {
             ..older_record(2, V2)
         };
         state.schema = SCHEMA;
-        assert!(state.request_trial(2, WEBKIT));
+        assert!(state.request_trial(2, 0, WEBKIT));
         assert_eq!(start(&mut state, LaunchFacts::default(), true), (0, true));
         assert_eq!(start(&mut state, LaunchFacts::default(), true), (2, false));
 
-        assert!(state.request_trial(2, WEBKIT));
+        assert!(state.request_trial(2, 0, WEBKIT));
         assert_eq!(start(&mut state, LaunchFacts::default(), true), (1, true));
         state.keep_trial(V2);
         assert_eq!(start(&mut state, LaunchFacts::default(), true), (1, false));
-        assert!(!state.request_trial(1, WEBKIT));
+        assert!(!state.request_trial(1, 0, WEBKIT));
     }
 
     #[test]
@@ -1465,7 +1479,7 @@ mod tests {
         };
         assert_eq!(state.trial_target(1, 0, WEBKIT), None);
         assert_eq!(state.trial_target(1, 0, NEWER_WEBKIT), Some(0));
-        assert!(state.request_trial(1, NEWER_WEBKIT));
+        assert!(state.request_trial(1, 0, NEWER_WEBKIT));
     }
 
     #[test]
@@ -1476,14 +1490,15 @@ mod tests {
         };
         assert_eq!(start(&mut state, LaunchFacts::default(), true), (1, true));
         state.keep_trial(V2);
-        assert!(!state.request_trial(1, WEBKIT));
+        let floor = state.floor(LaunchFacts::default());
+        assert!(!state.request_trial(1, floor, WEBKIT));
     }
 
     #[test]
     fn a_safe_graphics_launch_drops_a_waiting_trial() {
         let mut state = older_record(2, V2);
         state.schema = SCHEMA;
-        assert!(state.request_trial(2, WEBKIT));
+        assert!(state.request_trial(2, 0, WEBKIT));
         let safe = LaunchFacts {
             safe_graphics: true,
             ..LaunchFacts::default()
@@ -1492,40 +1507,89 @@ mod tests {
         assert_eq!(state.trial, None);
     }
 
-    /// NVIDIA on Wayland keeps shared memory by default. A trial the user asks
-    /// for goes to the direct GPU path, and keeping it lifts the preset.
+    /// NVIDIA on a current WebKitGTK: the proprietary driver, and no drawing without the GPU.
+    fn nvidia_current() -> LaunchFacts {
+        LaunchFacts {
+            software_fails: true,
+            ..nvidia_wayland()
+        }
+    }
+
+    /// The direct GPU path showed a green video and crashed on a reporter's NVIDIA machine,
+    /// which a question asked at launch can't show. So a trial stops at shared memory.
     #[test]
-    fn nvidia_reaches_the_direct_path_only_through_a_kept_trial() {
+    fn nvidia_is_offered_nothing_below_shared_memory() {
         let mut state = current();
-        assert_eq!(start(&mut state, nvidia_wayland(), true), (1, false));
-        assert!(state.request_trial(1, WEBKIT));
-        assert_eq!(start(&mut state, nvidia_wayland(), true), (0, true));
-        state.keep_trial(V2);
-        assert_eq!(start(&mut state, nvidia_wayland(), true), (0, false));
-        assert_eq!(state.reason, Some(TierReason::TrialKept));
+        assert_eq!(start(&mut state, nvidia_current(), true), (1, false));
+        let floor = state.floor(nvidia_current());
+        assert_eq!(floor, 1);
+        assert!(!state.request_trial(1, floor, WEBKIT));
+
+        let plan = state.plan_launch(V2, WEBKIT, nvidia_current());
+        let report = BootReport::new(&state, plan, nvidia_current(), 0, WEBKIT, true);
+        assert_eq!((report.tier, report.floor), (1, 1));
+        assert_eq!(report.faster, FasterGraphics::None);
+    }
+
+    /// Without the GPU, a current WebKitGTK crashes or draws nothing on NVIDIA. A blank window
+    /// still confirms its render, so a machine that climbed there would stay blank.
+    #[test]
+    fn nvidia_never_climbs_to_the_tiers_that_turn_the_gpu_off() {
+        let mut state = current();
+        assert_eq!(start(&mut state, nvidia_current(), false), (1, false));
+        assert_eq!(start(&mut state, nvidia_current(), false), (1, false));
+        assert_eq!(start(&mut state, nvidia_current(), true), (1, false));
+
+        let safe_mode = StartupState {
+            mode: GraphicsMode::Safe,
+            ..current()
+        };
+        assert_eq!(safe_mode.choose_tier(V2, nvidia_current()), 1);
         assert_eq!(
-            state.shown_reason(TierReason::Default, 0),
-            TierReason::TrialKept
+            safe_mode.reason_for(1, nvidia_current()),
+            TierReason::Settings
         );
-        // A later failure brings the preset back.
-        assert_eq!(start(&mut state, nvidia_wayland(), false), (0, false));
-        assert_eq!(start(&mut state, nvidia_wayland(), true), (1, false));
-        assert_eq!(start(&mut state, nvidia_wayland(), true), (1, false));
+
+        let safe_launch = LaunchFacts {
+            safe_graphics: true,
+            ..nvidia_current()
+        };
+        assert_eq!(current().choose_tier(V2, safe_launch), 1);
+    }
+
+    /// A record that already holds tier 2 or 3 on such a machine is a blank window today.
+    #[test]
+    fn an_nvidia_record_above_shared_memory_comes_straight_back_down() {
+        for stuck in [2, MAX_TIER] {
+            let mut state = older_record(stuck, V2);
+            assert_eq!(start(&mut state, nvidia_current(), true), (1, false));
+            assert_eq!(state.good_tier, Some(1));
+        }
     }
 
     #[test]
-    fn the_nvidia_direct_path_turns_off_explicit_sync_and_keeps_dmabuf() {
-        assert_eq!(
-            tier_vars(0, true, true, true),
-            vec![
-                ("__NV_DISABLE_EXPLICIT_SYNC", "1"),
-                ("WEBKIT_FORCE_DMABUF_RENDERER", "1")
-            ]
-        );
-        assert_eq!(
-            tier_vars(1, true, true, true),
-            tier_vars(1, true, true, false)
-        );
+    fn the_ceiling_only_applies_where_software_rendering_fails() {
+        assert!(nvidia_software_fails(true, Some((2, 52))));
+        assert!(nvidia_software_fails(true, Some((2, 54))));
+        assert!(!nvidia_software_fails(true, Some((2, 50))));
+        assert!(!nvidia_software_fails(true, None));
+        assert!(!nvidia_software_fails(false, Some((2, 54))));
+
+        // An older WebKitGTK on NVIDIA keeps the whole ladder.
+        let mut older = current();
+        assert_eq!(start(&mut older, nvidia_wayland(), false), (1, false));
+        assert_eq!(start(&mut older, nvidia_wayland(), false), (1, false));
+        assert_eq!(start(&mut older, nvidia_wayland(), false), (2, false));
+        assert_eq!(start(&mut older, nvidia_wayland(), true), (3, false));
+
+        let x11_session = LaunchFacts {
+            software_fails: true,
+            ..LaunchFacts::default()
+        };
+        let mut state = current();
+        assert_eq!(start(&mut state, x11_session, false), (0, false));
+        assert_eq!(start(&mut state, x11_session, false), (1, false));
+        assert_eq!(start(&mut state, x11_session, true), (1, false));
     }
 
     /// A floor applies itself. Once it is gone, the tier it produced is too.
@@ -1582,8 +1646,19 @@ mod tests {
         assert_eq!(healthy.render_path, RenderPath::Gpu);
 
         let nvidia = report(&mut current(), nvidia_wayland());
-        assert_eq!(nvidia.faster, FasterGraphics::Suggested);
+        assert_eq!(nvidia.faster, FasterGraphics::None);
         assert_eq!(nvidia.render_path, RenderPath::SharedMemory);
+
+        // Raised by failed launches on another GPU: worth saying once.
+        let mut raised = StartupState {
+            reason: Some(TierReason::FailedLaunches),
+            ..older_record(1, V2)
+        };
+        raised.schema = SCHEMA;
+        assert_eq!(
+            report(&mut raised, LaunchFacts::default()).faster,
+            FasterGraphics::Suggested
+        );
         assert_eq!((nvidia.tier, nvidia.failed_boots), (1, 0));
         assert!(nvidia.nvidia_preset && !nvidia.safe_graphics);
         assert_eq!(nvidia.mode, GraphicsMode::Automatic);

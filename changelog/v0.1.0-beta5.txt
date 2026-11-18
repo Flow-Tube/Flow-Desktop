@@ -9,7 +9,8 @@ Flow Desktop is a privacy-first YouTube and YouTube Music client - no account, n
 LINUX
 - Fixed Flow staying on a slower graphics mode after 0.1.0-beta3 moved a working computer onto one (#660). The first launch tries the fast mode once and asks whether to keep it.
 - Try faster graphics, in Settings > Appearance and in a one-time notice, restarts Flow on a faster graphics mode. If the window stays blank, Flow goes back on its own after 15 seconds.
-- On NVIDIA with Wayland, Try faster graphics uses the direct GPU path with explicit sync off. The default stays on shared memory.
+- On NVIDIA with Wayland, Flow stays on shared memory. The direct GPU path showed a green picture and crashed in testing, so Try faster graphics is not offered there.
+- On NVIDIA with WebKitGTK 2.52 or later, Flow no longer falls back to drawing without the GPU, which only crashed or left the window blank. Installs already stuck on that mode come back on the next launch, and Safe gives the same result as Compatible.
 - Flow on Linux asks for fewer redraws: the playing bars and live dots hold still, pages and the side menu switch without a fade or slide, and the video has square corners. Ambient mode stays off on the slower graphics modes.
 - Seeking inside the loaded part of a video, and fast quality switches, no longer make WebKitGTK restart its decoder, which could stutter.
 - Settings > About now names the graphics path in use (GPU, GPU through shared memory, or no GPU) and why. The Linux help page explains what each one costs.

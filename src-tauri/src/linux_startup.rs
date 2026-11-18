@@ -78,10 +78,11 @@ const MAX_TIER: u8 = 3;
 /// First WebKitGTK release where the DMABUF renderer is the only accelerated
 /// path and `WEBKIT_DMABUF_RENDERER_FORCE_SHM` exists.
 const SHM_TRANSPORT_SINCE: (u32, u32) = (2, 44);
-/// First WebKitGTK release known to fail on the NVIDIA proprietary driver once the GPU is taken
-/// away from it: 2.52 crashes as soon as a page needs a compositing layer (Ubuntu's LP #2168736)
-/// and 2.54 leaves the window black (WebKit bug 329288). A reporter's RTX 5090 showed the same.
-const NVIDIA_SOFTWARE_FAILS_SINCE: (u32, u32) = (2, 52);
+/// First WebKitGTK release that can fail on the NVIDIA proprietary driver once the GPU is taken
+/// away from it: 2.52 can crash as soon as a page needs a compositing layer (Ubuntu's
+/// LP #2168736) and 2.54 can leave the window black (WebKit bug 329288, seen on a reporter's
+/// RTX 5090). It is not every machine: a reporter's GTX 1060 drew correctly that way on 2.52.6.
+const NVIDIA_SOFTWARE_UNRELIABLE_SINCE: (u32, u32) = (2, 52);
 /// The record version that carries reasons and trials. An older record can hold
 /// a tier that was raised by launches that only looked like failures.
 const SCHEMA: u8 = 2;
@@ -272,8 +273,8 @@ struct LaunchFacts {
     nvidia_wayland: bool,
     user_set_dmabuf: bool,
     safe_graphics: bool,
-    /// The NVIDIA proprietary driver with a WebKitGTK that can't draw on it without the GPU.
-    software_fails: bool,
+    /// The NVIDIA proprietary driver with a WebKitGTK that may not draw on it without the GPU.
+    software_unreliable: bool,
 }
 
 impl LaunchFacts {
@@ -281,11 +282,17 @@ impl LaunchFacts {
         self.nvidia_wayland && !self.user_set_dmabuf
     }
 
-    /// The highest tier worth using. Tiers 2 and 3 turn the GPU off, and where that only
-    /// crashes or blanks the window they are no rescue: a blank window whose page still runs
-    /// counts as rendered, so a machine that climbed there would stay blank for good.
-    fn ceiling(self) -> u8 {
-        if self.software_fails { 1 } else { MAX_TIER }
+    /// The highest tier Flow moves to by itself. Tiers 2 and 3 turn the GPU off, and where
+    /// that may blank the window they are no rescue: a blank window whose page still runs counts
+    /// as rendered, so a machine that climbed there would stay blank for good. The user can still
+    /// choose them, and on some machines must: after Ubuntu moved NVIDIA to shared memory, a
+    /// reporter's GTX 1060 showed a green video on every path that keeps the GPU.
+    fn climb_limit(self) -> u8 {
+        if self.software_unreliable {
+            1
+        } else {
+            MAX_TIER
+        }
     }
 }
 
@@ -303,14 +310,12 @@ impl StartupState {
     /// a reporter's GTX 1060: the page drew, the video was green and the web process crashed on
     /// close, none of which a question asked at launch could have shown.
     fn floor(&self, facts: LaunchFacts) -> u8 {
-        u8::from(facts.nvidia_preset())
-            .max(self.mode.floor())
-            .min(facts.ceiling())
+        u8::from(facts.nvidia_preset()).max(self.mode.floor())
     }
 
     fn choose_tier(&self, version: &str, facts: LaunchFacts) -> u8 {
         if facts.safe_graphics {
-            return facts.ceiling();
+            return MAX_TIER;
         }
         let floor = self.floor(facts);
         let base = match self.good_tier {
@@ -320,9 +325,10 @@ impl StartupState {
             Some(good) => good.saturating_sub(1),
             None => 0,
         };
+        // The floor comes last: the user's own choice may pass the limit on climbing.
         base.saturating_add(self.failed_boots)
+            .min(facts.climb_limit())
             .max(floor)
-            .min(facts.ceiling())
     }
 
     /// Call before [`Self::launched`], which counts this launch as failed until it renders.
@@ -331,9 +337,7 @@ impl StartupState {
             TierReason::SafeGraphicsLaunch
         } else if tier == 0 {
             TierReason::Default
-        } else if self.mode != GraphicsMode::Automatic
-            && tier == self.mode.floor().min(facts.ceiling())
-        {
+        } else if self.mode != GraphicsMode::Automatic && tier == self.mode.floor() {
             TierReason::Settings
         } else if self.failed_boots > 0 {
             if self.crash_looped {
@@ -653,8 +657,8 @@ fn tier_vars(
 }
 
 /// An unknown WebKitGTK is treated as an older one, which keeps the whole ladder.
-fn nvidia_software_fails(nvidia: bool, version: Option<(u32, u32)>) -> bool {
-    nvidia && version.is_some_and(|version| version >= NVIDIA_SOFTWARE_FAILS_SINCE)
+fn nvidia_software_unreliable(nvidia: bool, version: Option<(u32, u32)>) -> bool {
+    nvidia && version.is_some_and(|version| version >= NVIDIA_SOFTWARE_UNRELIABLE_SINCE)
 }
 
 fn has_shm_transport(version: Option<(u32, u32)>) -> bool {
@@ -723,7 +727,7 @@ impl LaunchFacts {
             nvidia_wayland: nvidia && wayland,
             user_set_dmabuf,
             safe_graphics,
-            software_fails: nvidia_software_fails(nvidia, webkit_version()),
+            software_unreliable: nvidia_software_unreliable(nvidia, webkit_version()),
         }
     }
 }
@@ -1012,7 +1016,8 @@ mod tests {
     use super::{
         BootReport, FailedTrial, FasterGraphics, GraphicsMode, LaunchFacts, LaunchLock, MAX_TIER,
         RenderPath, SCHEMA, StartupState, TierReason, drops_im_module, has_shm_transport,
-        load_state, nvidia_software_fails, save_state, tier_vars, try_launch_lock, x11_available,
+        load_state, nvidia_software_unreliable, save_state, tier_vars, try_launch_lock,
+        x11_available,
     };
     use std::ffi::OsStr;
 
@@ -1507,10 +1512,11 @@ mod tests {
         assert_eq!(state.trial, None);
     }
 
-    /// NVIDIA on a current WebKitGTK: the proprietary driver, and no drawing without the GPU.
+    /// NVIDIA on a current WebKitGTK: the proprietary driver, where drawing without the GPU
+    /// may fail.
     fn nvidia_current() -> LaunchFacts {
         LaunchFacts {
-            software_fails: true,
+            software_unreliable: true,
             ..nvidia_wayland()
         }
     }
@@ -1531,33 +1537,55 @@ mod tests {
         assert_eq!(report.faster, FasterGraphics::None);
     }
 
-    /// Without the GPU, a current WebKitGTK crashes or draws nothing on NVIDIA. A blank window
+    /// Without the GPU, a current WebKitGTK may crash or draw nothing on NVIDIA. A blank window
     /// still confirms its render, so a machine that climbed there would stay blank.
     #[test]
-    fn nvidia_never_climbs_to_the_tiers_that_turn_the_gpu_off() {
+    fn nvidia_never_climbs_by_itself_to_the_tiers_that_turn_the_gpu_off() {
         let mut state = current();
         assert_eq!(start(&mut state, nvidia_current(), false), (1, false));
         assert_eq!(start(&mut state, nvidia_current(), false), (1, false));
         assert_eq!(start(&mut state, nvidia_current(), true), (1, false));
+    }
 
-        let safe_mode = StartupState {
+    /// One reporter's NVIDIA machine showed a green video on every path that keeps the GPU, so
+    /// the tiers without it stay within the user's reach.
+    #[test]
+    fn nvidia_still_reaches_the_tiers_without_the_gpu_when_the_user_asks() {
+        let mut safe_mode = StartupState {
             mode: GraphicsMode::Safe,
             ..current()
         };
-        assert_eq!(safe_mode.choose_tier(V2, nvidia_current()), 1);
+        assert_eq!(safe_mode.floor(nvidia_current()), MAX_TIER);
         assert_eq!(
-            safe_mode.reason_for(1, nvidia_current()),
+            safe_mode.reason_for(MAX_TIER, nvidia_current()),
             TierReason::Settings
         );
+        assert_eq!(
+            start(&mut safe_mode, nvidia_current(), true),
+            (MAX_TIER, false)
+        );
+        // Failed launches under the user's choice don't pull it back down.
+        assert_eq!(
+            start(&mut safe_mode, nvidia_current(), false),
+            (MAX_TIER, false)
+        );
+        assert_eq!(
+            start(&mut safe_mode, nvidia_current(), true),
+            (MAX_TIER, false)
+        );
+
+        // Back on Automatic, the tier that Safe produced is not remembered.
+        safe_mode.mode = GraphicsMode::Automatic;
+        assert_eq!(start(&mut safe_mode, nvidia_current(), true), (1, false));
 
         let safe_launch = LaunchFacts {
             safe_graphics: true,
             ..nvidia_current()
         };
-        assert_eq!(current().choose_tier(V2, safe_launch), 1);
+        assert_eq!(current().choose_tier(V2, safe_launch), MAX_TIER);
     }
 
-    /// A record that already holds tier 2 or 3 on such a machine is a blank window today.
+    /// A record that climbed to tier 2 or 3 on such a machine may be a blank window today.
     #[test]
     fn an_nvidia_record_above_shared_memory_comes_straight_back_down() {
         for stuck in [2, MAX_TIER] {
@@ -1568,12 +1596,12 @@ mod tests {
     }
 
     #[test]
-    fn the_ceiling_only_applies_where_software_rendering_fails() {
-        assert!(nvidia_software_fails(true, Some((2, 52))));
-        assert!(nvidia_software_fails(true, Some((2, 54))));
-        assert!(!nvidia_software_fails(true, Some((2, 50))));
-        assert!(!nvidia_software_fails(true, None));
-        assert!(!nvidia_software_fails(false, Some((2, 54))));
+    fn the_limit_on_climbing_only_applies_where_software_rendering_may_fail() {
+        assert!(nvidia_software_unreliable(true, Some((2, 52))));
+        assert!(nvidia_software_unreliable(true, Some((2, 54))));
+        assert!(!nvidia_software_unreliable(true, Some((2, 50))));
+        assert!(!nvidia_software_unreliable(true, None));
+        assert!(!nvidia_software_unreliable(false, Some((2, 54))));
 
         // An older WebKitGTK on NVIDIA keeps the whole ladder.
         let mut older = current();
@@ -1583,7 +1611,7 @@ mod tests {
         assert_eq!(start(&mut older, nvidia_wayland(), true), (3, false));
 
         let x11_session = LaunchFacts {
-            software_fails: true,
+            software_unreliable: true,
             ..LaunchFacts::default()
         };
         let mut state = current();

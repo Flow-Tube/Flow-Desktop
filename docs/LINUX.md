@@ -99,13 +99,20 @@ Two things Flow cannot change:
 - **X11 sessions.** There WebKitGTK copies each frame on the processor even
   on the fast path.
 
-On NVIDIA with Wayland, Flow starts on shared memory and stays there. The
-direct GPU path fails on many driver and WebKitGTK combinations (a green
-picture where the video should be, or a crash), and Debian, Ubuntu and
-Gentoo make the same choice in their WebKitGTK. Flow also never draws without
-the GPU on NVIDIA with WebKitGTK 2.52 or later, where that crashes or leaves
-the window blank, so Safe and "Start with safe graphics" give the same result
-as Compatible there. Try faster graphics is not offered on these systems.
+On NVIDIA with Wayland, Flow starts on shared memory and Try faster graphics
+is not offered. The direct GPU path fails on many driver and WebKitGTK
+combinations (a green picture where the video should be, or a crash), and
+Debian, Ubuntu and Gentoo make the same choice in their WebKitGTK.
+
+On NVIDIA with WebKitGTK 2.52 or later, Flow does not move to Safe by
+itself, because drawing without the GPU crashes or leaves the window blank on
+some of these systems. You can still choose it. If the video is a green
+picture, try Safe in Settings > Appearance > Graphics compatibility, or
+"Start with safe graphics" for one launch. If Safe leaves the window blank,
+quit Flow and delete `startup_state.json` to go back to Automatic. The deb,
+rpm and AppImage builds keep it in
+`~/.local/share/io.github.aedev.flow.desktop/` (Flow Beta adds `.beta` to
+the folder name).
 
 Advanced users can set the WebKitGTK variables themselves before starting
 Flow. Your own values always win:

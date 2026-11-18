@@ -153,6 +153,9 @@ pub async fn restore_notes(
 pub async fn delete_notes(pool: &SqlitePool, ids: &[String]) -> Result<(), SyncError> {
     let at = clock::edit_ms(pool).await?;
     let mut tx = pool.begin_with("BEGIN IMMEDIATE").await?;
+    // An Undo is stamped after this deletion even when it lands in the same millisecond. At an
+    // equal time the tombstone wins the merge, and the note put back would be deleted again.
+    clock::observe(&mut tx, at).await?;
     for id in ids {
         notes::delete(&mut tx, id).await?;
     }

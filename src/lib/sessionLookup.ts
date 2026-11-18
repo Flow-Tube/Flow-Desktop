@@ -61,6 +61,17 @@ export function createSessionLookup<T>(
 
 /** The value for `key`, or null with no key and until it resolves. */
 export function useSessionLookup<T>(lookup: SessionLookup<T>, key: string | null): T | null {
+  return useSessionLookupState(lookup, key).value;
+}
+
+/**
+ * The value for `key` and whether the lookup has answered, which a failed request does too.
+ * For a caller that holds its own fallback back until this one has had its say.
+ */
+export function useSessionLookupState<T>(
+  lookup: SessionLookup<T>,
+  key: string | null,
+): { value: T | null; settled: boolean } {
   const [resolved, setResolved] = useState<{ key: string; value: T | null } | null>(null);
 
   useEffect(() => {
@@ -76,12 +87,12 @@ export function useSessionLookup<T>(lookup: SessionLookup<T>, key: string | null
     };
   }, [key, lookup]);
 
-  if (!key) return null;
+  if (!key) return { value: null, settled: false };
 
   // Read the cache during render so a remounting card, or a second card for the
   // same video, shows the value immediately instead of flashing the listed one
   // for a frame while the effect catches up.
   const cached = lookup.peek(key);
-  if (cached !== undefined) return cached;
-  return resolved?.key === key ? resolved.value : null;
+  if (cached !== undefined) return { value: cached, settled: true };
+  return resolved?.key === key ? { value: resolved.value, settled: true } : { value: null, settled: false };
 }

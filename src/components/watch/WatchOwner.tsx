@@ -4,7 +4,7 @@ import { ChevronDown } from "lucide-react";
 import { SubscribeButton } from "../ui/SubscribeButton";
 import { AnchoredPortalMenu, type MenuAnchor } from "../ui/AnchoredPortalMenu";
 import { ChannelLabel } from "../video/CardMeta";
-import { upgradeAvatarUrl } from "../../lib/thumbnails";
+import { upgradeAvatarUrl, avatarSize } from "../../lib/thumbnails";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 import { getString } from "../../lib/i18n/index";
 import { collaboratorsByline } from "../../lib/collaborators";
@@ -23,7 +23,7 @@ export interface WatchOwnerProps {
 }
 
 function Avatar({ url, name, className }: { url: string | null | undefined; name: string; className: string }) {
-  const src = useProxiedImageUrl(upgradeAvatarUrl(url ?? null)) || null;
+  const src = useProxiedImageUrl(upgradeAvatarUrl(url ?? null, avatarSize(40))) || null;
   return (
     <span
       className={`flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-container-high font-bold text-chrome-neutral-400 ${className}`}

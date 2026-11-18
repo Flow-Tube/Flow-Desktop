@@ -236,9 +236,7 @@ impl StreamingManager {
             user_agent,
             video_id,
         };
-        let mut lock = self.sessions.lock().unwrap();
-        lock.insert(token, session);
-        lock.retain(|_, s| s.expires_at > now);
+        self.sessions.lock().unwrap().insert(token, session);
     }
 
     pub fn register_inline_session(&self, token: String, body: Vec<u8>, content_type: String) {
@@ -254,9 +252,7 @@ impl StreamingManager {
             user_agent: String::new(),
             video_id: None,
         };
-        let mut lock = self.sessions.lock().unwrap();
-        lock.insert(token, session);
-        lock.retain(|_, s| s.expires_at > now);
+        self.sessions.lock().unwrap().insert(token, session);
     }
 
     pub fn register_local_session(&self, token: String, path: String, content_type: String) {
@@ -272,9 +268,19 @@ impl StreamingManager {
             user_agent: String::new(),
             video_id: None,
         };
-        let mut lock = self.sessions.lock().unwrap();
-        lock.insert(token, session);
-        lock.retain(|_, s| s.expires_at > now);
+        self.sessions.lock().unwrap().insert(token, session);
+    }
+
+    /// Forgets the sessions whose links have run out, and returns how many are left. Called
+    /// from [`keep_tidy`]. Every registration used to do this itself, which walked the whole
+    /// map under the lock every media request takes, once per stream of every video resolved.
+    pub fn prune_expired(&self) -> usize {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |elapsed| elapsed.as_secs());
+        let mut sessions = self.sessions.lock().unwrap();
+        sessions.retain(|_, session| session.expires_at > now);
+        sessions.len()
     }
 
     /// Stops serving the local files under `folder`, which the library no longer holds.
@@ -481,6 +487,22 @@ async fn write_cached_response(
 // ---------------------------------------------------------------------------
 // Server
 // ---------------------------------------------------------------------------
+
+/// How often expired proxy sessions and idle SABR sessions are let go.
+const TIDY_INTERVAL: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// Runs for the life of the app. Without it an expired session stayed until something else
+/// was registered, and a finished SABR video kept its buffer until the next SABR resolve.
+pub async fn keep_tidy(manager: StreamingManager) {
+    let mut tick = tokio::time::interval(TIDY_INTERVAL);
+    tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    loop {
+        tick.tick().await;
+        let sessions = manager.prune_expired();
+        manager.sabr().prune_expired();
+        debug!(sessions, "proxy_sessions_tidied");
+    }
+}
 
 pub async fn start_proxy_server(manager: StreamingManager, std_listener: std::net::TcpListener) {
     std_listener
@@ -1877,6 +1899,48 @@ mod session_expiry_tests {
             remote_session_expiry(expired, 1000),
             1000 + UNDATED_SESSION_SECS
         );
+    }
+}
+
+#[cfg(test)]
+mod session_pruning_tests {
+    use super::StreamingManager;
+
+    fn expire(manager: &StreamingManager, token: &str) {
+        manager
+            .sessions
+            .lock()
+            .unwrap()
+            .get_mut(token)
+            .unwrap()
+            .expires_at = 1;
+    }
+
+    #[test]
+    fn pruning_drops_expired_sessions_and_keeps_the_rest() {
+        let (manager, _) = StreamingManager::new();
+        for token in ["old", "live"] {
+            manager.register_inline_session(token.into(), b"#EXTM3U".to_vec(), "text/plain".into());
+        }
+        expire(&manager, "old");
+
+        assert_eq!(manager.prune_expired(), 1);
+        assert!(manager.get_session("live").is_some());
+        assert!(manager.get_session("old").is_none());
+    }
+
+    /// Registering used to walk every session under the lock. It now only adds its own, and
+    /// an expired one is still refused when asked for.
+    #[test]
+    fn registering_leaves_other_sessions_alone_and_an_expired_one_is_still_refused() {
+        let (manager, _) = StreamingManager::new();
+        manager.register_inline_session("old".into(), Vec::new(), "text/plain".into());
+        expire(&manager, "old");
+        manager.register_inline_session("new".into(), Vec::new(), "text/plain".into());
+
+        assert_eq!(manager.sessions.lock().unwrap().len(), 2);
+        assert!(manager.get_session("old").is_none());
+        assert_eq!(manager.sessions.lock().unwrap().len(), 1);
     }
 }
 

@@ -34,6 +34,7 @@ import { useFinishedShortIds, useSubscriptionsHiddenFilter } from "../lib/useWat
 import { splitSubscriptionFeed } from "../lib/subscriptionFeedSplit";
 import { uniqueVideoKeys } from "../lib/videoKeys";
 import { useScrollAnchor } from "../lib/useScrollAnchor";
+import { useChunkedList } from "../lib/localMedia/useChunkedList";
 import type { SubscribedChannel, SubscriptionGroup } from "../store/useSubscriptionStore";
 import type { VideoSummary } from "../types/video";
 import { Checkbox } from "../components/ui/Checkbox";
@@ -269,12 +270,20 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
     [filteredVideos, finishedShorts, shortsExcludedChannels, showSubscriptionLive, showSubscriptionShorts, showSubscriptionVideos],
   );
 
-  const videoKeys = useMemo(() => uniqueVideoKeys(regularVideos), [regularVideos]);
+  // The feed can hold 1500 uploads. Mounting them all at once froze the page for as long as
+  // that took, so it opens on the first of them and grows as the last one shown comes near.
+  const { count: shownCount, onLastVisible } = useChunkedList(
+    `${selectedGroupName ?? ""}|${selectedChannelId ?? ""}|${query}`,
+    regularVideos.length,
+    "subscriptions",
+  );
+  const shownVideos = useMemo(() => regularVideos.slice(0, shownCount), [regularVideos, shownCount]);
+  const videoKeys = useMemo(() => uniqueVideoKeys(shownVideos), [shownVideos]);
   const getVideoKey = useCallback((video: VideoSummary, index: number) => videoKeys[index] ?? `${video.id}-${index}`, [videoKeys]);
   const pageRef = useRef<HTMLDivElement>(null);
   // Everything that can grow or shrink above the card being read.
   useScrollAnchor(pageRef, [
-    regularVideos,
+    shownVideos,
     shortsForShelf.length > 0,
     scanProgress != null,
     failedChannelNames.length,
@@ -430,10 +439,11 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
                         />
                       )}
                       <VideoGrid
-                        videos={regularVideos}
+                        videos={shownVideos}
                         onPlay={onPlay}
                         onAddToQueue={onAddToQueue}
                         getVideoKey={getVideoKey}
+                        onLastVisibleIndex={onLastVisible}
                         scrollAnchors
                       />
                     </>

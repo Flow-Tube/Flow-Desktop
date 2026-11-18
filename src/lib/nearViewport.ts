@@ -21,6 +21,21 @@ interface Watcher {
 /** One observer per scroll root: a feed of several hundred cards must not create that many. */
 const observers = new Map<Element | null, { observer: IntersectionObserver; watchers: Map<Element, Set<Watcher>> }>();
 
+/**
+ * Elements last reported near. An observer only reports a target when it starts being watched
+ * or its state changes, so a watcher that joins one already watched would otherwise wait for
+ * the card to leave and come back.
+ */
+const nearNow = new WeakSet<Element>();
+
+function startDwell(watcher: Watcher) {
+  if (watcher.timer !== null) return;
+  watcher.timer = setTimeout(() => {
+    watcher.timer = null;
+    watcher.onNear();
+  }, DWELL_MS);
+}
+
 function observerFor(root: Element | null) {
   const existing = observers.get(root);
   if (existing) return existing;
@@ -29,15 +44,14 @@ function observerFor(root: Element | null) {
   const observer = new IntersectionObserver(
     (entries) => {
       for (const entry of entries) {
+        if (entry.isIntersecting) nearNow.add(entry.target);
+        else nearNow.delete(entry.target);
         for (const watcher of watchers.get(entry.target) ?? []) {
           if (!entry.isIntersecting) {
             if (watcher.timer !== null) clearTimeout(watcher.timer);
             watcher.timer = null;
-          } else if (watcher.timer === null) {
-            watcher.timer = setTimeout(() => {
-              watcher.timer = null;
-              watcher.onNear();
-            }, DWELL_MS);
+          } else {
+            startDwell(watcher);
           }
         }
       }
@@ -62,6 +76,8 @@ function watchNear(element: Element, scrollRoot: Element | null, onNear: () => v
     group = new Set();
     shared.watchers.set(target, group);
     shared.observer.observe(target);
+  } else if (nearNow.has(target)) {
+    startDwell(watcher);
   }
   group.add(watcher);
 
@@ -71,6 +87,7 @@ function watchNear(element: Element, scrollRoot: Element | null, onNear: () => v
     if (group.size > 0) return;
     shared.watchers.delete(target);
     shared.observer.unobserve(target);
+    nearNow.delete(target);
     if (shared.watchers.size === 0) {
       shared.observer.disconnect();
       observers.delete(root);

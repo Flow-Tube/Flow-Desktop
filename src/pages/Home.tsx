@@ -44,6 +44,10 @@ interface HomeProps {
   onAddToQueue: (video: VideoSummary) => void;
 }
 
+// A card keeps its place in the tree when one before it is hidden, instead of every card after
+// it being mounted again.
+const videoIdKey = (video: VideoSummary) => video.id;
+
 /** Home: the backend builds the feed (services/home_feed); this page lays it out. */
 export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
   const homeFeedEnabled = useAppSettingsStore((state) => state.values[SETTINGS.HOME_FEED_ENABLED] !== "false");
@@ -251,6 +255,7 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
           trackImpressions
           getReason={reasonOf}
           getReasonLine={reasonLineOf}
+          getVideoKey={videoIdKey}
           onLastVisibleIndex={handleLastVisible}
         />
         <HomeFeedFooter

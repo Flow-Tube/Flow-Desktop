@@ -695,6 +695,25 @@
   animation: music-wave 760ms ease-in-out infinite;
 }
 
+/*
+  Linux draws through WebKitGTK's GTK 3 port, which repaints the whole window for every frame
+  the page asks for, and on its fallback paths copies it as well. An animation that never ends
+  asks for 60 of them a second for as long as it is on screen, so these hold still there, and
+  the shell snaps where it would animate layout. Set in src/bootstrap.tsx.
+*/
+:root[data-light-effects] .music-wave-bar,
+:root[data-light-effects] .live-dot {
+  animation: none;
+}
+
+:root[data-light-effects] .sidebar-rail {
+  transition: none;
+}
+
+:root[data-light-effects] {
+  --motion-page: 0ms;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .music-wave-bar {
     animation: none;

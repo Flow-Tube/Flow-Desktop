@@ -224,6 +224,9 @@ function DockCard({
     <motion.div
       layoutId={downloadSurfaceLayoutId(item.id)}
       layout
+      // Progress re-renders this card four times a second. Without a dependency each of those
+      // renders measures the layout again; the card only changes shape with these.
+      layoutDependency={`${item.status}:${detail ? 1 : 0}`}
       initial={false}
       exit={{ ...DOCK_EXIT, transition: DOCK_EXIT_TRANSITION }}
       transition={DOWNLOAD_SURFACE_SPRING}
@@ -355,6 +358,7 @@ function GroupDockCard({
   return (
     <motion.div
       layout
+      layoutDependency={`${state}:${shown.length}:${more > 0 ? 1 : 0}`}
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ ...DOCK_EXIT, transition: DOCK_EXIT_TRANSITION }}

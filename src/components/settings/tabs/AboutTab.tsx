@@ -49,7 +49,8 @@ function LinkRow({ icon, label, value, href, onSelect }: { icon: ReactNode; labe
         <span className="text-sm font-medium text-chrome-neutral-200">{label}</span>
       </div>
       <div className="flex items-center justify-end gap-2 min-w-0 text-end">
-        {value && <span className="text-sm text-chrome-neutral-400 break-all">{value}</span>}
+        {/* A plain row's value can be selected and copied, as bug reports ask for these. */}
+        {value && <span className={`text-sm text-chrome-neutral-400 break-all ${select ? '' : 'select-text'}`}>{value}</span>}
         {href && <ExternalLink size={12} className="text-chrome-neutral-500 group-hover:text-chrome-neutral-300 transition-colors" />}
         {onSelect && <ChevronRight size={14} className="text-chrome-neutral-500 group-hover:text-chrome-neutral-300 transition-colors rtl:-scale-x-100" />}
       </div>

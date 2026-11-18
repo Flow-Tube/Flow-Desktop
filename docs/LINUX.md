@@ -58,13 +58,74 @@ uses safer settings on the next launch by itself. You can also choose:
   is too broken to reach Settings. From a terminal, run
   `flow-desktop --safe-graphics`, or set `FLOW_SAFE_GRAPHICS=1`.
 
+### When Flow feels slow
+
+Every safer setting costs speed. Settings > About shows which one Flow is
+on, in the Graphics row:
+
+- **GPU**: the fast path. Nothing is turned off.
+- **GPU through shared memory**: the page is still drawn by the GPU, but each
+  finished frame is copied through memory. The cost grows with the size of
+  the window, so a maximized window on a 4K screen is much slower than a
+  small one.
+- **No GPU**: the page and the video are drawn by the processor. This is the
+  slowest setting.
+
+If Flow is on a slower setting than it may need, it says so once and offers
+**Try faster graphics**, which is also in Settings > Appearance. Flow
+restarts on a faster setting and asks whether to keep it. If the window is
+blank you cannot answer, so Flow goes back on its own after 15 seconds and
+does not try that setting again until WebKitGTK is updated.
+
+On Linux, Flow also holds a few things still that would otherwise ask for a
+new frame all the time: the bars beside the playing song, the dot on live
+videos, the fade between pages and the side menu's slide. The video has
+square corners, and Ambient mode stays off on the two slower settings.
+
+Auto quality stops at 1080p on Linux and stays on H.264, because video is
+mostly decoded by the processor there. A quality you pick yourself is not
+limited.
+
+Flow 0.1.0-beta3 could move a working computer onto a slower setting and
+keep it there. The first launch of a newer version tries the fast path once
+for those installs, with the same question.
+
+Two things Flow cannot change:
+
+- **Display scaling such as 125% or 150%.** GTK 3, which WebKitGTK uses,
+  draws at 200% and lets the desktop shrink the result. A maximized window
+  on a 4K screen at 150% is drawn at 5120 by 2880. A whole-number scale
+  (100% or 200%) or a smaller window is faster.
+- **X11 sessions.** There WebKitGTK copies each frame on the processor even
+  on the fast path.
+
+On NVIDIA with Wayland, Flow starts on shared memory and Try faster graphics
+is not offered. The direct GPU path fails on many driver and WebKitGTK
+combinations (a green picture where the video should be, or a crash), and
+Debian, Ubuntu and Gentoo make the same choice in their WebKitGTK.
+
+On NVIDIA with WebKitGTK 2.52 or later, Flow does not move to Safe by
+itself, because drawing without the GPU crashes or leaves the window blank on
+some of these systems. You can still choose it. If the video is a green
+picture, try Safe in Settings > Appearance > Graphics compatibility, or
+"Start with safe graphics" for one launch. If Safe leaves the window blank,
+quit Flow and delete `startup_state.json` to go back to Automatic. The deb,
+rpm and AppImage builds keep it in
+`~/.local/share/io.github.aedev.flow.desktop/` (Flow Beta adds `.beta` to
+the folder name).
+
 Advanced users can set the WebKitGTK variables themselves before starting
 Flow. Your own values always win:
 
 - `WEBKIT_DISABLE_DMABUF_RENDERER=1` turns off GPU buffer sharing, and `=0`
   turns it back on when Flow turned it off.
 - `WEBKIT_DISABLE_COMPOSITING_MODE=1` draws the page in software.
+- `WEBKIT_DMABUF_RENDERER_FORCE_SHM=1` copies frames through shared memory.
 - `GDK_BACKEND=x11` runs the window through X11 or XWayland.
+- On NVIDIA, to try the direct GPU path yourself, start Flow with
+  `WEBKIT_DMABUF_RENDERER_FORCE_SHM=0 __NV_DISABLE_EXPLICIT_SYNC=1`, and on
+  Debian, Ubuntu and Gentoo also `WEBKIT_FORCE_DMABUF_RENDERER=1`. Play a
+  video before you rely on it.
 
 ## Video codecs
 

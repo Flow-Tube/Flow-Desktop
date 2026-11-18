@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { captionEdgeShadow, colorWithOpacity, filterCues } from "./subtitleStyleCss";
+import { activeCuePositions, captionEdgeShadow, colorWithOpacity, filterCues } from "./subtitleStyleCss";
 
 describe("subtitle style", () => {
   it("makes a color with its opacity", () => {
@@ -19,5 +19,24 @@ describe("subtitle style", () => {
     expect(filterCues(cues, " HELLO ")).toEqual([cues[0]]);
     expect(filterCues(cues, "")).toEqual(cues);
     expect(filterCues(cues, "nothing")).toEqual([]);
+  });
+});
+
+describe("activeCuePositions", () => {
+  const cues = [
+    { start: 0, end: 2 },
+    { start: 1.5, end: 4 },
+    { start: 6, end: 8 },
+  ];
+
+  it("lists the cues showing at a time, including ones that overlap", () => {
+    expect(activeCuePositions(cues, 1)).toBe("0");
+    expect(activeCuePositions(cues, 1.8)).toBe("0,1");
+    expect(activeCuePositions(cues, 7)).toBe("2");
+  });
+
+  it("is empty between cues, and the same string while one cue stays on screen", () => {
+    expect(activeCuePositions(cues, 5)).toBe("");
+    expect(activeCuePositions(cues, 6.2)).toBe(activeCuePositions(cues, 7.9));
   });
 });

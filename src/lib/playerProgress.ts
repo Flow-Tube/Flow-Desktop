@@ -23,6 +23,41 @@ export function segmentFillPercent(time: number, start: number, end: number): nu
   return ((time - start) / (end - start)) * 100;
 }
 
+/**
+ * How many device pixels a bar is wide: the number of positions it can show. Zero before layout.
+ */
+export function barSteps(element: Element | null | undefined, pixelRatio = window.devicePixelRatio || 1): number {
+  return element ? Math.round(element.clientWidth * pixelRatio) : 0;
+}
+
+/** Keeps `onSteps` current with a bar's width in device pixels. Returns the cleanup. */
+export function watchBarSteps(element: Element | null | undefined, onSteps: (steps: number) => void): () => void {
+  onSteps(barSteps(element));
+  if (!element || typeof ResizeObserver === "undefined") return () => {};
+  const observer = new ResizeObserver(() => onSteps(barSteps(element)));
+  observer.observe(element);
+  return () => observer.disconnect();
+}
+
+/**
+ * `time` moved to the nearest position a bar of `steps` device pixels can show. Drawn every
+ * frame, a long video moves its bar by a small fraction of a pixel, and each of those writes
+ * still cost a layout, a repaint and a new frame for the window. Snapped, the value only
+ * changes when the picture does, and `setStyleIfChanged` skips every frame in between.
+ */
+export function snapToBarPixel(time: number, duration: number, steps: number): number {
+  if (!(steps > 0) || !(duration > 0)) return time;
+  return (Math.round((time / duration) * steps) / steps) * duration;
+}
+
+/**
+ * A percentage as the browser itself writes it back (`50%`, `33.333%`), so comparing it with
+ * the element's current style finds an unchanged value.
+ */
+export function cssPercent(percent: number): string {
+  return `${Number(percent.toFixed(3))}%`;
+}
+
 /** Writes an inline style only when it changes, so an idle frame does no style work. */
 export function setStyleIfChanged(
   element: HTMLElement | null | undefined,

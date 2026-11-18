@@ -701,7 +701,8 @@ impl RecommendationService {
             }
         }
 
-        let mut brain = self.brain_store.write().await;
+        // What a feed showed is bookkeeping, not learning: it can wait for the slower save.
+        let mut brain = self.brain_store.write_later().await;
         for video in &unique_videos {
             let entry = brain
                 .feed_history

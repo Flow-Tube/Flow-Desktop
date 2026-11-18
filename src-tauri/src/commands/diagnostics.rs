@@ -16,6 +16,9 @@ use tauri::State;
 /// Cap on the number of trailing log lines returned to the UI, so the viewer and
 /// the clipboard payload stay bounded even after long sessions.
 const MAX_LOG_LINES: usize = 4000;
+/// The most one log file contributes. A day spent in a warning loop writes far more than
+/// the last `MAX_LOG_LINES` lines the page keeps.
+const MAX_LOG_TAIL_BYTES: u64 = 4 * 1024 * 1024;
 
 fn logs_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, ErrorResponse> {
     let dir = app
@@ -79,31 +82,66 @@ pub fn log_frontend_event(level: String, message: String, context: Option<String
 /// non-blocking appender buffers writes, so the very latest lines may not appear
 /// yet — the frontend augments this with its in-memory event buffer.
 #[tauri::command]
-pub fn read_logs(app: tauri::AppHandle) -> Result<String, ErrorResponse> {
+pub async fn read_logs(app: tauri::AppHandle) -> Result<String, ErrorResponse> {
     let dir = logs_dir(&app)?;
-    if !dir.exists() {
-        return Ok(String::new());
-    }
+    // File reads, kept off the main thread: as a plain command this froze the window for as
+    // long as a week of logs took to read.
+    tauri::async_runtime::spawn_blocking(move || {
+        if !dir.exists() {
+            return Ok(String::new());
+        }
+        let mut files: Vec<std::path::PathBuf> = std::fs::read_dir(&dir)
+            .map_err(AppError::from)?
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| is_log_file(path))
+            .collect();
+        files.sort();
+        Ok(last_log_lines(&files, MAX_LOG_LINES, MAX_LOG_TAIL_BYTES))
+    })
+    .await
+    .map_err(|error| AppError::Internal(format!("Reading the logs failed: {error}")))?
+}
 
-    let mut files: Vec<std::path::PathBuf> = std::fs::read_dir(&dir)
-        .map_err(AppError::from)?
-        .filter_map(Result::ok)
-        .map(|entry| entry.path())
-        .filter(|path| is_log_file(path))
-        .collect();
-    files.sort();
+/// The end of `path` as text, at most `max_bytes` of it, starting on a whole line.
+fn read_tail(path: &std::path::Path, max_bytes: u64) -> std::io::Result<String> {
+    use std::io::{Read, Seek, SeekFrom};
 
-    let mut lines: Vec<String> = Vec::new();
-    for path in files {
-        if let Ok(contents) = std::fs::read_to_string(&path) {
-            lines.extend(contents.lines().map(ToOwned::to_owned));
+    let mut file = std::fs::File::open(path)?;
+    let start = file.metadata()?.len().saturating_sub(max_bytes);
+    file.seek(SeekFrom::Start(start))?;
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)?;
+    let text = String::from_utf8_lossy(&bytes);
+    Ok(if start > 0 {
+        // A read that starts inside the file starts inside a line.
+        text.split_once('\n')
+            .map_or_else(String::new, |(_, rest)| rest.to_owned())
+    } else {
+        text.into_owned()
+    })
+}
+
+/// The last `max_lines` lines of `files`, which are oldest first. Reads the newest file
+/// first and stops once it has enough, so older days are not read just to be dropped.
+fn last_log_lines(files: &[std::path::PathBuf], max_lines: usize, max_file_bytes: u64) -> String {
+    let mut newest_first: Vec<String> = Vec::new();
+    let mut found = 0;
+    for path in files.iter().rev() {
+        if found >= max_lines {
+            break;
+        }
+        if let Ok(text) = read_tail(path, max_file_bytes) {
+            found += text.lines().count();
+            newest_first.push(text);
         }
     }
-
-    if lines.len() > MAX_LOG_LINES {
-        lines.drain(0..lines.len() - MAX_LOG_LINES);
-    }
-    Ok(lines.join("\n"))
+    let lines: Vec<&str> = newest_first
+        .iter()
+        .rev()
+        .flat_map(|text| text.lines())
+        .collect();
+    lines[lines.len().saturating_sub(max_lines)..].join("\n")
 }
 
 /// Clears the persisted logs. Rolled files are deleted; the active file (held
@@ -251,4 +289,126 @@ pub fn set_graphics_mode(app: tauri::AppHandle, mode: String) -> Result<(), Erro
     #[cfg(not(target_os = "linux"))]
     let _ = (app, mode);
     Ok(())
+}
+
+/// Restarts Flow on a faster graphics tier that the user then keeps or lets
+/// lapse (see `linux_startup`). False when there is no faster tier to try, and
+/// always on other platforms.
+#[tauri::command]
+#[must_use]
+pub fn start_graphics_trial(app: tauri::AppHandle) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        if !crate::linux_startup::request_trial(&app.config().identifier) {
+            return false;
+        }
+        crate::relaunch::request();
+        app.exit(0);
+        true
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = app;
+        false
+    }
+}
+
+/// The trial's question is on screen: starts its countdown and returns the
+/// seconds left. `None` when this launch is not a trial.
+#[tauri::command]
+#[must_use]
+pub fn graphics_trial_shown() -> Option<u64> {
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux_startup::trial_shown()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        None
+    }
+}
+
+/// Keeps the graphics tier this trial launch runs on.
+#[tauri::command]
+#[must_use]
+pub fn keep_graphics_trial(app: tauri::AppHandle) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux_startup::keep_trial(
+            &app.config().identifier,
+            &app.package_info().version.to_string(),
+        )
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = app;
+        false
+    }
+}
+
+/// Ends the trial and restarts Flow on the tier it had before.
+#[tauri::command]
+pub fn revert_graphics_trial(app: tauri::AppHandle) {
+    #[cfg(target_os = "linux")]
+    if crate::linux_startup::end_trial(&app.config().identifier) {
+        crate::relaunch::request();
+        app.exit(0);
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = app;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{last_log_lines, read_tail};
+
+    fn logs(days: &[&str]) -> (std::path::PathBuf, Vec<std::path::PathBuf>) {
+        let dir = std::env::temp_dir().join(format!(
+            "flow-read-logs-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4().simple()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let files = days
+            .iter()
+            .enumerate()
+            .map(|(day, contents)| {
+                let path = dir.join(format!("flow.2026-11-{:02}.log", day + 1));
+                std::fs::write(&path, contents).unwrap();
+                path
+            })
+            .collect();
+        (dir, files)
+    }
+
+    #[test]
+    fn the_last_lines_come_back_in_order_across_days() {
+        let (dir, files) = logs(&["a1\na2\n", "b1\nb2\n", "c1\nc2\n"]);
+        assert_eq!(last_log_lines(&files, 3, 1024), "b2\nc1\nc2");
+        assert_eq!(last_log_lines(&files, 100, 1024), "a1\na2\nb1\nb2\nc1\nc2");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// Older days used to be read in full and then thrown away.
+    #[test]
+    fn older_files_are_not_read_once_there_are_enough_lines() {
+        let (dir, mut files) = logs(&["b1\nb2\n", "c1\nc2\n"]);
+        files.insert(0, dir.join("flow.2026-10-31.log"));
+        std::fs::create_dir(&files[0]).unwrap();
+        assert_eq!(last_log_lines(&files, 2, 1024), "c1\nc2");
+        // A file that can't be read is skipped.
+        assert_eq!(last_log_lines(&files, 100, 1024), "b1\nb2\nc1\nc2");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_large_file_gives_its_end_from_a_whole_line() {
+        let (dir, files) = logs(&["first line\nsecond line\nthird\n"]);
+        assert_eq!(read_tail(&files[0], 14).unwrap(), "third\n");
+        assert_eq!(
+            read_tail(&files[0], 1024).unwrap(),
+            "first line\nsecond line\nthird\n"
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 }

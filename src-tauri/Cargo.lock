@@ -1649,6 +1649,7 @@ name = "flow"
 version = "0.1.0-beta4"
 dependencies = [
  "aes-gcm",
+ "apple-native-keyring-store",
  "async-trait",
  "base64 0.23.1",
  "bip39",
@@ -1670,7 +1671,7 @@ dependencies = [
  "icu_properties",
  "icu_segmenter",
  "image",
- "keyring",
+ "keyring-core",
  "libc",
  "libloading 0.9.0",
  "local-ip-address",
@@ -1716,9 +1717,11 @@ dependencies = [
  "webm-iterable",
  "windows",
  "windows-core",
+ "windows-native-keyring-store",
  "windows-registry 0.100.0",
  "wiremock",
  "x25519-dalek",
+ "zbus-secret-service-keyring-store",
  "zeroize",
  "zip",
 ]
@@ -3039,18 +3042,6 @@ checksum = "0fbe853b403ae61a04233030ae8a79d94975281ed9770a1f9e246732b534b28d"
 dependencies = [
  "bitflags 2.13.2",
  "serde",
-]
-
-[[package]]
-name = "keyring"
-version = "4.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2270074a3d26bcac93c1dc5d2845eb4c089e8d761ccf6e0ea266a16004640627"
-dependencies = [
- "apple-native-keyring-store",
- "keyring-core",
- "windows-native-keyring-store",
- "zbus-secret-service-keyring-store",
 ]
 
 [[package]]

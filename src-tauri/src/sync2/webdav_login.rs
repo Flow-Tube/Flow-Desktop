@@ -42,7 +42,8 @@ pub async fn forget_pending_login() -> Result<(), CredentialError> {
 }
 
 fn encoded(login: &WebDavLogin) -> Result<String, CredentialError> {
-    serde_json::to_string(login).map_err(|_| CredentialError("Could not encode the WebDAV login"))
+    serde_json::to_string(login)
+        .map_err(|_| CredentialError::failed("Could not encode the WebDAV login"))
 }
 
 fn save(store: &dyn CredentialStore, login: &WebDavLogin) -> Result<(), CredentialError> {
@@ -53,7 +54,7 @@ fn load(store: &dyn CredentialStore) -> Result<WebDavLogin, CredentialError> {
     store
         .read(WEBDAV_ENTRY)?
         .and_then(|value| serde_json::from_str(&value).ok())
-        .ok_or(CredentialError("No WebDAV login is saved"))
+        .ok_or(CredentialError::failed("No WebDAV login is saved"))
 }
 
 fn forget(store: &dyn CredentialStore) -> Result<(), CredentialError> {

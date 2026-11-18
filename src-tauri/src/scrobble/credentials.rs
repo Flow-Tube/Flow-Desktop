@@ -94,7 +94,7 @@ pub fn save(store: &dyn CredentialStore, credentials: &Credentials) -> Result<()
         return store.remove(CREDENTIALS_ENTRY);
     }
     let value = serde_json::to_string(credentials)
-        .map_err(|_| CredentialError("Could not encode the credentials"))?;
+        .map_err(|_| CredentialError::failed("Could not encode the credentials"))?;
     store.write(CREDENTIALS_ENTRY, &value)
 }
 

@@ -13,3 +13,6 @@ SYNC
 - Try again on the keychain card now asks the keychain again. Before, a keychain that could not be reached once, for example KDE Wallet starting after Flow, stayed unreachable until Flow restarted (#659). Last.fm's Allow access button gets the same fix.
 - The keychain card says what went wrong and what to do on your system: on Linux it names KDE Wallet and GNOME Keyring, and it mentions macOS only on a Mac.
 - Flow no longer opens the keychain at launch on a device that is in no sync group.
+
+PLAYER
+- Right-click the video and choose Copy frame to put the picture on screen on the clipboard, or Save frame to keep it as a PNG named after the video and the moment (#658). The frame keeps the video's own resolution.

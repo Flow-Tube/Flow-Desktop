@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   AppWindow,
   Bug,
+  Camera,
+  ImageDown,
   Info,
   Link,
   Pause,
@@ -11,6 +13,7 @@ import {
 } from "lucide-react";
 import { usePlayerStore, type PlaybackRate } from "../../../store/usePlayerStore";
 import { copyText } from "../../../lib/clipboard";
+import { copyVideoFrame, saveVideoFrame } from "../../../lib/videoFrame";
 import { getString } from "../../../lib/i18n/index";
 import { isLocalMediaId } from "../../../lib/localMediaId";
 import type { VolumeFeedback } from "../../../lib/useVolumeFeedback";
@@ -454,6 +457,14 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
           { label: getString("player_menu_copy_url"), icon: <Link size={18} />, action: () => copyVideoUrl(false) },
           { label: getString("player_menu_copy_url_at_time"), icon: <Link size={18} />, action: () => copyVideoUrl(true) },
         ]]),
+    [
+      { label: getString("player_menu_copy_frame"), icon: <Camera size={18} />, action: () => copyVideoFrame(videoRef.current, showCopied) },
+      {
+        label: getString("player_menu_save_frame"),
+        icon: <ImageDown size={18} />,
+        action: () => saveVideoFrame(videoRef.current, title, showCopied),
+      },
+    ],
     [
       { label: getString("player_menu_stats"), icon: <Info size={18} />, action: () => setStatsVisible((value) => !value) },
       { label: getString("player_menu_copy_debug"), icon: <Bug size={18} />, action: copyDebugInfo },

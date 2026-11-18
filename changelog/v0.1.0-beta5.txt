@@ -1,0 +1,10 @@
+FLOW DESKTOP CHANGE LOG
+VERSION: 0.1.0-beta5
+DATE: 2026-11-18
+STATUS: PRE-RELEASE
+
+ABOUT
+Flow Desktop is a privacy-first YouTube and YouTube Music client - no account, no ads, no analytics, no telemetry. It is the desktop companion to Flow for Android.
+
+BACKUPS AND IMPORT
+- Fixed Flow closing while it read a Google Takeout export with a folder named in Russian, Ukrainian, Greek, Turkish, Vietnamese, Chinese, Japanese or Korean, such as My Activity (#661).

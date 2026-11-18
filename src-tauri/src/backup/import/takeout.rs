@@ -33,7 +33,10 @@ fn segments(name: &str) -> Option<Vec<&str>> {
     let product = *parts.get(1)?;
     let is_youtube = product.eq_ignore_ascii_case("YouTube")
         || (product.len() > 8
-            && product[..8.min(product.len())].eq_ignore_ascii_case("YouTube ")
+            && product
+                .as_bytes()
+                .get(..8)
+                .is_some_and(|head| head.eq_ignore_ascii_case(b"YouTube "))
             && product.to_lowercase().ends_with("youtube music"));
     let valid = parts.len() >= 3
         && parts[0].eq_ignore_ascii_case("Takeout")
@@ -356,6 +359,29 @@ mod tests {
             "Takeout/Meine Aktivitäten/YouTube/x.json"
         ));
         assert!(!is_my_activity_entry("YouTube/x.json"));
+    }
+
+    #[test]
+    fn product_folders_in_any_script_are_read_without_a_crash() {
+        for product in [
+            "Мои действия",
+            "Мої дії",
+            "Η δραστηριότητά μου",
+            "Etkinliğim",
+            "Hoạt động của tôi",
+            "マイアクティビティ",
+            "我的活动",
+            "내 활동",
+            "نشاطي",
+        ] {
+            assert!(!is_csv_entry(&format!("Takeout/{product}/YouTube/x.csv")));
+            assert!(is_my_activity_entry(&format!(
+                "Takeout/{product}/YouTube/MyActivity.json"
+            )));
+        }
+        assert!(is_csv_entry(
+            "Takeout/YouTube и YouTube Music/playlists/x.csv"
+        ));
     }
 
     #[test]

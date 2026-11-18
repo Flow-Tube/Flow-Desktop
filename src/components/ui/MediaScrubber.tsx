@@ -4,6 +4,7 @@ import { SQUIGGLY_SEEK, SquigglyCanvas } from "./SquigglyCanvas";
 
 import { getString } from "../../lib/i18n/index";
 import { formatTime } from "../../lib/musicFormat";
+import { snapToBarPixel, watchBarSteps } from "../../lib/playerProgress";
 import { useExpressiveSliders } from "../../lib/useExpressiveSliders";
 
 interface MediaScrubberProps {
@@ -69,13 +70,24 @@ export function MediaScrubber({
   useEffect(() => {
     if (!following || !clock) return;
     let frame: number | null = null;
+    // A position that moved less than a device pixel draws the same picture, so it is not
+    // written: every write here costs a style pass, a repaint and a new frame.
+    let steps = 0;
+    let drawn = -1;
+    const stopWatchingWidth = watchBarSteps(trackRef.current, (next) => {
+      steps = next;
+      drawn = -1;
+    });
     const paint = () => {
-      const value = Math.min(1, Math.max(0, clock() / duration));
-      if (isExpressive) {
-        trackRef.current?.style.setProperty("--m3-fill", String(value));
-      } else {
-        if (fillRef.current) fillRef.current.style.width = `${value * 100}%`;
-        if (thumbRef.current) thumbRef.current.style.left = `${value * 100}%`;
+      const value = snapToBarPixel(Math.min(duration, Math.max(0, clock())), duration, steps) / duration;
+      if (value !== drawn) {
+        drawn = value;
+        if (isExpressive) {
+          trackRef.current?.style.setProperty("--m3-fill", String(value));
+        } else {
+          if (fillRef.current) fillRef.current.style.width = `${value * 100}%`;
+          if (thumbRef.current) thumbRef.current.style.left = `${value * 100}%`;
+        }
       }
       frame = document.visibilityState === "visible" ? requestAnimationFrame(paint) : null;
     };
@@ -87,6 +99,7 @@ export function MediaScrubber({
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
       if (frame !== null) cancelAnimationFrame(frame);
+      stopWatchingWidth();
       document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [following, clock, duration, isExpressive]);

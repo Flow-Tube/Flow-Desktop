@@ -4,7 +4,7 @@ import { ShelfScroller } from '../ui/ShelfScroller';
 import { SubscribeButton } from '../ui/SubscribeButton';
 import { Button } from '../ui/Button';
 import { ChannelLabel } from '../video/CardMeta';
-import { upgradeAvatarUrl } from '../../lib/thumbnails';
+import { upgradeAvatarUrl, avatarSize } from '../../lib/thumbnails';
 import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
 import { getString } from '../../lib/i18n/index';
 import type { SearchCreator } from '../../lib/searchResults';
@@ -21,7 +21,7 @@ interface SearchCreatorCardProps {
 export function SearchCreatorCard({ creator, onPlay, onAddToQueue }: SearchCreatorCardProps) {
   const { channel, latest } = creator;
   const navigate = useNavigate();
-  const avatar = useProxiedImageUrl(upgradeAvatarUrl(channel.avatarUrl));
+  const avatar = useProxiedImageUrl(upgradeAvatarUrl(channel.avatarUrl, avatarSize(64)));
   const open = () => navigate(`/channel/${channel.channelId}`);
   const subtitle = joinIsolated([channel.handle, channel.subscriberCountText, channel.videoCountText]);
 

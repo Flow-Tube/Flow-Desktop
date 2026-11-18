@@ -1,4 +1,4 @@
-import { upgradeAvatarUrl } from "../../lib/thumbnails";
+import { upgradeAvatarUrl, avatarSize } from "../../lib/thumbnails";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 
 export function getAvatarUrl(url?: string | null) {
@@ -9,7 +9,8 @@ export function getAvatarUrl(url?: string | null) {
 }
 
 export function ChannelAvatarImage({ src, name }: { src?: string | null; name: string }) {
-  const imageSrc = useProxiedImageUrl(upgradeAvatarUrl(src));
+  // Every place this is drawn is 44 px or smaller.
+  const imageSrc = useProxiedImageUrl(upgradeAvatarUrl(src, avatarSize(44)));
   if (!imageSrc) {
     return (
       <div className="flex h-full w-full items-center justify-center bg-surface-container-high text-sm font-semibold text-chrome-neutral-400">

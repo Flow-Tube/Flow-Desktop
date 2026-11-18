@@ -13,7 +13,7 @@ use crate::errors::AppResult;
 const LAST_FEED: &str = "LAST_FEED";
 const RESERVE: &str = "RESERVE";
 const RELATED: &str = "RELATED";
-const LAST_FEED_CAP: usize = 60;
+pub(super) const LAST_FEED_CAP: usize = 60;
 const RESERVE_CAP: i64 = 200;
 const RELATED_PER_SEED_CAP: usize = 20;
 const RELATED_SEED_CAP: i64 = 50;

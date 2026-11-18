@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useSyncExternalStore, type RefObject } from 'react';
 import { useSubscriptionStore } from '../store/useSubscriptionStore';
 import { getChannelDetails } from './api/youtube';
+import { useNearViewport } from './nearViewport';
 
 // ─── Shared singleton state ────────────────────────────────────
 
@@ -124,6 +125,7 @@ function enqueueAvatarFetch(channelId: string) {
  */
 export function useChannelAvatar(
   channelId: string | null | undefined,
+  nearRef?: RefObject<Element | null>,
 ): string | null {
   const subAvatar = useSubscriptionStore((state) => {
     if (!channelId) return null;
@@ -143,6 +145,10 @@ export function useChannelAvatar(
   );
   const cachedAvatar = useSyncExternalStore(subscribe, getSnapshot);
 
+  // A card in a feed passes `nearRef` and only asks once it is near the screen: a channel
+  // lookup per card that is merely mounted flooded the backend on a long feed.
+  const near = useNearViewport(nearRef, !!channelId && !subAvatar && !!nearRef);
+
   // Enqueue fetch if needed (inside effect to comply with React rules)
   useEffect(() => {
     if (!channelId) return;
@@ -150,9 +156,10 @@ export function useChannelAvatar(
     if (avatarCache.has(channelId)) return;
     // Already available from subscriptions
     if (subAvatar) return;
+    if (nearRef && !near) return;
 
     enqueueAvatarFetch(channelId);
-  }, [channelId, subAvatar]);
+  }, [channelId, subAvatar, nearRef, near]);
 
   // ── Resolve synchronously ────────────────────────────────────
   if (!channelId) return null;

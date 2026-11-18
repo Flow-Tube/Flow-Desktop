@@ -108,6 +108,7 @@ describe("VideoCard title", () => {
 
   it("shows the listed title and asks for nothing while switched off", async () => {
     setOriginalTitles(false);
+    useSettingsStore.setState({ dearrowEnabled: false });
     render(freshId());
     await flush();
 
@@ -122,12 +123,14 @@ describe("VideoCard title", () => {
 
     expect(host.textContent).toContain(LISTED);
     expect(getOriginalTitle).not.toHaveBeenCalled();
+    expect(getDeArrowOverride).not.toHaveBeenCalled();
   });
 
   it("shows the original title once near the screen", async () => {
     const id = freshId();
     render(id);
     await flush();
+    await comesNearScreen();
     await comesNearScreen();
 
     expect(getOriginalTitle).toHaveBeenCalledExactlyOnceWith(id);
@@ -140,23 +143,40 @@ describe("VideoCard title", () => {
     render(freshId());
     await flush();
     await comesNearScreen();
+    await comesNearScreen();
 
     expect(host.textContent).toContain(LISTED);
   });
 
   it("shows a DeArrow title ahead of the original, without asking for the original", async () => {
     getDeArrowOverride.mockResolvedValue({ title: DEARROW, thumbnailUrl: null });
-    render(freshId());
+    const id = freshId();
+    render(id);
     await flush();
+    expect(getDeArrowOverride).not.toHaveBeenCalled();
+    await comesNearScreen();
 
+    expect(getDeArrowOverride).toHaveBeenCalledExactlyOnceWith(id);
     expect(host.textContent).toContain(DEARROW);
     expect(host.textContent).not.toContain(ORIGINAL);
     expect(getOriginalTitle).not.toHaveBeenCalled();
   });
 
+  it("still shows the original when DeArrow can't be reached", async () => {
+    getDeArrowOverride.mockRejectedValue(new Error("offline"));
+    render(freshId());
+    await flush();
+    await comesNearScreen();
+    await comesNearScreen();
+
+    expect(host.textContent).toContain(ORIGINAL);
+  });
+
   it("shows the original when DeArrow is on but has no title for the video", async () => {
     render(freshId());
     await flush();
+    await comesNearScreen();
+    // The original is only asked for after DeArrow has answered.
     await comesNearScreen();
 
     expect(host.textContent).toContain(ORIGINAL);

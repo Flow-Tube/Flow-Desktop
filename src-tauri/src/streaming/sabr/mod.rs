@@ -321,7 +321,9 @@ impl SabrSessionManager {
         }
     }
 
-    fn prune_expired(&self) {
+    /// Cancels sessions nobody has asked for lately, which frees their buffers. An idle one
+    /// can start again from its descriptor.
+    pub(crate) fn prune_expired(&self) {
         let mut sessions = self.sessions.lock().unwrap();
         let idle_ttl = self.idle_ttl;
         let now = now_secs();

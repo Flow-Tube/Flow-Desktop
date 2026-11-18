@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 use std::time::Instant;
 
 use serde::Deserialize;
@@ -44,12 +44,66 @@ struct SidecarResponse {
     error: Option<String>,
 }
 
-/// Cache of minted tokens keyed by content binding (visitor data). The mutex is
-/// held across the mint so concurrent requests for the same binding don't each
-/// spawn the (multi-second) BotGuard VM.
+/// Cache of minted tokens keyed by content binding. The lock is only held to
+/// read or write an entry, never across a mint.
 fn token_cache() -> &'static Mutex<HashMap<String, MintedToken>> {
     static CACHE: OnceLock<Mutex<HashMap<String, MintedToken>>> = OnceLock::new();
     CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Mints running at once. Each opens a hidden web view or a Node process, so
+/// a burst of resolves (prefetch, previews) must not start one per video.
+const CONCURRENT_MINTS: usize = 2;
+
+/// One turn at a time per binding, so concurrent requests for the same binding
+/// share one mint instead of each starting the (multi-second) BotGuard VM,
+/// while a request for another binding doesn't wait behind it.
+fn mint_turn(binding: &str) -> Arc<Mutex<()>> {
+    static TURNS: OnceLock<std::sync::Mutex<HashMap<String, Arc<Mutex<()>>>>> = OnceLock::new();
+    let mut turns = TURNS
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    // Nobody else holds a turn that only this map still points to.
+    turns.retain(|_, turn| Arc::strong_count(turn) > 1);
+    turns.entry(binding.to_owned()).or_default().clone()
+}
+
+async fn cached_token(binding: &str) -> Option<MintedToken> {
+    token_cache()
+        .lock()
+        .await
+        .get(binding)
+        .filter(|token| token.is_fresh())
+        .cloned()
+}
+
+/// The cached token for `binding`, or the one `mint` makes. `mint` runs at most
+/// once at a time per binding and [`CONCURRENT_MINTS`] times overall.
+async fn cached_or_minted<F, Fut>(binding: &str, mint: F) -> Option<MintedToken>
+where
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = Option<MintedToken>>,
+{
+    static SLOTS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(CONCURRENT_MINTS);
+
+    if let Some(cached) = cached_token(binding).await {
+        return Some(cached);
+    }
+    let turn = mint_turn(binding);
+    let _turn = turn.lock().await;
+    // Whoever had the turn before may have minted this binding meanwhile.
+    if let Some(cached) = cached_token(binding).await {
+        return Some(cached);
+    }
+    let minted = {
+        let _slot = SLOTS.acquire().await.ok()?;
+        mint().await?
+    };
+    let mut cache = token_cache().lock().await;
+    cache.retain(|_, token| token.is_fresh());
+    cache.insert(binding.to_owned(), minted.clone());
+    Some(minted)
 }
 
 /// Resolve the Node executable. Honors `FLOW_NODE`, else relies on PATH.
@@ -197,26 +251,20 @@ pub async fn mint_po_token(content_binding: &str) -> Option<MintedToken> {
         return None;
     }
 
-    let mut cache = token_cache().lock().await;
-    if let Some(cached) = cache.get(content_binding) {
-        if cached.is_fresh() {
-            return Some(cached.clone());
+    cached_or_minted(content_binding, || async {
+        // Prefer the real-browser WebView mint (highest-fidelity attestation); fall
+        // back to the headless Node sidecar when there is no GUI (unit tests, dev).
+        match crate::api::innertube::core::webview_pot::mint(content_binding).await {
+            Some(result) => Some(MintedToken {
+                po_token: result.po_token,
+                integrity_token: result.integrity_token,
+                ttl: result.ttl,
+                minted_at: Instant::now(),
+            }),
+            None => run_sidecar(content_binding).await,
         }
-    }
-
-    // Prefer the real-browser WebView mint (highest-fidelity attestation); fall
-    // back to the headless Node sidecar when there is no GUI (unit tests, dev).
-    let minted = match crate::api::innertube::core::webview_pot::mint(content_binding).await {
-        Some(result) => MintedToken {
-            po_token: result.po_token,
-            integrity_token: result.integrity_token,
-            ttl: result.ttl,
-            minted_at: Instant::now(),
-        },
-        None => run_sidecar(content_binding).await?,
-    };
-    cache.insert(content_binding.to_string(), minted.clone());
-    Some(minted)
+    })
+    .await
 }
 
 /// Generate a BotGuard PO token bound to `content_binding`. Thin wrapper over
@@ -239,6 +287,63 @@ pub async fn remint_po_token(content_binding: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    fn token(po_token: &str) -> MintedToken {
+        MintedToken {
+            po_token: po_token.into(),
+            integrity_token: String::new(),
+            ttl: 3600,
+            minted_at: Instant::now(),
+        }
+    }
+
+    #[tokio::test]
+    async fn requests_for_one_binding_share_a_single_mint() {
+        let mints = AtomicUsize::new(0);
+        let mint = || async {
+            mints.fetch_add(1, Ordering::SeqCst);
+            tokio::task::yield_now().await;
+            Some(token("shared"))
+        };
+        let (first, second) = tokio::join!(
+            cached_or_minted("test-shared-binding", mint),
+            cached_or_minted("test-shared-binding", mint),
+        );
+        assert_eq!(first.unwrap().po_token, "shared");
+        assert_eq!(second.unwrap().po_token, "shared");
+        assert_eq!(mints.load(Ordering::SeqCst), 1);
+    }
+
+    /// The cache lock used to be held across the mint, so a slow mint for one
+    /// video stalled every other mint, music included.
+    #[tokio::test]
+    async fn a_slow_mint_does_not_hold_up_another_binding() {
+        let (release, held) = tokio::sync::oneshot::channel::<()>();
+        let slow = tokio::spawn(cached_or_minted("test-slow-binding", || async {
+            let _ = held.await;
+            Some(token("slow"))
+        }));
+        tokio::task::yield_now().await;
+
+        let quick = cached_or_minted("test-quick-binding", || async { Some(token("quick")) }).await;
+        assert_eq!(quick.unwrap().po_token, "quick");
+
+        release.send(()).unwrap();
+        assert_eq!(slow.await.unwrap().unwrap().po_token, "slow");
+    }
+
+    #[tokio::test]
+    async fn a_failed_mint_is_not_cached() {
+        assert!(
+            cached_or_minted("test-failing-binding", || async { None })
+                .await
+                .is_none()
+        );
+        let retried =
+            cached_or_minted("test-failing-binding", || async { Some(token("retry")) }).await;
+        assert_eq!(retried.unwrap().po_token, "retry");
+    }
 
     #[test]
     fn resource_dir_is_tried_first() {

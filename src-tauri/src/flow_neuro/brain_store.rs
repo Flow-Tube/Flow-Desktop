@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use sqlx::SqlitePool;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
@@ -13,6 +13,10 @@ use crate::flow_neuro::scoring::UserBrain;
 use crate::flow_neuro::signals::{SPELLING_TITLES, get_or_create_brain, save_brain, settle_brain};
 
 const FLUSH_INTERVAL: Duration = Duration::from_secs(3);
+/// How long bookkeeping may wait for a save. What was shown on a feed is noted every second
+/// or two while scrolling, and saving the whole brain that often rewrote several hundred
+/// kilobytes of JSON every three seconds for a change nothing reads until the next feed.
+const BOOKKEEPING_FLUSH_INTERVAL: Duration = Duration::from_secs(60);
 
 /// Owns the single resident `UserBrain`. Reads borrow it directly; writes mutate in memory and
 /// are coalesced to disk by a background task, avoiding a full JSON rewrite on every interaction.
@@ -20,6 +24,9 @@ pub struct BrainStore {
     pool: SqlitePool,
     brain: RwLock<UserBrain>,
     dirty: AtomicBool,
+    /// Changed, but only by bookkeeping that can wait [`BOOKKEEPING_FLUSH_INTERVAL`].
+    dirty_later: AtomicBool,
+    last_flush: std::sync::Mutex<Instant>,
     /// Set while a sync merge writes the stored brain: a flush then would write the resident
     /// brain over the merged one before the reload picks it up.
     held: AtomicBool,
@@ -57,6 +64,8 @@ impl BrainStore {
             pool,
             brain: RwLock::new(brain),
             dirty: AtomicBool::new(false),
+            dirty_later: AtomicBool::new(false),
+            last_flush: std::sync::Mutex::new(Instant::now()),
             held: AtomicBool::new(false),
         });
         store.clone().spawn_flush_loop();
@@ -74,10 +83,25 @@ impl BrainStore {
         }
     }
 
+    /// Write access for bookkeeping, such as which videos a feed showed. It is saved within
+    /// [`BOOKKEEPING_FLUSH_INTERVAL`], with the next learning change, or when Flow closes,
+    /// whichever comes first.
+    pub async fn write_later(&self) -> BrainWriteGuard<'_> {
+        BrainWriteGuard {
+            guard: self.brain.write().await,
+            dirty: &self.dirty_later,
+        }
+    }
+
     /// Persists the brain only if it changed since the last flush. The snapshot is cloned under a
     /// short read lock so the DB write never blocks readers or writers.
     pub async fn flush(&self) -> AppResult<()> {
-        if self.held.load(Ordering::Relaxed) || !self.dirty.swap(false, Ordering::Relaxed) {
+        if self.held.load(Ordering::Relaxed) {
+            return Ok(());
+        }
+        let learned = self.dirty.swap(false, Ordering::Relaxed);
+        let noted = self.dirty_later.swap(false, Ordering::Relaxed);
+        if !learned && !noted {
             return Ok(());
         }
         let snapshot = self.brain.read().await.clone();
@@ -85,7 +109,22 @@ impl BrainStore {
             self.dirty.store(true, Ordering::Relaxed);
             return Err(error);
         }
+        *self.last_flush_at() = Instant::now();
         Ok(())
+    }
+
+    fn last_flush_at(&self) -> std::sync::MutexGuard<'_, Instant> {
+        self.last_flush
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// Whether the periodic flush has anything to save now: a learning change always, and
+    /// bookkeeping once it has waited long enough.
+    fn flush_is_due(&self, bookkeeping_wait: Duration) -> bool {
+        self.dirty.load(Ordering::Relaxed)
+            || (self.dirty_later.load(Ordering::Relaxed)
+                && self.last_flush_at().elapsed() >= bookkeeping_wait)
     }
 
     /// Saves the brain and holds further saves until [`Self::reload`], while a sync merge
@@ -104,6 +143,7 @@ impl BrainStore {
         let spelled = fill_gaps_from_titles(&mut fresh, &titles);
         *self.brain.write().await = fresh;
         self.dirty.store(spelled, Ordering::Relaxed);
+        self.dirty_later.store(false, Ordering::Relaxed);
         self.held.store(false, Ordering::Relaxed);
         Ok(())
     }
@@ -118,6 +158,7 @@ impl BrainStore {
         save_brain(&self.pool, &brain).await?;
         *resident = brain;
         self.dirty.store(false, Ordering::Relaxed);
+        self.dirty_later.store(false, Ordering::Relaxed);
         Ok(())
     }
 
@@ -126,6 +167,9 @@ impl BrainStore {
             let mut ticker = tokio::time::interval(FLUSH_INTERVAL);
             loop {
                 ticker.tick().await;
+                if !self.flush_is_due(BOOKKEEPING_FLUSH_INTERVAL) {
+                    continue;
+                }
                 if let Err(error) = self.flush().await {
                     tracing::error!(%error, "[FlowNeuro] failed to flush brain");
                 }
@@ -166,5 +210,43 @@ mod tests {
             get_or_create_brain(&pool).await.unwrap().total_interactions,
             43
         );
+    }
+
+    async fn store() -> (SqlitePool, Arc<BrainStore>) {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let store = BrainStore::load(pool.clone()).await.unwrap();
+        (pool, store)
+    }
+
+    /// Feed impressions arrive every second or two while scrolling. They used to make the
+    /// three-second flush rewrite the whole brain each time.
+    #[tokio::test]
+    async fn bookkeeping_waits_its_own_interval_and_learning_does_not() {
+        let (_pool, store) = store().await;
+        assert!(!store.flush_is_due(BOOKKEEPING_FLUSH_INTERVAL));
+
+        store.write_later().await.total_interactions = 1;
+        assert!(!store.flush_is_due(BOOKKEEPING_FLUSH_INTERVAL));
+        assert!(store.flush_is_due(Duration::ZERO), "due once it has waited");
+
+        store.write().await.total_interactions = 2;
+        assert!(store.flush_is_due(BOOKKEEPING_FLUSH_INTERVAL));
+    }
+
+    #[tokio::test]
+    async fn a_flush_saves_bookkeeping_too_as_closing_the_app_does() {
+        let (pool, store) = store().await;
+        store.write_later().await.total_interactions = 9;
+        store.flush().await.unwrap();
+        assert_eq!(
+            get_or_create_brain(&pool).await.unwrap().total_interactions,
+            9
+        );
+        assert!(!store.flush_is_due(Duration::ZERO), "nothing left to save");
     }
 }

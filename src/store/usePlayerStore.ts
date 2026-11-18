@@ -743,8 +743,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     isLiveChatOpen: true,
   }),
   
-  setCurrentTime: (currentTime) => set({ currentTime }),
-  setDuration: (duration) => set({ duration }),
+  // The player and the watch page both write every tick. An unchanged value must not
+  // wake every subscriber of the store.
+  setCurrentTime: (currentTime) => set((state) => (state.currentTime === currentTime ? state : { currentTime })),
+  setDuration: (duration) => set((state) => (state.duration === duration ? state : { duration })),
   markPlaybackStarted: (videoId) => {
     if (get().playbackStartedVideoId === videoId) return;
     if (get().currentVideo?.id !== videoId) return;

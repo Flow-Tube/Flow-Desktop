@@ -65,6 +65,7 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     { title: "settings_highlight_new_days" },
     { title: "settings_expressive_sliders", summary: "settings_expressive_sliders_desc" },
     { title: "settings_graphics_compat", summary: "settings_graphics_compat_desc" },
+    { title: "graphics_try_faster", summary: "settings_graphics_try_faster_desc", keywords: ["lag", "slow", "gpu", "performance"] },
     { title: "theme_presets", keywords: ["color", "palette", "dark", "light"] },
     { title: "theme_variant" },
     { title: "theme_custom" },

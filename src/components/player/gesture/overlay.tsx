@@ -52,8 +52,6 @@ type PlayerGestureOverlayProps = {
   src?: string | null;
   isPlaying: boolean;
   playbackRate: PlaybackRate;
-  currentTime: number;
-  duration: number;
   seekFeedback: SeekFeedbackState | null;
   volumeFeedback: VolumeFeedback | null;
   qualityLabel?: string | null;
@@ -99,14 +97,19 @@ function formatTime(seconds: number) {
 }
 
 
+/** The stats panel follows the playback time itself, so the overlay around it doesn't. */
+function PlayerStats(props: Omit<React.ComponentProps<typeof StatsForNerds>, "currentTime" | "duration">) {
+  const currentTime = usePlayerStore((state) => Math.floor(state.currentTime));
+  const duration = usePlayerStore((state) => state.duration);
+  return <StatsForNerds {...props} currentTime={currentTime} duration={duration} />;
+}
+
 export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
   videoRef,
   title,
   src,
   isPlaying,
   playbackRate,
-  currentTime,
-  duration,
   seekFeedback,
   volumeFeedback,
   qualityLabel,
@@ -206,7 +209,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
   const copyVideoUrl = async (includeTime: boolean) => {
     const videoId = usePlayerStore.getState().currentVideo?.id;
     if (!videoId) return;
-    const copied = await copyText(youtubeWatchUrl(videoId, includeTime ? currentTime : undefined));
+    const copied = await copyText(youtubeWatchUrl(videoId, includeTime ? usePlayerStore.getState().currentTime : undefined));
     showCopied(
       getString(!copied ? "player_url_copy_failed" : includeTime ? "player_timed_url_copied" : "player_video_url_copied"),
     );
@@ -424,6 +427,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
 
   const copyDebugInfo = async () => {
     const video = videoRef.current;
+    const { currentTime, duration } = usePlayerStore.getState();
     const copied = await copyText(JSON.stringify({
       title,
       src,
@@ -529,10 +533,8 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
       )}
 
       {statsVisible && (
-        <StatsForNerds
+        <PlayerStats
           videoRef={videoRef}
-          currentTime={currentTime}
-          duration={duration}
           playbackRate={playbackRate}
           qualityLabel={qualityLabel}
           mimeType={mimeType}

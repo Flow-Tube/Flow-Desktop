@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildThumbnailSources, resolveYoutubeThumbnailCandidates, thumbnailNeedsHighRes } from "./thumbnails";
+import {
+  avatarSize,
+  buildThumbnailSources,
+  resolveYoutubeThumbnailCandidates,
+  thumbnailNeedsHighRes,
+  upgradeAvatarUrl,
+} from "./thumbnails";
 
 const ID = "dQw4w9WgXcQ";
 const MAXRES = `https://i.ytimg.com/vi/${ID}/maxresdefault.jpg`;
@@ -61,5 +67,24 @@ describe("buildThumbnailSources", () => {
       "https://i.ytimg.com/vi/abcdefghijk/hq720.jpg",
     ]);
     expect(buildThumbnailSources(null, null)).toEqual([]);
+  });
+});
+
+describe("avatarSize", () => {
+  it("asks for the smallest fixed size that covers the slot on this screen", () => {
+    expect(avatarSize(36, 1)).toBe(48);
+    expect(avatarSize(36, 2)).toBe(88);
+    expect(avatarSize(24, 2)).toBe(48);
+    expect(avatarSize(64, 2)).toBe(176);
+    expect(avatarSize(64, 1)).toBe(88);
+  });
+
+  it("never asks for more than three times the slot, or more than 512", () => {
+    expect(avatarSize(36, 4)).toBe(176);
+    expect(avatarSize(400, 3)).toBe(512);
+  });
+
+  it("puts the size into the avatar's address", () => {
+    expect(upgradeAvatarUrl("https://yt3.ggpht.com/abc=s176-c-k-c0x00ffffff-no-rj", avatarSize(36, 2))).toContain("=s88");
   });
 });

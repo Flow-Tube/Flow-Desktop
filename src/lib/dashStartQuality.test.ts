@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   manifestVideoTracks,
+  measuresConnectionSpeed,
   pickDashStart,
   readMeasuredSpeedKbps,
   recordVideoSegmentSpeed,
@@ -191,5 +192,16 @@ describe("measured speed", () => {
     });
     expect(readMeasuredSpeedKbps()).toBeNull();
     expect(() => recordVideoSegmentSpeed(segment(MB, 1000))).not.toThrow();
+  });
+});
+
+describe("measuresConnectionSpeed", () => {
+  it("times segments that come over the network", () => {
+    expect(measuresConnectionSpeed("dash-native")).toBe(true);
+    expect(measuresConnectionSpeed(undefined)).toBe(true);
+  });
+
+  it("ignores a SABR session, whose segments come out of the backend's buffer", () => {
+    expect(measuresConnectionSpeed("sabr-dash")).toBe(false);
   });
 });

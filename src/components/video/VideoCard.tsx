@@ -11,13 +11,13 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useImageFallback } from '../../lib/useImageFallback';
 import { deArrowThumbnail } from '../../lib/api/foss';
 import { dontRecommendLabel } from '../../lib/dontRecommendLabel';
-import { useDeArrowOverride } from '../../lib/useDeArrowOverride';
+import { useDeArrowOverrideState } from '../../lib/useDeArrowOverride';
 import { useOriginalTitle } from '../../lib/useOriginalTitle';
 import { getVideoDetails } from '../../lib/api/youtube';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { useAppSettingsStore } from '../../store/useAppSettingsStore';
 import { useChannelAvatar } from '../../lib/useChannelAvatar';
-import { isUnavailableYoutubeThumbnail, resolveYoutubeThumbnailCandidates, upgradeAvatarUrl } from '../../lib/thumbnails';
+import { isUnavailableYoutubeThumbnail, resolveYoutubeThumbnailCandidates, upgradeAvatarUrl, avatarSize } from '../../lib/thumbnails';
 import { IS_LINUX_RUNTIME } from '../../lib/platform';
 import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
 import { SETTINGS } from '../../lib/settings/schema';
@@ -112,7 +112,7 @@ function LiveBadge({ className }: { className?: string }) {
     <div
       className={`z-10 flex items-center gap-1 rounded bg-primary px-1 py-px text-[11px] font-bold uppercase leading-tight tracking-wide text-on-primary ${className || ''}`}
     >
-      <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
+      <span className="live-dot h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
       Live
     </div>
   );
@@ -150,6 +150,8 @@ function VideoCardComponent({
   menuActions: ownMenuActions,
   searchQuery = '',
 }: VideoCardProps) {
+  // Compiled by the React Compiler pilot (vite.config.ts): a feed renders this card more than anything else.
+  "use memo";
   const navigate = useNavigate();
   const subscribe = useSubscriptionStore((s) => s.subscribe);
   const unsubscribe = useSubscriptionStore((s) => s.unsubscribe);
@@ -225,21 +227,33 @@ function VideoCardComponent({
   // channel, which multiplied across a large feed floods the backend.
   const hookAvatarUrl = useChannelAvatar(
     isChannel || video.channelAvatarUrl ? null : channelId || null,
+    cardRef,
   );
-  const resolvedAvatarUrl = useProxiedImageUrl(upgradeAvatarUrl(video.channelAvatarUrl || hookAvatarUrl));
+  const resolvedAvatarUrl = useProxiedImageUrl(
+    upgradeAvatarUrl(video.channelAvatarUrl || hookAvatarUrl, avatarSize(36)),
+  );
   // A collaboration names every channel; it opens the first, which is the uploader.
   const collaborators = video.collaborators ?? [];
   const isCollab = collaborators.length >= 2;
   const byline = isCollab ? collaboratorsByline(collaborators) : video.channelName;
-  const channelCardAvatarUrl = useProxiedImageUrl(upgradeAvatarUrl(video.thumbnailUrl));
+  // Only a channel card draws this; asking for it on every video card cost each an IPC call.
+  const channelCardAvatarUrl = useProxiedImageUrl(isChannel ? upgradeAvatarUrl(video.thumbnailUrl) : undefined);
   // Cached and de-duplicated across cards and remounts by the hook; this used to
   // be a bare `getDeArrowOverride` in an effect, one IPC per card, every mount.
-  const dearrowOverride = useDeArrowOverride(isChannel || isLocalFile ? null : video.id, dearrowEnabled);
+  const { override: dearrowOverride, settled: dearrowSettled } = useDeArrowOverrideState(
+    isChannel || isLocalFile ? null : video.id,
+    dearrowEnabled,
+    cardRef,
+  );
   const overriddenTitle = dearrowOverride?.title || null;
   const dearrowRandomFrame = useAppSettingsStore((state) => state.values[SETTINGS.DEARROW_RANDOM_FRAME] !== "false");
   const overriddenThumbnail = deArrowThumbnail(dearrowOverride, dearrowRandomFrame) || null;
 
-  const originalTitle = useOriginalTitle(isChannel || isLocalFile || overriddenTitle ? null : video.id, cardRef);
+  // Asked only once DeArrow has none to give: its title would replace this one.
+  const originalTitle = useOriginalTitle(
+    isChannel || isLocalFile || overriddenTitle || !dearrowSettled ? null : video.id,
+    cardRef,
+  );
   const displayTitle = overriddenTitle || originalTitle || video.title;
   const thumbnailCandidates = useMemo(
     () => resolveYoutubeThumbnailCandidates(video.id, overriddenThumbnail || video.thumbnailUrl, highResThumbnail),
@@ -483,7 +497,9 @@ function VideoCardComponent({
       .catch(feedActionFailed);
 
   const aiReportActions = useAiReportAction(video);
-  const menuActions: MediaMenuAction[] = ownMenuActions ?? [
+  // Built when the menu opens: some twenty rows of labels and icons, and a feed renders every
+  // card far more often than anyone opens a menu.
+  const buildMenuActions = (): MediaMenuAction[] => ownMenuActions ?? [
     {
       id: "play-next",
       label: getString("play_next_video"),
@@ -656,7 +672,7 @@ function VideoCardComponent({
         anchor={menuAnchor}
         onClose={() => setShowMenu(false)}
         header={{ title: displayTitle, subtitle: byline, image: displayThumbnail, imageShape: "landscape" }}
-        actions={menuActions}
+        actions={buildMenuActions()}
         note={reason ? { title: getString("home_feed_why"), body: reason } : null}
       />
     );
@@ -1026,6 +1042,7 @@ function VideoCardComponent({
                 alt={video.channelName}
                 className="h-full w-full object-cover"
                 loading="lazy"
+                decoding="async"
               />
             ) : (
               <span className="text-xs font-semibold text-chrome-zinc-400">{channelInitials}</span>

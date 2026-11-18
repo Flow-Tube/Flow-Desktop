@@ -1,10 +1,10 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { X, Repeat, Search, Share2, Play, Loader2 } from "lucide-react";
 import { usePlayerStore } from "../../store/usePlayerStore";
 import { useUiStore } from "../../store/useUiStore";
 import type { VideoChapter, CaptionTrack } from "../../types/video";
 import { fetchCaptionText } from "../../lib/captionText";
-import { filterCues } from "../../lib/subtitleStyleCss";
+import { activeCuePositions, filterCues } from "../../lib/subtitleStyleCss";
 import { lastCueLine, parseCaptionCues, type CaptionCue } from "./SubtitleOverlay";
 import {
   cachedTranscript,
@@ -55,7 +55,6 @@ export const Chapters: React.FC<ChaptersProps> = ({
   autoChapters = false,
   seekTo,
 }) => {
-  const currentTime = usePlayerStore((state) => state.currentTime);
   const showToast = useUiStore((state) => state.showToast);
   const toSrc = useProxyImageSrc();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -71,9 +70,11 @@ export const Chapters: React.FC<ChaptersProps> = ({
   const [transcriptQuery, setTranscriptQuery] = useState("");
   useEffect(() => setTranscriptQuery(""), [videoId, selectedCaptionId]);
 
-  const activeChapter = chapters.find(
-    (c) => currentTime >= c.startSeconds && currentTime <= c.endSeconds
-  );
+  // Derived in the selectors here and below, so the position can tick as it likes and the
+  // panel only re-renders when the chapter or the spoken line changes.
+  const activeChapter = usePlayerStore((state) => chapters.find(
+    (c) => state.currentTime >= c.startSeconds && state.currentTime <= c.endSeconds
+  ));
 
   useEffect(() => {
     rememberView(videoId, { tab: activeTab, captionId: selectedCaptionId });
@@ -151,6 +152,10 @@ export const Chapters: React.FC<ChaptersProps> = ({
   }, [activeTab, selectedCaptionId, captions, videoId]);
 
   const shownCues = filterCues(transcriptCues, transcriptQuery);
+  const activeCueKey = usePlayerStore((state) =>
+    activeTab === "transcript" ? activeCuePositions(shownCues, state.currentTime) : "",
+  );
+  const activeCues = useMemo(() => new Set(activeCueKey.split(",")), [activeCueKey]);
 
   const scrollActiveIntoView = (behavior: ScrollBehavior = "smooth") => {
     const activeEl = containerRef.current?.querySelector('[data-active="true"]');
@@ -380,7 +385,7 @@ export const Chapters: React.FC<ChaptersProps> = ({
                 <div className="py-16 text-center text-sm text-chrome-zinc-500">{getString("transcript_search_empty")}</div>
               )}
               {!loadingTranscript && !transcriptError && shownCues.map((cue, idx) => {
-                const isCueActive = currentTime >= cue.start && currentTime <= cue.end;
+                const isCueActive = activeCues.has(String(idx));
 
                 return (
                   <div

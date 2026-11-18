@@ -7,6 +7,7 @@ import { CurrentVideoReminderButton } from "../watch/UpcomingReminderButton";
 import type { PlayerErrorInfo } from "../../lib/playerError";
 import { getString } from "../../lib/i18n/index";
 import { SUBTITLE_FONT_SCALES, usePlayerStore } from "../../store/usePlayerStore";
+import { useShallow } from "zustand/react/shallow";
 import { useSettingsStore, type SponsorBlockCategory } from "../../store/useSettingsStore";
 import type {
   AudioTrack,
@@ -21,16 +22,20 @@ import { FlowPlayerControls } from "./FlowPlayerControls";
 import { MiniPlayerControls } from "./MiniPlayerControls";
 import {
   allVideoRepresentations,
+  autoBitrateCapKbps,
+  autoQualityBox,
   autoRepresentationToSwitchTo,
   droppedLastAdaptationSet,
   nearestSupportedQuality,
-  pickAutoVideoTrack,
   representationLabel,
   representationLabelWithCodec,
+  settleAutoVideoTrack,
   type DashVideoTrack,
+  type PlayerBox,
 } from "../../lib/dashVideoTrack";
 import {
   manifestVideoTracks,
+  measuresConnectionSpeed,
   pickDashStart,
   readMeasuredSpeedKbps,
   recordVideoSegmentSpeed,
@@ -57,7 +62,9 @@ import { recapSponsorSkip } from "../../lib/recap/recapQueue";
 import { longPressRate } from "../../lib/pointerGesture";
 import { isPopOutWindow } from "../../lib/api/pip";
 import { PlayerGestureOverlay } from "./gesture/overlay";
-import { SubtitleOverlay } from "./SubtitleOverlay";
+import { PlayerSubtitles } from "./PlayerSubtitles";
+import { webkitGtkBufferSettings } from "../../lib/dashSetup";
+import { dashErrorDetails } from "../../lib/dashErrorDetails";
 import { isLocalCaption } from "../../lib/captionText";
 import { useSubtitleFileDrop } from "../../lib/localSubtitles";
 import { useLocalSubtitleStore, videoSubtitleState } from "../../store/useLocalSubtitleStore";
@@ -237,10 +244,19 @@ function readBufferedAheadSeconds(player: DashPlayerController): number | null {
   }
 }
 
+/** One array for every player without chapters. A new `[]` per render restarted the seek bar's effect each time. */
+const NO_CHAPTERS: VideoChapter[] = [];
+// A rounded clip makes WebKitGTK draw every video frame through a mask, so the picture is square there.
+const VIDEO_CORNERS = IS_LINUX_RUNTIME ? "rounded-none" : "rounded-xl";
 const FULLSCREEN_SETTLE_MS = 120;
+/** How long the player's size has to hold before Auto is settled for it. */
+const AUTO_RESIZE_SETTLE_MS = 400;
 /** Video kept behind the playhead. Keeping as much behind as ahead held up to
  * two extra minutes of 1080p in memory. */
 const BACK_BUFFER_SECONDS = 30;
+/** How often what is further behind than that is dropped. At 120 the buffer held up to 150
+ * seconds behind the playhead between two prunes. */
+const BACK_BUFFER_PRUNE_SECONDS = 30;
 const PLAYER_LOG_MAX_CHARS = 500;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -330,7 +346,7 @@ export const Player: React.FC<PlayerProps> = ({
   onRetrySource,
   sourceMode,
   className,
-  chapters = [],
+  chapters = NO_CHAPTERS,
   heatmap,
   storyboard,
   projection = null,
@@ -351,6 +367,8 @@ export const Player: React.FC<PlayerProps> = ({
   const sourceSwitchingRef = useRef(false);
   const dashPlayerRef = useRef<DashPlayerController | null>(null);
   const dashReadyRef = useRef(false);
+  // The area Auto was last settled for, so a resize that changes nothing is left alone.
+  const autoBoxRef = useRef<PlayerBox | null>(null);
   const hlsPlayerRef = useRef<Hls | null>(null);
   const liveSeekedBackRef = useRef(false);
   const qualitySwitchSnapshotRef = useRef<QualitySwitchSnapshot | null>(null);
@@ -378,6 +396,9 @@ export const Player: React.FC<PlayerProps> = ({
   const attachedAudioIdentityRef = useRef<string | null>(null);
   const videoProgressSampleRef = useRef<{ time: number; at: number } | null>(null);
 
+  // Picked field by field, and never the playback time: a bare `usePlayerStore()` re-rendered
+  // the player, its controls and its menus on every time tick. What needs the time reads the
+  // media element, or subscribes in a leaf of its own.
   const {
     isPlaying,
     setIsPlaying,
@@ -386,7 +407,6 @@ export const Player: React.FC<PlayerProps> = ({
     setMuted,
     playbackRate,
     setPlaybackRate,
-    currentTime,
     duration,
     setCurrentTime,
     setDuration,
@@ -399,10 +419,35 @@ export const Player: React.FC<PlayerProps> = ({
     videoPlayerMode,
     enterVideoPip,
     expandVideoPlayer,
-    isVideoFullscreen: isFullscreen,
-    setIsVideoFullscreen: setIsFullscreen,
+    isFullscreen,
+    setIsFullscreen,
     setIsVideoFullscreenTransitioning,
-  } = usePlayerStore();
+  } = usePlayerStore(
+    useShallow((state) => ({
+      isPlaying: state.isPlaying,
+      setIsPlaying: state.setIsPlaying,
+      volume: state.volume,
+      muted: state.muted,
+      setMuted: state.setMuted,
+      playbackRate: state.playbackRate,
+      setPlaybackRate: state.setPlaybackRate,
+      duration: state.duration,
+      setCurrentTime: state.setCurrentTime,
+      setDuration: state.setDuration,
+      playNext: state.playNext,
+      playPrevious: state.playPrevious,
+      videoFit: state.videoFit,
+      isTheaterMode: state.isTheaterMode,
+      setIsTheaterMode: state.setIsTheaterMode,
+      sponsorBlockSegments: state.sponsorBlockSegments,
+      videoPlayerMode: state.videoPlayerMode,
+      enterVideoPip: state.enterVideoPip,
+      expandVideoPlayer: state.expandVideoPlayer,
+      isFullscreen: state.isVideoFullscreen,
+      setIsFullscreen: state.setIsVideoFullscreen,
+      setIsVideoFullscreenTransitioning: state.setIsVideoFullscreenTransitioning,
+    })),
+  );
 
   usePersistedPlayerVolume();
 
@@ -486,12 +531,14 @@ export const Player: React.FC<PlayerProps> = ({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
   const ambient = useAmbientSettings();
-  const {
-    sponsorBlockEnabled,
-    sponsorBlockActions,
-    incrementStats,
-    loadSettings
-  } = useSettingsStore();
+  const { sponsorBlockEnabled, sponsorBlockActions, incrementStats, loadSettings } = useSettingsStore(
+    useShallow((state) => ({
+      sponsorBlockEnabled: state.sponsorBlockEnabled,
+      sponsorBlockActions: state.sponsorBlockActions,
+      incrementStats: state.incrementStats,
+      loadSettings: state.loadSettings,
+    })),
+  );
   const [sbMuted, setSbMuted] = useState(false);
   const [notifyToast, setNotifyToast] = useState<{ segment: any; categoryName: string; visible: boolean } | null>(null);
   const notifyTimeoutRef = useRef<number | null>(null);
@@ -507,7 +554,6 @@ export const Player: React.FC<PlayerProps> = ({
     bufferingStartedAtRef.current = null;
     setIsBuffering(false);
   }, []);
-  const [bufferedPct, setBufferedPct] = useState(0);
   const [selectedCaptionId, setSelectedCaptionId] = useState<string>("off");
   const [selectedAudioTrackId, setSelectedAudioTrackId] = useState<string | null>(null);
   const [hasStartedPlayback, setHasStartedPlayback] = useState(false);
@@ -688,10 +734,17 @@ export const Player: React.FC<PlayerProps> = ({
 
     if (selectedQualityId === "auto") {
       const currentRep = player.getCurrentRepresentationForType("video");
-      const autoTrack = pickAutoVideoTrack(
+      // Auto climbs as far as fills the player and no further: a picture decoded larger than
+      // it is shown costs decoding, memory and network for nothing.
+      const box = autoQualityBox(video.clientWidth, video.clientHeight, window.devicePixelRatio || 1, IS_LINUX_RUNTIME);
+      const autoTrack = settleAutoVideoTrack(
         videoTracks,
         useAppSettingsStore.getState().values[SETTINGS.DEFAULT_VIDEO_CODEC] ?? "H.264",
+        box,
+        currentRep ? String(currentRep.id) : null,
       );
+      const maxKbps = autoBitrateCapKbps(autoTrack, box);
+      autoBoxRef.current = box;
       const autoStart = autoRepresentationToSwitchTo(autoTrack, currentRep);
       if (autoStart) {
         player.setRepresentationForTypeById("video", autoStart, false);
@@ -703,12 +756,17 @@ export const Player: React.FC<PlayerProps> = ({
               video: true,
               audio: false,
             },
+            maxBitrate: { video: maxKbps },
           },
         },
       });
       logPlayerEvent("dash-quality-auto-requested", {
         switchTime: video.currentTime,
         autoTrack: autoTrack?.id,
+        // Scalars: the saved log keeps no objects.
+        fillWidth: box?.width,
+        fillHeight: box?.height,
+        maxKbps,
       });
 
       if (currentRep && currentRep.height) {
@@ -748,6 +806,7 @@ export const Player: React.FC<PlayerProps> = ({
               video: false,
               audio: false,
             },
+            maxBitrate: { video: -1 },
           },
         },
       });
@@ -791,6 +850,8 @@ export const Player: React.FC<PlayerProps> = ({
               video: false,
               audio: false,
             },
+            // A chosen quality is never held to the player's size.
+            maxBitrate: { video: -1 },
           },
         },
       });
@@ -820,6 +881,28 @@ export const Player: React.FC<PlayerProps> = ({
     });
   }, [logPlayerEvent, selectedQuality, selectedQualityId]);
   const applyDashQualitySelectionRef = useRef(applyDashQualitySelection);
+
+  // Fullscreen, theater mode, the mini player and a resized window change what fills the
+  // player, so Auto is settled again once the size holds still.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !isDashPlayback || selectedQualityId !== "auto" || typeof ResizeObserver === "undefined") return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const observer = new ResizeObserver(() => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        const box = autoQualityBox(video.clientWidth, video.clientHeight, window.devicePixelRatio || 1, IS_LINUX_RUNTIME);
+        const applied = autoBoxRef.current;
+        if (box?.width === applied?.width && box?.height === applied?.height) return;
+        applyDashQualitySelectionRef.current();
+      }, AUTO_RESIZE_SETTLE_MS);
+    });
+    observer.observe(video);
+    return () => {
+      if (timer) clearTimeout(timer);
+      observer.disconnect();
+    };
+  }, [isDashPlayback, selectedQualityId]);
 
   // Re-resolving would fetch the same codec and fail again, then wait out a source switch.
   const leaveFailingCodec = useCallback((reason: "decode-error" | "no-picture" = "decode-error") => {
@@ -1027,6 +1110,10 @@ export const Player: React.FC<PlayerProps> = ({
     retrySourceFiredRef.current = true;
     logPlayerEventRef.current("source-mode-fallback", { reason, sourceMode });
     onRetrySourceRef.current?.(reason);
+  }, [sourceMode]);
+  const sourceModeRef = useRef(sourceMode);
+  useEffect(() => {
+    sourceModeRef.current = sourceMode;
   }, [sourceMode]);
   const fireRetrySourceRef = useRef(fireRetrySource);
   useEffect(() => {
@@ -1254,10 +1341,10 @@ export const Player: React.FC<PlayerProps> = ({
 
   const seekBy = useCallback((delta: number) => {
     const video = videoRef.current;
-    const baseTime = video ? video.currentTime : currentTime;
+    const baseTime = video ? video.currentTime : usePlayerStore.getState().currentTime;
     seekTo(baseTime + delta);
     showSeekFeedback(delta > 0 ? "forward" : "backward", Math.abs(delta));
-  }, [currentTime, seekTo, showSeekFeedback]);
+  }, [seekTo, showSeekFeedback]);
 
 
   useEffect(() => {
@@ -1335,7 +1422,7 @@ export const Player: React.FC<PlayerProps> = ({
   const jumpChapter = useCallback((direction: 1 | -1) => {
     if (chapters.length === 0) return;
     const video = videoRef.current;
-    const time = video?.currentTime ?? currentTime;
+    const time = video?.currentTime ?? usePlayerStore.getState().currentTime;
     if (direction === 1) {
       const next = chapters.find((chapter) => chapter.startSeconds > time + 0.5);
       seekTo(next ? next.startSeconds : video?.duration ?? duration);
@@ -1343,7 +1430,7 @@ export const Player: React.FC<PlayerProps> = ({
     }
     const passed = chapters.filter((chapter) => chapter.startSeconds < time - 2);
     seekTo(passed.length > 0 ? passed[passed.length - 1]!.startSeconds : 0);
-  }, [chapters, currentTime, duration, seekTo]);
+  }, [chapters, duration, seekTo]);
 
   const windowFullscreenControllerRef = useRef<WindowFullscreenController | null>(null);
   if (!windowFullscreenControllerRef.current) {
@@ -1422,17 +1509,6 @@ export const Player: React.FC<PlayerProps> = ({
     syncNativeFullscreen,
     videoPlayerMode,
   ]);
-
-  const updateBuffered = useCallback(() => {
-    const video = videoRef.current;
-    if (!video || !Number.isFinite(video.duration) || video.duration <= 0 || video.buffered.length === 0) {
-      setBufferedPct(0);
-      return;
-    }
-
-    const bufferedEnd = video.buffered.end(video.buffered.length - 1);
-    setBufferedPct(Math.min(100, (bufferedEnd / video.duration) * 100));
-  }, []);
 
   const realignExternalAudioClock = useCallback(
     (audio: HTMLAudioElement, video: HTMLVideoElement, force: boolean) => {
@@ -1598,8 +1674,9 @@ export const Player: React.FC<PlayerProps> = ({
         },
         buffer: {
           fastSwitchEnabled: fastQualitySwitchEnabled(),
+          ...webkitGtkBufferSettings(),
           bufferToKeep: BACK_BUFFER_SECONDS,
-          bufferPruningInterval: 120,
+          bufferPruningInterval: BACK_BUFFER_PRUNE_SECONDS,
           bufferTimeDefault: bufferConfig.minSeconds,
           bufferTimeAtTopQuality: bufferConfig.maxSeconds,
           bufferTimeAtTopQualityLongForm: bufferConfig.maxSeconds,
@@ -1626,6 +1703,7 @@ export const Player: React.FC<PlayerProps> = ({
         ),
         preferredCodec: useAppSettingsStore.getState().values[SETTINGS.DEFAULT_VIDEO_CODEC] ?? "H.264",
         speedKbps,
+        box: autoQualityBox(video.clientWidth, video.clientHeight, window.devicePixelRatio || 1, IS_LINUX_RUNTIME),
       });
       if (start.bitrateKbps) {
         player.updateSettings({ streaming: { abr: { initialBitrate: { video: start.bitrateKbps } } } });
@@ -1712,15 +1790,18 @@ export const Player: React.FC<PlayerProps> = ({
       }
       return { label: "dash-unknown", fatal: false };
     };
+    const onFragmentLoaded = (event: unknown) => {
+      if (measuresConnectionSpeed(sourceModeRef.current)) recordVideoSegmentSpeed(event);
+    };
     const onPlaybackError = (event: unknown) => {
       const { label, fatal } = classifyDashError(event);
-      logPlayerEventRef.current("dash-playback-error", { event, errorClass: label, fatal });
+      logPlayerEventRef.current("dash-playback-error", { ...dashErrorDetails(event), errorClass: label, fatal });
       if (label === "media-decode" && leaveFailingCodecRef.current()) return;
       if (fatal) fireRetrySourceRef.current(`dash:${label}`);
     };
     const onDashError = (event: unknown) => {
       const { label, fatal } = classifyDashError(event);
-      logPlayerEventRef.current("dash-error", { event, errorClass: label, fatal });
+      logPlayerEventRef.current("dash-error", { ...dashErrorDetails(event), errorClass: label, fatal });
       if (label === "media-decode" && leaveFailingCodecRef.current()) return;
       if (fatal) fireRetrySourceRef.current(`dash:${label}`);
     };
@@ -1753,7 +1834,7 @@ export const Player: React.FC<PlayerProps> = ({
     };
 
     player.on(dashEvents.MANIFEST_LOADED, onManifestLoaded);
-    player.on(dashEvents.FRAGMENT_LOADING_COMPLETED, recordVideoSegmentSpeed);
+    player.on(dashEvents.FRAGMENT_LOADING_COMPLETED, onFragmentLoaded);
     player.on(dashEvents.PLAYBACK_WAITING, onPlaybackWaiting);
     player.on(dashEvents.BUFFER_LEVEL_STATE_CHANGED, onBufferStateChanged);
     player.on(dashEvents.QUALITY_CHANGE_REQUESTED, onQualityChangeRequested);
@@ -1772,7 +1853,7 @@ export const Player: React.FC<PlayerProps> = ({
     return () => {
       dashReadyRef.current = false;
       player.off(dashEvents.MANIFEST_LOADED, onManifestLoaded);
-      player.off(dashEvents.FRAGMENT_LOADING_COMPLETED, recordVideoSegmentSpeed);
+      player.off(dashEvents.FRAGMENT_LOADING_COMPLETED, onFragmentLoaded);
       player.off(dashEvents.PLAYBACK_WAITING, onPlaybackWaiting);
       player.off(dashEvents.BUFFER_LEVEL_STATE_CHANGED, onBufferStateChanged);
       player.off(dashEvents.QUALITY_CHANGE_REQUESTED, onQualityChangeRequested);
@@ -2337,7 +2418,6 @@ export const Player: React.FC<PlayerProps> = ({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
-    currentTime,
     isFullscreen,
     isTheaterMode,
     muted,
@@ -2395,7 +2475,6 @@ export const Player: React.FC<PlayerProps> = ({
         }
       });
     }
-    updateBuffered();
   };
 
   const handleAudioLoadedMetadata = () => {
@@ -2515,7 +2594,6 @@ export const Player: React.FC<PlayerProps> = ({
     setDuration(nextDuration);
     onTimeUpdate?.(nextTime, nextDuration);
     if (usesExternalAudio && audio) syncExternalAudio(false);
-    updateBuffered();
   };
 
   // The root stays unclipped so the glow can leave it; what it used to clip lives in the content wrapper.
@@ -2524,7 +2602,7 @@ export const Player: React.FC<PlayerProps> = ({
   const playerRootClasses = cx(
     "relative w-full outline-none",
     fillsTallerSlot ? "h-full" : "aspect-video",
-    isTheaterSurface ? "max-h-[calc(100vh-160px)] min-h-[480px] rounded-none" : "rounded-xl",
+    isTheaterSurface ? "max-h-[calc(100vh-160px)] min-h-[480px] rounded-none" : VIDEO_CORNERS,
     isFullscreen && "rounded-none",
     className
   );
@@ -2559,7 +2637,7 @@ export const Player: React.FC<PlayerProps> = ({
         className={cx(
           "absolute inset-0 z-10 overflow-hidden text-chrome-white",
           !showAmbient && "bg-chrome-black",
-          isTheaterSurface ? "flex items-center justify-center rounded-none" : "rounded-xl",
+          isTheaterSurface ? "flex items-center justify-center rounded-none" : VIDEO_CORNERS,
           isFullscreen && "rounded-none",
         )}
       >
@@ -2573,7 +2651,6 @@ export const Player: React.FC<PlayerProps> = ({
         playsInline
         preload="auto"
         onLoadedMetadata={handleLoadedMetadata}
-        onProgress={updateBuffered}
         onTimeUpdate={handleTimeUpdate}
         onPlaying={() => {
           const activeVideoId = usePlayerStore.getState().currentVideo?.id;
@@ -2662,8 +2739,6 @@ export const Player: React.FC<PlayerProps> = ({
         src={src}
         isPlaying={isPlaying}
         playbackRate={playbackRate}
-        currentTime={currentTime}
-        duration={duration}
         seekFeedback={seekFeedback}
         volumeFeedback={volumeFeedback}
         qualityLabel={selectedQualityId === "auto" ? activeQualityLabel : selectedQuality?.qualityLabel}
@@ -2721,10 +2796,9 @@ export const Player: React.FC<PlayerProps> = ({
       )}
 
       {/* Modular Subtitle Overlay */}
-      <SubtitleOverlay
+      <PlayerSubtitles
         captions={captions}
         selectedCaptionId={selectedCaptionId}
-        currentTime={currentTime}
         shouldShowControls={shouldShowControls}
         offsetMs={subtitleOffsetMs}
       />
@@ -2842,7 +2916,6 @@ export const Player: React.FC<PlayerProps> = ({
         audioTracks={audioTracks}
         selectedAudioTrackId={selectedAudioTrackId}
         setSelectedAudioTrackId={setSelectedAudioTrackId}
-        bufferedPct={bufferedPct}
         muted={muted}
         setMuted={setMuted}
         isFullscreen={isFullscreen}

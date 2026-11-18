@@ -10,10 +10,12 @@ use tauri::{AppHandle, Manager};
 use tokio::sync::Notify;
 use tokio::time::Instant;
 
+use super::actions::state_pool;
 use super::auto_sync::{SyncTrigger, allows};
 use super::device::DEVICE_KEYS;
 use super::live_hub::until_another_online;
 use super::service::sync_now;
+use super::state::load_group;
 
 /// A push waits until nothing changed for this long, so a burst of edits leaves as one.
 pub const PUSH_QUIET: Duration = Duration::from_secs(10);
@@ -82,9 +84,14 @@ pub fn spawn(app: AppHandle) {
                 pushes.changed.notified().await;
                 continue;
             };
-            // The keys are read only once there is something to send; without them the timer
-            // sync sends it.
-            let Ok(device) = DEVICE_KEYS.get().await else {
+            // The keys are read only once there is something to send to a group; without them
+            // the timer sync sends it.
+            let device = if matches!(load_group(&state_pool(&app)).await, Ok(Some(_))) {
+                DEVICE_KEYS.get().await.ok()
+            } else {
+                None
+            };
+            let Some(device) = device else {
                 pushes.take(seen);
                 continue;
             };

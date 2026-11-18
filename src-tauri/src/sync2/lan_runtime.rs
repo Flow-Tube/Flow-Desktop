@@ -13,7 +13,7 @@ use mdns_sd::{DaemonEvent, Receiver, ResolvedService, ServiceDaemon, ServiceEven
 use tauri::AppHandle;
 use tokio::task::JoinSet;
 
-use super::actions::{Local, local};
+use super::actions::{Local, local, state_pool};
 use super::device::DEVICE_KEYS;
 use super::engine::{Result, Session, now_ms};
 use super::epoch::{Purpose, purpose_key};
@@ -248,7 +248,8 @@ fn live_sink(app: &AppHandle) -> LiveSink {
 
 /// Runs for the app's lifetime in the Default profile, with the process's one mDNS daemon. A run
 /// ends once this device's keys change for a new group, and starts again at once with them; one
-/// that fails, for example on a locked keychain, starts again a minute later.
+/// that fails, for example on a locked keychain, starts again a minute later, and so does one on
+/// a device in no group.
 pub fn spawn(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         let daemon = ServiceDaemon::new().ok();
@@ -256,6 +257,12 @@ pub fn spawn(app: AppHandle) {
             tracing::warn!(target: "flow::sync2", "mDNS is unavailable; LAN members are met only at kept addresses");
         }
         loop {
+            // Outside a group there is nobody to meet, and reading the keys would raise the
+            // keychain for nothing, on every launch.
+            if !matches!(load_group(&state_pool(&app)).await, Ok(Some(_))) {
+                tokio::time::sleep(CHECK_EVERY).await;
+                continue;
+            }
             if let Err(error) = run(&app, daemon.as_ref()).await {
                 tracing::warn!(target: "flow::sync2", kind = error.kind(), "LAN sync stopped");
                 tokio::time::sleep(CHECK_EVERY).await;

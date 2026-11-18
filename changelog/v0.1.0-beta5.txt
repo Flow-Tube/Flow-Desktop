@@ -1,10 +1,43 @@
 FLOW DESKTOP CHANGE LOG
 VERSION: 0.1.0-beta5
-DATE: 2026-11-18
+DATE: 2026-11-17
 STATUS: PRE-RELEASE
 
 ABOUT
 Flow Desktop is a privacy-first YouTube and YouTube Music client - no account, no ads, no analytics, no telemetry. It is the desktop companion to Flow for Android.
+
+LINUX
+- Fixed Flow staying on a slower graphics mode after 0.1.0-beta3 moved a working computer onto one (#660). The first launch tries the fast mode once and asks whether to keep it.
+- Try faster graphics, in Settings > Appearance and in a one-time notice, restarts Flow on a faster graphics mode. If the window stays blank, Flow goes back on its own after 15 seconds.
+- On NVIDIA with Wayland, Flow stays on shared memory. The direct GPU path showed a green picture and crashed in testing, so Try faster graphics is not offered there.
+- On NVIDIA with WebKitGTK 2.52 or later, Flow no longer moves by itself to drawing without the GPU, which crashes or leaves the window blank on some systems. Installs that climbed there come back on the next launch. Safe and Start with safe graphics still use it when you choose them.
+- Flow on Linux asks for fewer redraws: the playing bars and live dots hold still, pages and the side menu switch without a fade or slide, and the video has square corners. Ambient mode stays off on the slower graphics modes.
+- Seeking inside the loaded part of a video, and fast quality switches, no longer make WebKitGTK restart its decoder, which could stutter.
+- The Device rows in Settings > About, such as Graphics and Video decoders, can be selected and copied.
+- Settings > About now names the graphics path in use (GPU, GPU through shared memory, or no GPU) and why. The Linux help page explains what each one costs.
+
+HOME AND RECOMMENDATIONS
+- Home no longer redraws every card each time the feed loads more or changes state. Loading a page sends only its new videos, where it used to resend the whole feed at least three times.
+- Hiding a video on Home no longer reloads every card after it.
+
+SUBSCRIPTIONS AND CHANNELS
+- Subscriptions opens on its first 120 videos and adds more as you scroll, instead of drawing up to 1500 cards at once. Coming back to the page returns to where you were.
+- While a first check of your channels runs, videos already listed are no longer redrawn with every batch.
+- Channel pictures on cards, in the side menu and in lists are loaded at the size they are shown, not at 512 pixels each.
+- Cards look up their DeArrow title and channel picture only once they come near the screen, and no longer ask the backend for an image they never show.
+
+PLAYER
+- The player, its controls and its menus no longer redraw several times a second while a video plays. Only the parts that show the time follow it.
+- The transcript panel redraws when the spoken line changes instead of on every tick, and a Short no longer redraws its whole surface as it plays.
+- The buffered part of the seek bar keeps growing while a video is paused.
+- The seek bar, the mini player bar and the music bar are redrawn only when they move by a pixel, not on every frame. On a long video that is a few times a second instead of 60 or more.
+- The mini player's bar and the seek bar's thumb are no longer animated while they are hidden.
+- Auto quality now stops at the size that fills the player on your screen. Fullscreen on a 4K screen still reaches 2160p, while a small player or the mini player no longer loads and decodes a picture larger than it shows. A quality you pick yourself is never limited.
+- On Linux, Auto stays on H.264 and stops at 1080p, since video there is mostly decoded on the processor. Pick a higher quality by hand to go above it.
+- Fixed Auto starting far too high after a video had played through the backup stream: its segments were timed as if they came over the network, which made the connection look hundreds of times faster than it was.
+- When the player has to switch to a backup stream, the saved log now says why.
+- Video already played is dropped from memory every 30 seconds instead of every 2 minutes.
+- The dark shade behind the player controls now covers only the bottom band they sit in, not the whole picture, so the video stays bright while the controls show and costs less to draw.
 
 BACKUPS AND IMPORT
 - Fixed Flow closing while it read a Google Takeout export with a folder named in Russian, Ukrainian, Greek, Turkish, Vietnamese, Chinese, Japanese or Korean, such as My Activity (#661).
@@ -13,3 +46,23 @@ SYNC
 - Try again on the keychain card now asks the keychain again. Before, a keychain that could not be reached once, for example KDE Wallet starting after Flow, stayed unreachable until Flow restarted (#659). Last.fm's Allow access button gets the same fix.
 - The keychain card says what went wrong and what to do on your system: on Linux it names KDE Wallet and GNOME Keyring, and it mentions macOS only on a Mac.
 - Flow no longer opens the keychain at launch on a device that is in no sync group.
+
+DESKTOP
+- Flow starts with a smaller first script: Settings, Sync, Recap, your Persona, Extensions, Diagnostics, Import, Support and the welcome screens now load when they are first opened.
+
+DOWNLOADS
+- The Downloads page no longer redraws every saved video and song four times a second while something is downloading.
+- The download cards in the corner no longer re-measure the page on every progress update.
+
+FIXES
+- Fixed hidden helper windows staying open until Flow quit when a video took too long to resolve, which made Flow use more memory the longer it ran.
+- Preparing playback for one video no longer waits behind a slow token request for another.
+- Fixed covers and artwork turning into placeholders after Flow had been open for about six hours.
+- Flow lets go of expired stream links and of a finished video's buffer on its own every minute, where it used to wait for the next video to be opened.
+- Opening Diagnostics & logs no longer freezes the window while a week of logs is read.
+- Scrolling a feed no longer rewrites your whole recommendation profile to disk every three seconds. What a feed showed is now saved once a minute, with the next thing you watch, or when Flow closes.
+- Undoing a deleted note now always wins over the deletion, even when both happen in the same instant.
+- Fixed a possible freeze after hours of use when Flow was started by a launcher that never reads its output.
+
+UNDER THE HOOD
+- A first component, the video card, is built with the React Compiler, which only compiles components that opt in.

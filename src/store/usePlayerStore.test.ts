@@ -530,3 +530,19 @@ describe("live chat visibility", () => {
     expect(usePlayerStore.getState().isLiveChatOpen).toBe(true);
   });
 });
+
+describe("playback position", () => {
+  // The player and the watch page both write the position and duration on every tick.
+  it("does not wake subscribers when a tick repeats the same value", () => {
+    usePlayerStore.getState().setCurrentTime(12.5);
+    usePlayerStore.getState().setDuration(300);
+    let notified = 0;
+    const unsubscribe = usePlayerStore.subscribe(() => (notified += 1));
+    usePlayerStore.getState().setCurrentTime(12.5);
+    usePlayerStore.getState().setDuration(300);
+    expect(notified).toBe(0);
+    usePlayerStore.getState().setCurrentTime(12.75);
+    expect(notified).toBe(1);
+    unsubscribe();
+  });
+});

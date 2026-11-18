@@ -1,5 +1,5 @@
 import type { ButtonHTMLAttributes } from 'react';
-import { upgradeAvatarUrl } from '../../lib/thumbnails';
+import { upgradeAvatarUrl, avatarSize } from '../../lib/thumbnails';
 import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
 
 export interface QuickAccessAvatarProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -18,7 +18,7 @@ export function QuickAccessAvatar({
   ...props
 }: QuickAccessAvatarProps) {
   const initial = name.trim().charAt(0).toUpperCase() || '?';
-  const imageSrc = useProxiedImageUrl(upgradeAvatarUrl(avatarUrl));
+  const imageSrc = useProxiedImageUrl(upgradeAvatarUrl(avatarUrl, avatarSize(64)));
 
   return (
     <button

@@ -13,6 +13,7 @@ LINUX
 - On NVIDIA with WebKitGTK 2.52 or later, Flow no longer moves by itself to drawing without the GPU, which crashes or leaves the window blank on some systems. Installs that climbed there come back on the next launch. Safe and Start with safe graphics still use it when you choose them.
 - Flow on Linux asks for fewer redraws: the playing bars and live dots hold still, pages and the side menu switch without a fade or slide, and the video has square corners. Ambient mode stays off on the slower graphics modes.
 - Seeking inside the loaded part of a video, and fast quality switches, no longer make WebKitGTK restart its decoder, which could stutter.
+- The Device rows in Settings > About, such as Graphics and Video decoders, can be selected and copied.
 - Settings > About now names the graphics path in use (GPU, GPU through shared memory, or no GPU) and why. The Linux help page explains what each one costs.
 
 HOME AND RECOMMENDATIONS

@@ -127,6 +127,10 @@ const FlowNeuroPersona = lazy(() => import("./pages/FlowNeuroPersona"));
 
 const windowLayoutStyle = { "--app-titlebar-height": `${APP_TITLEBAR_HEIGHT}px` } as CSSProperties;
 
+if (typeof document !== "undefined") {
+  document.documentElement.style.setProperty("--app-titlebar-height", `${APP_TITLEBAR_HEIGHT}px`);
+}
+
 function App() {
   /*
     Selected one action at a time, never destructured off a bare `usePlayerStore()`:

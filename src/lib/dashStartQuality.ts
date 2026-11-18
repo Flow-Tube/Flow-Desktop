@@ -97,6 +97,16 @@ export function readMeasuredSpeedKbps(): number | null {
   }
 }
 
+/**
+ * Whether a source's segment downloads say anything about the connection. A SABR session's
+ * segments are fetched ahead by the backend and handed over from its buffer, at the speed of a
+ * local copy: timing them read hundreds of megabits on a link that carried four, and the next
+ * video then started far above what the connection could load.
+ */
+export function measuresConnectionSpeed(sourceMode: string | undefined): boolean {
+  return sourceMode !== "sabr-dash";
+}
+
 interface FragmentLoadedEvent {
   error?: unknown;
   mediaType?: string;

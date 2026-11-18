@@ -35,6 +35,7 @@ import {
 } from "../../lib/dashVideoTrack";
 import {
   manifestVideoTracks,
+  measuresConnectionSpeed,
   pickDashStart,
   readMeasuredSpeedKbps,
   recordVideoSegmentSpeed,
@@ -63,6 +64,7 @@ import { isPopOutWindow } from "../../lib/api/pip";
 import { PlayerGestureOverlay } from "./gesture/overlay";
 import { PlayerSubtitles } from "./PlayerSubtitles";
 import { webkitGtkBufferSettings } from "../../lib/dashSetup";
+import { dashErrorDetails } from "../../lib/dashErrorDetails";
 import { isLocalCaption } from "../../lib/captionText";
 import { useSubtitleFileDrop } from "../../lib/localSubtitles";
 import { useLocalSubtitleStore, videoSubtitleState } from "../../store/useLocalSubtitleStore";
@@ -761,7 +763,9 @@ export const Player: React.FC<PlayerProps> = ({
       logPlayerEvent("dash-quality-auto-requested", {
         switchTime: video.currentTime,
         autoTrack: autoTrack?.id,
-        box,
+        // Scalars: the saved log keeps no objects.
+        fillWidth: box?.width,
+        fillHeight: box?.height,
         maxKbps,
       });
 
@@ -1106,6 +1110,10 @@ export const Player: React.FC<PlayerProps> = ({
     retrySourceFiredRef.current = true;
     logPlayerEventRef.current("source-mode-fallback", { reason, sourceMode });
     onRetrySourceRef.current?.(reason);
+  }, [sourceMode]);
+  const sourceModeRef = useRef(sourceMode);
+  useEffect(() => {
+    sourceModeRef.current = sourceMode;
   }, [sourceMode]);
   const fireRetrySourceRef = useRef(fireRetrySource);
   useEffect(() => {
@@ -1782,15 +1790,18 @@ export const Player: React.FC<PlayerProps> = ({
       }
       return { label: "dash-unknown", fatal: false };
     };
+    const onFragmentLoaded = (event: unknown) => {
+      if (measuresConnectionSpeed(sourceModeRef.current)) recordVideoSegmentSpeed(event);
+    };
     const onPlaybackError = (event: unknown) => {
       const { label, fatal } = classifyDashError(event);
-      logPlayerEventRef.current("dash-playback-error", { event, errorClass: label, fatal });
+      logPlayerEventRef.current("dash-playback-error", { ...dashErrorDetails(event), errorClass: label, fatal });
       if (label === "media-decode" && leaveFailingCodecRef.current()) return;
       if (fatal) fireRetrySourceRef.current(`dash:${label}`);
     };
     const onDashError = (event: unknown) => {
       const { label, fatal } = classifyDashError(event);
-      logPlayerEventRef.current("dash-error", { event, errorClass: label, fatal });
+      logPlayerEventRef.current("dash-error", { ...dashErrorDetails(event), errorClass: label, fatal });
       if (label === "media-decode" && leaveFailingCodecRef.current()) return;
       if (fatal) fireRetrySourceRef.current(`dash:${label}`);
     };
@@ -1823,7 +1834,7 @@ export const Player: React.FC<PlayerProps> = ({
     };
 
     player.on(dashEvents.MANIFEST_LOADED, onManifestLoaded);
-    player.on(dashEvents.FRAGMENT_LOADING_COMPLETED, recordVideoSegmentSpeed);
+    player.on(dashEvents.FRAGMENT_LOADING_COMPLETED, onFragmentLoaded);
     player.on(dashEvents.PLAYBACK_WAITING, onPlaybackWaiting);
     player.on(dashEvents.BUFFER_LEVEL_STATE_CHANGED, onBufferStateChanged);
     player.on(dashEvents.QUALITY_CHANGE_REQUESTED, onQualityChangeRequested);
@@ -1842,7 +1853,7 @@ export const Player: React.FC<PlayerProps> = ({
     return () => {
       dashReadyRef.current = false;
       player.off(dashEvents.MANIFEST_LOADED, onManifestLoaded);
-      player.off(dashEvents.FRAGMENT_LOADING_COMPLETED, recordVideoSegmentSpeed);
+      player.off(dashEvents.FRAGMENT_LOADING_COMPLETED, onFragmentLoaded);
       player.off(dashEvents.PLAYBACK_WAITING, onPlaybackWaiting);
       player.off(dashEvents.BUFFER_LEVEL_STATE_CHANGED, onBufferStateChanged);
       player.off(dashEvents.QUALITY_CHANGE_REQUESTED, onQualityChangeRequested);

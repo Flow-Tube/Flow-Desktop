@@ -32,6 +32,8 @@ PLAYER
 - The mini player's bar and the seek bar's thumb are no longer animated while they are hidden.
 - Auto quality now stops at the size that fills the player on your screen. Fullscreen on a 4K screen still reaches 2160p, while a small player or the mini player no longer loads and decodes a picture larger than it shows. A quality you pick yourself is never limited.
 - On Linux, Auto stays on H.264 and stops at 1080p, since video there is mostly decoded on the processor. Pick a higher quality by hand to go above it.
+- Fixed Auto starting far too high after a video had played through the backup stream: its segments were timed as if they came over the network, which made the connection look hundreds of times faster than it was.
+- When the player has to switch to a backup stream, the saved log now says why.
 - Video already played is dropped from memory every 30 seconds instead of every 2 minutes.
 - The dark shade behind the player controls now covers only the bottom band they sit in, not the whole picture, so the video stays bright while the controls show and costs less to draw.
 

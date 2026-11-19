@@ -52,6 +52,8 @@ SYNC
 - Try again on the keychain card now asks the keychain again. Before, a keychain that could not be reached once, for example KDE Wallet starting after Flow, stayed unreachable until Flow restarted (#659). Last.fm's Allow access button gets the same fix.
 - The keychain card says what went wrong and what to do on your system: on Linux it names KDE Wallet and GNOME Keyring, and it mentions macOS only on a Mac.
 - Flow no longer opens the keychain at launch on a device that is in no sync group.
+- A computer removed from a sync group on the local network now finds out the next time it reaches a desktop still in the group, and stops syncing, instead of showing Linked forever (#662). That desktop gives it only the list of devices.
+- New installs name themselves after the computer, such as Flow Desktop (MY-PC - Windows), so two installs in one group are easy to tell apart. Development builds add Dev.
 
 DESKTOP
 - Flow starts with a smaller first script: Settings, Sync, Recap, your Persona, Extensions, Diagnostics, Import, Support and the welcome screens now load when they are first opened.

@@ -94,6 +94,9 @@ function matchesQuery(query: string, title: string, author?: string | null): boo
   return `${title} ${author ?? ""}`.toLowerCase().includes(query);
 }
 
+const songMatchesQuery = (query: string, song: MusicEntry["song"]) =>
+  matchesQuery(query, song.title, song.artists.map((artist) => artist.name).join(" "));
+
 export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
   const navigate = useNavigate();
   const cardGridStyle = useGridStyle();
@@ -135,38 +138,49 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
 
   const sortedRecords = useMemo(() => sortDownloadRecords(records, sort), [records, sort]);
 
+  // The saved downloads are built apart from the ones in progress. Progress arrives four times
+  // a second, and building both together gave every saved card a new object each time, which
+  // re-rendered the whole library for as long as anything was downloading.
+  const savedVideoEntries = useMemo<VideoEntry[]>(
+    () =>
+      sortedRecords
+        .filter((record) => record.mediaKind === "video" && record.collectionDbId == null)
+        .map<VideoEntry>((record) => ({
+          key: `record-${record.id}`,
+          recordId: record.id,
+          video: downloadRecordToVideo(record),
+          detail: downloadDetail(record),
+        }))
+        .filter((entry) => matchesQuery(query, entry.video.title, entry.video.channelName)),
+    [sortedRecords, query],
+  );
   const videoEntries = useMemo<VideoEntry[]>(() => {
     const fromActive = inProgress
       .filter((item) => item.mediaKind === "video")
-      .map<VideoEntry>((item) => ({ key: `active-${item.id}`, video: progressToVideo(item), progress: item }));
-    const fromRecords = sortedRecords
-      .filter((record) => record.mediaKind === "video" && record.collectionDbId == null)
-      .map<VideoEntry>((record) => ({
-        key: `record-${record.id}`,
-        recordId: record.id,
-        video: downloadRecordToVideo(record),
-        detail: downloadDetail(record),
-      }));
-    return [...fromActive, ...fromRecords].filter((entry) =>
-      matchesQuery(query, entry.video.title, entry.video.channelName),
-    );
-  }, [inProgress, sortedRecords, query]);
+      .map<VideoEntry>((item) => ({ key: `active-${item.id}`, video: progressToVideo(item), progress: item }))
+      .filter((entry) => matchesQuery(query, entry.video.title, entry.video.channelName));
+    return fromActive.length > 0 ? [...fromActive, ...savedVideoEntries] : savedVideoEntries;
+  }, [inProgress, savedVideoEntries, query]);
 
+  const savedMusicEntries = useMemo<MusicEntry[]>(
+    () =>
+      sortedRecords
+        .filter((record) => record.mediaKind !== "video" && record.collectionDbId == null)
+        .map<MusicEntry>((record) => ({
+          key: `record-${record.id}`,
+          recordId: record.id,
+          song: downloadRecordToSong(record),
+        }))
+        .filter((entry) => songMatchesQuery(query, entry.song)),
+    [sortedRecords, query],
+  );
   const musicEntries = useMemo<MusicEntry[]>(() => {
     const fromActive = inProgress
       .filter((item) => item.mediaKind !== "video")
-      .map<MusicEntry>((item) => ({ key: `active-${item.id}`, song: progressToSong(item) }));
-    const fromRecords = sortedRecords
-      .filter((record) => record.mediaKind !== "video" && record.collectionDbId == null)
-      .map<MusicEntry>((record) => ({
-        key: `record-${record.id}`,
-        recordId: record.id,
-        song: downloadRecordToSong(record),
-      }));
-    return [...fromActive, ...fromRecords].filter((entry) =>
-      matchesQuery(query, entry.song.title, entry.song.artists.map((artist) => artist.name).join(" ")),
-    );
-  }, [inProgress, sortedRecords, query]);
+      .map<MusicEntry>((item) => ({ key: `active-${item.id}`, song: progressToSong(item) }))
+      .filter((entry) => songMatchesQuery(query, entry.song));
+    return fromActive.length > 0 ? [...fromActive, ...savedMusicEntries] : savedMusicEntries;
+  }, [inProgress, savedMusicEntries, query]);
 
   const musicSongs = useMemo(() => musicEntries.map((entry) => entry.song), [musicEntries]);
 

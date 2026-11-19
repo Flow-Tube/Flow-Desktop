@@ -17,7 +17,7 @@ use tokio_tungstenite::tungstenite::handshake::derive_accept_key;
 use tokio_tungstenite::tungstenite::protocol::{Role, WebSocketConfig};
 use tokio_tungstenite::tungstenite::{Bytes, Message};
 
-use super::actions::{local, stopped};
+use super::actions::{local, state_pool, stopped};
 use super::auto_sync::SyncTrigger;
 use super::engine::Result;
 use super::live_hub::{announce, receive, set_server_online, subscribe};
@@ -96,13 +96,14 @@ pub fn spawn(app: AppHandle) {
 }
 
 async fn listen(app: &AppHandle) -> Result<()> {
-    let local = local(app).await?;
-    let Some(record) = load_group(&local.pool).await? else {
+    let pool = state_pool(app);
+    let Some(record) = load_group(&pool).await? else {
         return Ok(());
     };
-    if record.kind != StoreKind::Server || stopped(&local.pool).await?.is_some() {
+    if record.kind != StoreKind::Server || stopped(&pool).await?.is_some() {
         return Ok(());
     }
+    let local = local(app).await?;
     let store = ServerStore::connect(
         &record.store_url,
         local.device.clone(),

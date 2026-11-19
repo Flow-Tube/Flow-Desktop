@@ -35,3 +35,15 @@ export function filterCues<T extends { text: string }>(cues: T[], query: string)
   const wanted = query.trim().toLocaleLowerCase();
   return wanted ? cues.filter((cue) => cue.text.toLocaleLowerCase().includes(wanted)) : cues;
 }
+
+/**
+ * Which cues are on screen at `time`, as their positions joined by commas. A string compares by
+ * value, so a store selector returning it only re-renders when the spoken line changes.
+ */
+export function activeCuePositions(cues: ReadonlyArray<{ start: number; end: number }>, time: number): string {
+  const active: number[] = [];
+  cues.forEach((cue, position) => {
+    if (time >= cue.start && time <= cue.end) active.push(position);
+  });
+  return active.join(",");
+}

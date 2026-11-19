@@ -19,7 +19,7 @@ use super::load::{inputs_disliked, related_graph, report_searches, seed_titles};
 use super::mixer::Page;
 use super::origin::{Origin, OriginKind, queries_by_id};
 use super::seeds::{SeedInput, feed_seed_inputs};
-use super::{HomeFeedService, cache, channel_memory, now_ms};
+use super::{Changed, HomeFeedService, cache, channel_memory, now_ms};
 use crate::flow_neuro::scoring::classify_persona;
 use crate::services::recommendation_service::{DiscoverySurface, RecommendationService};
 use crate::services::youtube_service::YoutubeService;
@@ -132,7 +132,7 @@ impl HomeFeedService {
                 break;
             }
             let feed_generation = self.generation();
-            self.update(app, feed_generation, |feed| {
+            self.update_status(app, feed_generation, |feed| {
                 feed.snapshot.loading_more = true;
                 feed.snapshot.load_more_failed = false;
             });
@@ -151,11 +151,13 @@ impl HomeFeedService {
                 }
                 Outcome::Exhausted => {
                     // Only answered requests that found nothing end the feed.
-                    self.update(app, feed_generation, |feed| feed.snapshot.has_more = false);
+                    self.update_status(app, feed_generation, |feed| {
+                        feed.snapshot.has_more = false;
+                    });
                     break;
                 }
                 Outcome::Failed => {
-                    self.update(app, feed_generation, |feed| {
+                    self.update_status(app, feed_generation, |feed| {
                         feed.snapshot.load_more_failed = true;
                     });
                     break;
@@ -163,7 +165,7 @@ impl HomeFeedService {
             }
         }
         let generation = self.generation();
-        self.update(app, generation, |feed| feed.snapshot.loading_more = false);
+        self.update_status(app, generation, |feed| feed.snapshot.loading_more = false);
     }
 
     async fn next_page(
@@ -597,7 +599,7 @@ impl HomeFeedService {
         let generation = self.generation();
         let mut appended = false;
         let mut snapshot: Option<(Vec<Card>, HashMap<String, Origin>)> = None;
-        self.update(app, generation, |feed| {
+        self.apply(app, generation, |feed| {
             let existing: HashSet<&str> = feed.snapshot.cards.iter().map(Card::id).collect();
             let page: Vec<Card> = attempt
                 .page
@@ -610,8 +612,9 @@ impl HomeFeedService {
                 })
                 .collect();
             if page.is_empty() {
-                return;
+                return Changed::Nothing;
             }
+            let start = feed.snapshot.cards.len();
             let tail: Vec<String> = feed
                 .snapshot
                 .cards
@@ -643,7 +646,25 @@ impl HomeFeedService {
             feed.snapshot.cards.extend(laid_out);
             feed.snapshot.has_more = true;
             appended = true;
-            snapshot = Some((feed.snapshot.cards.clone(), feed.snapshot.origins.clone()));
+            // The saved feed is the first cards only, so a longer feed has nothing new to save.
+            if start < cache::LAST_FEED_CAP {
+                let saved: Vec<Card> = feed
+                    .snapshot
+                    .cards
+                    .iter()
+                    .take(cache::LAST_FEED_CAP)
+                    .cloned()
+                    .collect();
+                let origins = saved
+                    .iter()
+                    .filter_map(|card| {
+                        let origin = feed.snapshot.origins.get(card.id())?;
+                        Some((card.id().to_string(), origin.clone()))
+                    })
+                    .collect();
+                snapshot = Some((saved, origins));
+            }
+            Changed::Appended { start }
         });
         if let Some((cards, origins)) = snapshot {
             let _ = cache::save_last_feed(pool, &cards, &origins, now).await;

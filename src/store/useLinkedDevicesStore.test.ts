@@ -43,7 +43,6 @@ const WORDS = Array.from({ length: 24 }, (_, i) => `word${i}`).join(" ");
 const LINKED = {
   kind: "server",
   storeUrl: "https://sync.example.com",
-  keychainBlocked: false,
   recoverySaved: false,
   lastSync: null,
   syncing: false,
@@ -104,11 +103,11 @@ describe("useLinkedDevicesStore", () => {
     expect(useLinkedDevicesStore.getState().words).toBe(WORDS);
   });
 
-  it("asks the keychain again, and says it is still waiting when macOS has not answered", async () => {
+  it("asks the keychain again, and says so when it still has not answered", async () => {
     api.retryKeychain.mockRejectedValueOnce({ kind: "linkedKeychain", message: "Waiting for access to the keychain" });
     await useLinkedDevicesStore.getState().retryKeychain();
     expect(useLinkedDevicesStore.getState().error).toBe(
-      "Flow is waiting for access to the keychain. Allow it when macOS asks, then try again.",
+      "Flow could not get this device's keys from the system keychain. Unlock it or allow access, then try again.",
     );
 
     api.retryKeychain.mockResolvedValueOnce(undefined);
@@ -116,7 +115,7 @@ describe("useLinkedDevicesStore", () => {
     api.getLinkedDevices.mockResolvedValue([]);
     await useLinkedDevicesStore.getState().retryKeychain();
     expect(useLinkedDevicesStore.getState().error).toBeNull();
-    expect(useLinkedDevicesStore.getState().status?.keychainBlocked).toBe(false);
+    expect(useLinkedDevicesStore.getState().status?.keychain ?? null).toBeNull();
   });
 
   it("loads no devices for a device in no group", async () => {

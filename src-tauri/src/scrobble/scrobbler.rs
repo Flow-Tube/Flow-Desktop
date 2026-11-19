@@ -553,7 +553,7 @@ mod tests {
         fn read(&self, name: &str) -> Result<Option<String>, CredentialError> {
             self.reads.fetch_add(1, Ordering::SeqCst);
             if self.refuse.load(Ordering::SeqCst) {
-                return Err(CredentialError("refused"));
+                return Err(CredentialError::failed("refused"));
             }
             self.inner.read(name)
         }

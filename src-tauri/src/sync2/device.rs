@@ -11,7 +11,9 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use super::keys::{MemberSecrets, member_secrets};
 use super::sealed::random_bytes;
-use crate::security::keychain::{CredentialError, CredentialStore, Keychain, off_thread};
+use crate::security::keychain::{
+    CredentialError, CredentialStore, Keychain, KeychainProblem, off_thread,
+};
 
 const KEYCHAIN_SERVICE: &str = if cfg!(debug_assertions) {
     "io.github.aedev.flow.desktop.sync.dev"
@@ -48,14 +50,15 @@ fn encode(keys: &MemberSecrets) -> Result<String, CredentialError> {
         sig: URL_SAFE_NO_PAD.encode(keys.sig_seed),
         kem: URL_SAFE_NO_PAD.encode(keys.kem_secret),
     };
-    serde_json::to_string(&stored).map_err(|_| CredentialError("Could not encode the device keys"))
+    serde_json::to_string(&stored)
+        .map_err(|_| CredentialError::failed("Could not encode the device keys"))
 }
 
 /// Loads the keys, creating them on first use. A damaged item is an error and is never replaced:
 /// new keys would silently take this device out of its group.
 fn device_keys(store: &dyn CredentialStore) -> Result<MemberSecrets, CredentialError> {
     match store.read(DEVICE_ENTRY)? {
-        Some(value) => decode(&value).ok_or(CredentialError(
+        Some(value) => decode(&value).ok_or(CredentialError::failed(
             "The device keys in the keychain are damaged",
         )),
         None => renew_device_keys(store),
@@ -75,7 +78,10 @@ fn forget_device_keys(store: &dyn CredentialStore) -> Result<(), CredentialError
 
 /// Returned to a caller while another one's read waits on the keychain, for example on the macOS
 /// access prompt.
-pub const WAITING: CredentialError = CredentialError("Waiting for access to the keychain");
+pub const WAITING: CredentialError = CredentialError::new(
+    KeychainProblem::Waiting,
+    "Waiting for access to the keychain",
+);
 
 enum Slot {
     Unread,
@@ -124,7 +130,10 @@ impl DeviceKeys {
             let read = device_keys(store.as_ref());
             *lock(&slot) = match &read {
                 Ok(keys) => Slot::Loaded(keys.clone()),
-                Err(error) => Slot::Refused(error.clone()),
+                Err(error) => {
+                    tracing::warn!(target: "flow::sync2", problem = ?error.problem, "device keys not read from the keychain");
+                    Slot::Refused(error.clone())
+                }
             };
             read
         })
@@ -157,9 +166,13 @@ impl DeviceKeys {
         }
     }
 
-    /// Whether syncing waits on the keychain: a read waits for access, or access was refused.
-    pub fn blocked(&self) -> bool {
-        matches!(*lock(&self.slot), Slot::Reading | Slot::Refused(_))
+    /// Why syncing waits on the keychain, if it does: a read waits for access, or it failed.
+    pub fn problem(&self) -> Option<KeychainProblem> {
+        match &*lock(&self.slot) {
+            Slot::Reading => Some(KeychainProblem::Waiting),
+            Slot::Refused(error) => Some(error.problem),
+            Slot::Unread | Slot::Loaded(_) => None,
+        }
     }
 
     /// Forgets a refusal, so the next read asks the keychain again.
@@ -216,18 +229,18 @@ mod tests {
         struct Refusing;
         impl CredentialStore for Refusing {
             fn read(&self, _: &str) -> Result<Option<String>, CredentialError> {
-                Err(CredentialError("refused"))
+                Err(CredentialError::failed("refused"))
             }
             fn write(&self, _: &str, _: &str) -> Result<(), CredentialError> {
-                Err(CredentialError("refused"))
+                Err(CredentialError::failed("refused"))
             }
             fn remove(&self, _: &str) -> Result<(), CredentialError> {
-                Err(CredentialError("refused"))
+                Err(CredentialError::failed("refused"))
             }
         }
         assert_eq!(
             device_keys(&Refusing).err(),
-            Some(CredentialError("refused"))
+            Some(CredentialError::failed("refused"))
         );
     }
 
@@ -249,7 +262,7 @@ mod tests {
                 let _ = answered.recv();
             }
             if self.refuse.load(Ordering::SeqCst) {
-                return Err(CredentialError("refused"));
+                return Err(CredentialError::new(KeychainProblem::Locked, "refused"));
             }
             self.inner.read(name)
         }
@@ -276,13 +289,13 @@ mod tests {
             tokio::task::yield_now().await;
         }
         assert_eq!(keys.get().await.err(), Some(WAITING));
-        assert!(keys.blocked());
+        assert_eq!(keys.problem(), Some(KeychainProblem::Waiting));
 
         answer.send(()).unwrap();
         let read = first.await.unwrap().unwrap();
         assert_eq!(keys.get().await.unwrap().did, read.did);
         assert_eq!(store.reads.load(Ordering::SeqCst), 1);
-        assert!(!keys.blocked());
+        assert_eq!(keys.problem(), None);
     }
 
     #[tokio::test]
@@ -294,12 +307,13 @@ mod tests {
         assert!(keys.get().await.is_err());
         assert!(keys.get().await.is_err());
         assert_eq!(store.reads.load(Ordering::SeqCst), 1);
-        assert!(keys.blocked());
+        assert_eq!(keys.problem(), Some(KeychainProblem::Locked));
 
         store.refuse.store(false, Ordering::SeqCst);
         keys.retry();
         assert!(keys.get().await.is_ok());
         assert_eq!(store.reads.load(Ordering::SeqCst), 2);
+        assert_eq!(keys.problem(), None);
     }
 
     #[tokio::test]

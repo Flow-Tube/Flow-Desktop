@@ -90,7 +90,9 @@ hex = "0.4"
 # Scrobbling: Last.fm's api_sig is an MD5 digest, and session keys and tokens live in the OS
 # keychain (macOS Keychain, Windows Credential Manager, the Secret Service on Linux).
 md-5 = "0.11"
-keyring = "4"
+# The stores `keyring` 4 picks, used directly: its `Entry::new` keeps a failed first connection
+# for the whole run, so a Secret Service that starts after Flow is never reached.
+keyring-core = "1"
 
 # Local Sync (P2P) — transport: plaintext WebSocket (payload is AES-GCM encrypted), gzip
 # compression (parity with Android java.util.zip), and LAN IP discovery for the QR.
@@ -130,6 +132,7 @@ windows = { version = "0.62", features = [
   "Win32_System_Diagnostics_ToolHelp",
 ] }
 windows-core = "0.62"
+windows-native-keyring-store = "1"
 
 # Single-instance: forward a second `flow://` launch to the running window
 # instead of spawning a duplicate. The "deep-link" feature makes it hand the
@@ -137,6 +140,7 @@ windows-core = "0.62"
 # The version wry uses, for WebKit preferences wry does not expose (src/macos_window.rs).
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
+apple-native-keyring-store = { version = "1", features = ["keychain"] }
 # statfs, to tell a read-only app location (a disk image, a translocated copy) from Applications.
 libc = "0.2"
 
@@ -145,6 +149,9 @@ tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 tauri-plugin-window-state = "2"
 # Global media keys. Installed at runtime only once the setting is turned on (services/media_keys.rs).
 tauri-plugin-global-shortcut = "2"
+
+[target.'cfg(all(unix, not(any(target_os = "macos", target_os = "ios", target_os = "android"))))'.dependencies]
+zbus-secret-service-keyring-store = { version = "1", features = ["crypto-rust"] }
 
 # tauri-plugin-deep-link 2.6.2 builds `ini::ParseOption` with only the fields rust-ini 0.21.1
 # has, so 0.21.3 breaks its Linux build. Drop this pin once deep-link ships a fix.

@@ -4,7 +4,7 @@ import { getString } from "../../lib/i18n/index";
 import { prefetchStreamInfo } from "../../lib/streamResolution";
 import { useChannelAvatar } from "../../lib/useChannelAvatar";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
-import { upgradeAvatarUrl } from "../../lib/thumbnails";
+import { upgradeAvatarUrl, avatarSize } from "../../lib/thumbnails";
 import { formatCount } from "../../lib/utils";
 import { SubscribeButton } from "../ui/SubscribeButton";
 import type { ShortItem } from "../../types/shorts";
@@ -25,7 +25,7 @@ export function ShortMetadata({
   const navigate = useNavigate();
   const channelId = short.channelId ?? details?.channelId ?? null;
   const fetchedAvatar = useChannelAvatar(channelId);
-  const avatar = useProxiedImageUrl(upgradeAvatarUrl(short.channelAvatarUrl ?? fetchedAvatar));
+  const avatar = useProxiedImageUrl(upgradeAvatarUrl(short.channelAvatarUrl ?? fetchedAvatar, avatarSize(48)));
   const originalTitle = useOriginalTitle(short.id);
   const title = originalTitle || (short.title.trim() && short.title !== "Short" ? short.title : details?.title || short.title);
   const channelName = short.channelName.trim() || details?.channelName || "Unknown channel";

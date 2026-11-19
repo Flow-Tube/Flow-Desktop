@@ -15,6 +15,7 @@ import type { ChannelDetails, VideoSummary } from '../types/video';
 import { mapWithConcurrency } from './concurrency';
 import { observeChannelUploads } from './api/recommendation';
 import { mergeCollaborations, mergeScopedFeed } from './subscriptionFeedMerge';
+import { reuseById } from "./reuseItems";
 
 export interface ScanProgress {
   processed: number;
@@ -229,7 +230,9 @@ export function useSubscriptionFeed(channels: SubscribedChannel[]) {
             setFailedChannelIds(feed.failedChannelIds);
             return;
           }
-          setVideos(feed.videos);
+          // Each batch is parsed afresh. Keeping the objects of uploads already listed lets
+          // their cards skip the batch.
+          setVideos((current) => reuseById(current, feed.videos));
           setRssChannels(feed.channels);
           setFailedChannelIds(feed.failedChannelIds);
           setLoading(false);

@@ -40,6 +40,7 @@ use super::webdav_login::{
     save_pending_login,
 };
 use crate::db::settings::{get_setting, set_setting};
+use crate::security::keychain::KeychainProblem;
 use crate::services::profile_service::ProfileService;
 use crate::sync::{changes, ledger};
 
@@ -206,8 +207,9 @@ pub struct LinkedStatus {
     pub login_due: bool,
     /// The devices yet to read the login this device sent, while that change is under way.
     pub login_waiting: Option<Vec<String>>,
-    /// The keychain hasn't given this device's keys: a read waits for access, or it was refused.
-    pub keychain_blocked: bool,
+    /// Why the keychain hasn't given this device's keys, if it hasn't: a read waits for access,
+    /// or it was locked, missing or failed.
+    pub keychain: Option<KeychainProblem>,
     pub recovery_saved: bool,
     /// Words the end of a restore had to make, to show once.
     pub replaced_words: Option<String>,
@@ -286,7 +288,7 @@ pub async fn status(app: &AppHandle) -> Result<LinkedStatus> {
         login_refused: login_refused(&pool).await?,
         login_due: login_due(&pool).await?,
         login_waiting: login_waiting(&pool).await?,
-        keychain_blocked: DEVICE_KEYS.blocked(),
+        keychain: DEVICE_KEYS.problem(),
         // Only a device that created or restored the group was shown words to confirm.
         recovery_saved: saved.as_deref() != Some("0"),
         replaced_words: take_replaced_words(),

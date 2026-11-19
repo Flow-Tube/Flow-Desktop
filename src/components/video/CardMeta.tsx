@@ -1,7 +1,7 @@
 import { BadgeCheck, Music2 } from "lucide-react";
 import { useAiChannelLabel } from "../../lib/aiList/useAiList";
 import { getString } from "../../lib/i18n/index";
-import { upgradeAvatarUrl } from "../../lib/thumbnails";
+import { upgradeAvatarUrl, avatarSize } from "../../lib/thumbnails";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 import type { Collaborator, VideoSummary } from "../../types/video";
 
@@ -71,8 +71,8 @@ export function CardPills({ video }: { video: VideoSummary }) {
 
 /** The first two channels of a collaboration, overlapped in the card's avatar slot. */
 export function CollabAvatars({ collaborators }: { collaborators: Collaborator[] }) {
-  const first = useProxiedImageUrl(upgradeAvatarUrl(collaborators[0]?.avatarUrl ?? null));
-  const second = useProxiedImageUrl(upgradeAvatarUrl(collaborators[1]?.avatarUrl ?? null));
+  const first = useProxiedImageUrl(upgradeAvatarUrl(collaborators[0]?.avatarUrl ?? null, avatarSize(28)));
+  const second = useProxiedImageUrl(upgradeAvatarUrl(collaborators[1]?.avatarUrl ?? null, avatarSize(28)));
   const avatar = (src: string | null | undefined, name: string | undefined, position: string) => (
     <span
       className={`absolute h-7 w-7 overflow-hidden rounded-full border-2 border-surface bg-chrome-zinc-800 ${position}`}

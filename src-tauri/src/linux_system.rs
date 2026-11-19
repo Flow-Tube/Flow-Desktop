@@ -81,6 +81,12 @@ pub struct GraphicsReport {
     /// The startup tier this launch used (0 to 3), see `linux_startup`.
     pub tier: u8,
     pub tier_reason: &'static str,
+    /// How this tier gets the page to the screen: "gpu", "shared-memory", "software", or
+    /// "own-variables" when the user's own renderer variables decide it.
+    pub render_path: &'static str,
+    /// What a faster-graphics trial can do here: "none", "trial" (this launch is
+    /// one), "available" or "suggested".
+    pub faster: &'static str,
     /// Graphics compatibility in Settings.
     pub mode: &'static str,
     /// `XDG_SESSION_TYPE`: "wayland", "x11", or empty when unset.
@@ -112,23 +118,16 @@ fn packaging() -> &'static str {
 #[must_use]
 pub fn graphics_report() -> Option<GraphicsReport> {
     let boot = crate::linux_startup::boot_report()?;
-    // SAFETY: plain getters of the loaded WebKitGTK library's version numbers.
-    let webkitgtk = unsafe {
-        format!(
-            "{}.{}.{}",
-            webkit2gtk::ffi::webkit_get_major_version(),
-            webkit2gtk::ffi::webkit_get_minor_version(),
-            webkit2gtk::ffi::webkit_get_micro_version()
-        )
-    };
     Some(GraphicsReport {
         tier: boot.tier,
-        tier_reason: boot.tier_reason(),
+        tier_reason: boot.reason.as_str(),
+        render_path: boot.render_path.as_str(),
+        faster: boot.faster.as_str(),
         mode: boot.mode.as_str(),
         session: std::env::var("XDG_SESSION_TYPE").unwrap_or_default(),
         x11_backend: std::env::var("GDK_BACKEND").is_ok_and(|backend| backend == "x11"),
         packaging: packaging(),
-        webkitgtk,
+        webkitgtk: crate::linux_startup::webkit_string(),
         decoders: crate::codec_probe::summary(),
     })
 }

@@ -62,8 +62,9 @@ use commands::db::{
 };
 use commands::diagnostics::{
     clear_logs, crash_report_delete, crash_report_dismiss, crash_report_read, get_graphics_mode,
-    graphics_report, linux_codec_source, log_frontend_event, logs_dir_path, read_logs,
-    reset_visitor_identity, reveal_logs_folder, set_graphics_mode, startup_render_ok,
+    graphics_report, graphics_trial_shown, keep_graphics_trial, linux_codec_source,
+    log_frontend_event, logs_dir_path, read_logs, reset_visitor_identity, reveal_logs_folder,
+    revert_graphics_trial, set_graphics_mode, start_graphics_trial, startup_render_ok,
     updates_supported,
 };
 use commands::discord::{clear_discord_presence, set_discord_presence};
@@ -192,17 +193,31 @@ use services::youtube_service::YoutubeService;
 /// outputs share one `EnvFilter` (default `info`, override with `RUST_LOG`) and
 /// carry module target + line number so every event points at its source.
 ///
-/// Returns the appender's flush guard, which the caller must keep alive for the
-/// process lifetime, or `None` when only stdout logging could be initialized.
-/// The file mirrors the same events as stdout — it never logs secrets.
+/// A release build writes stdout through a worker thread. Written directly, a
+/// launcher that hands Flow a pipe and never reads it fills the pipe after hours
+/// of logging, and then every thread that logs blocks on it, the UI thread
+/// included. The worker drops lines instead. A debug build writes directly, so
+/// the last lines before a crash still reach the terminal.
+///
+/// Returns the writers' flush guards, which the caller must keep alive for the
+/// process lifetime. The file mirrors the same events as stdout — it never logs
+/// secrets.
 fn init_tracing(
     app_data_dir: &std::path::Path,
-) -> Option<tracing_appender::non_blocking::WorkerGuard> {
+) -> Vec<tracing_appender::non_blocking::WorkerGuard> {
     use tracing_subscriber::{EnvFilter, Layer, fmt, prelude::*};
 
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    let mut guards = Vec::new();
 
     let stdout_layer = fmt::layer().with_target(true).with_line_number(true);
+    let stdout_layer = if cfg!(debug_assertions) {
+        stdout_layer.boxed()
+    } else {
+        let (writer, guard) = tracing_appender::non_blocking(std::io::stdout());
+        guards.push(guard);
+        stdout_layer.with_writer(writer).boxed()
+    };
 
     let log_dir = app_data_dir.join("logs");
     let appender = std::fs::create_dir_all(&log_dir)
@@ -217,33 +232,36 @@ fn init_tracing(
                 .map_err(|e| e.to_string())
         });
 
-    let (file_layer, guard) = match appender {
+    let file_layer = match appender {
         Ok(appender) => {
             let (writer, guard) = tracing_appender::non_blocking(appender);
-            let layer = fmt::layer()
-                .with_ansi(false)
-                .with_target(true)
-                .with_line_number(true)
-                .with_writer(writer)
-                .boxed();
-            (Some(layer), Some(guard))
+            guards.push(guard);
+            Some(
+                fmt::layer()
+                    .with_ansi(false)
+                    .with_target(true)
+                    .with_line_number(true)
+                    .with_writer(writer)
+                    .boxed(),
+            )
         }
         Err(error) => {
             eprintln!("flow: file logging unavailable, using stdout only: {error}");
-            (None, None)
+            None
         }
     };
 
+    let file_layer_ready = file_layer.is_some();
     tracing_subscriber::registry()
         .with(filter)
         .with(stdout_layer)
         .with(file_layer)
         .init();
 
-    if guard.is_some() {
+    if file_layer_ready {
         tracing::info!(dir = %log_dir.display(), "file_logging_initialized");
     }
-    guard
+    guards
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -378,11 +396,9 @@ pub fn run() {
                 ))
             })?;
 
-            // Keep the file-appender flush guard alive for the app's lifetime by
-            // handing it to Tauri's managed state (dropped on exit, flushing).
-            if let Some(guard) = init_tracing(&app_data_dir) {
-                app.manage(std::sync::Mutex::new(guard));
-            }
+            // Keep the log writers' flush guards alive for the app's lifetime by
+            // handing them to Tauri's managed state (dropped on exit, flushing).
+            app.manage(std::sync::Mutex::new(init_tracing(&app_data_dir)));
 
             tracing::info!(
                 profile = %active_profile.id,
@@ -424,6 +440,10 @@ pub fn run() {
                 nvidia_preset = boot_report.nvidia_preset,
                 safe_graphics = boot_report.safe_graphics,
                 graphics_mode = boot_report.mode.as_str(),
+                reason = boot_report.reason.as_str(),
+                render_path = boot_report.render_path.as_str(),
+                faster = boot_report.faster.as_str(),
+                own_variables = boot_report.own_variables,
                 libva_fallback,
                 "linux_startup_workarounds_applied"
             );
@@ -610,6 +630,7 @@ pub fn run() {
                 streaming_manager.clone(),
                 proxy_listeners.images,
             ));
+            tauri::async_runtime::spawn(streaming::proxy::keep_tidy(streaming_manager.clone()));
             app.manage(streaming_manager);
             app.manage(update_support);
 
@@ -660,6 +681,8 @@ pub fn run() {
             if let Some(main_window) = app.get_webview_window("main") {
                 web_process::watch(&main_window);
             }
+            #[cfg(target_os = "linux")]
+            linux_startup::watch_trial(app.handle().clone());
 
             // Other platforms quit with the main window, including the pop-out,
             // unless another Flow window is still open: then it only hides.
@@ -867,6 +890,10 @@ pub fn run() {
             startup_render_ok,
             get_graphics_mode,
             set_graphics_mode,
+            start_graphics_trial,
+            graphics_trial_shown,
+            keep_graphics_trial,
+            revert_graphics_trial,
             linux_codec_source,
             graphics_report,
             updates_supported,

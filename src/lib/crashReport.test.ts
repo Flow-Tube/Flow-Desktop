@@ -55,6 +55,8 @@ describe("bugReportUrl", () => {
       bugReportUrl({
         tier: 1,
         tierReason: "nvidia-wayland",
+        renderPath: "shared-memory",
+        faster: "suggested",
         mode: "automatic",
         session: "wayland",
         x11Backend: false,
@@ -65,7 +67,7 @@ describe("bugReportUrl", () => {
     );
     expect(url.searchParams.get("webview")).toBe("WebKitGTK 2.50.1");
     expect(url.searchParams.get("graphics")).toBe(
-      "Tier 1 (NVIDIA on Wayland), Automatic mode, wayland, rpm, WebKitGTK 2.50.1; system: H.264 absent, VP9 present",
+      "Tier 1 (NVIDIA on Wayland), GPU through shared memory, Automatic mode, wayland, rpm, WebKitGTK 2.50.1; system: H.264 absent, VP9 present",
     );
   });
 });

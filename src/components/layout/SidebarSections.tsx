@@ -5,7 +5,7 @@ import type { SubscribedChannel } from '../../store/useSubscriptionStore';
 import { SidebarItem } from '../ui/SidebarItem';
 import { getString } from '../../lib/i18n/index';
 import { openInNewTab } from '../../lib/openTarget';
-import { upgradeAvatarUrl } from '../../lib/thumbnails';
+import { upgradeAvatarUrl, avatarSize } from '../../lib/thumbnails';
 import { useImageFallback } from '../../lib/useImageFallback';
 import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
 import { useSubscriptionAvatarHydration } from '../../lib/useSubscriptionAvatarHydration';
@@ -13,7 +13,7 @@ import { useSubscriptionAvatarHydration } from '../../lib/useSubscriptionAvatarH
 const SUBS_DEFAULT_LIMIT = 7;
 
 function SidebarAvatar({ src }: { src?: string | null }) {
-  const imageSrc = useProxiedImageUrl(upgradeAvatarUrl(src));
+  const imageSrc = useProxiedImageUrl(upgradeAvatarUrl(src, avatarSize(24)));
   const { src: displaySrc, onError } = useImageFallback([imageSrc]);
 
   if (!displaySrc) return <div className="w-6 h-6 rounded-full bg-surface-container-high" />;

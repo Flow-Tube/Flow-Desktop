@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   AppWindow,
   Bug,
+  Camera,
+  ImageDown,
   Info,
   Link,
   Pause,
@@ -11,6 +13,7 @@ import {
 } from "lucide-react";
 import { usePlayerStore, type PlaybackRate } from "../../../store/usePlayerStore";
 import { copyText } from "../../../lib/clipboard";
+import { copyVideoFrame, saveVideoFrame } from "../../../lib/videoFrame";
 import { getString } from "../../../lib/i18n/index";
 import { isLocalMediaId } from "../../../lib/localMediaId";
 import type { VolumeFeedback } from "../../../lib/useVolumeFeedback";
@@ -49,8 +52,6 @@ type PlayerGestureOverlayProps = {
   src?: string | null;
   isPlaying: boolean;
   playbackRate: PlaybackRate;
-  currentTime: number;
-  duration: number;
   seekFeedback: SeekFeedbackState | null;
   volumeFeedback: VolumeFeedback | null;
   qualityLabel?: string | null;
@@ -96,14 +97,19 @@ function formatTime(seconds: number) {
 }
 
 
+/** The stats panel follows the playback time itself, so the overlay around it doesn't. */
+function PlayerStats(props: Omit<React.ComponentProps<typeof StatsForNerds>, "currentTime" | "duration">) {
+  const currentTime = usePlayerStore((state) => Math.floor(state.currentTime));
+  const duration = usePlayerStore((state) => state.duration);
+  return <StatsForNerds {...props} currentTime={currentTime} duration={duration} />;
+}
+
 export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
   videoRef,
   title,
   src,
   isPlaying,
   playbackRate,
-  currentTime,
-  duration,
   seekFeedback,
   volumeFeedback,
   qualityLabel,
@@ -203,7 +209,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
   const copyVideoUrl = async (includeTime: boolean) => {
     const videoId = usePlayerStore.getState().currentVideo?.id;
     if (!videoId) return;
-    const copied = await copyText(youtubeWatchUrl(videoId, includeTime ? currentTime : undefined));
+    const copied = await copyText(youtubeWatchUrl(videoId, includeTime ? usePlayerStore.getState().currentTime : undefined));
     showCopied(
       getString(!copied ? "player_url_copy_failed" : includeTime ? "player_timed_url_copied" : "player_video_url_copied"),
     );
@@ -421,6 +427,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
 
   const copyDebugInfo = async () => {
     const video = videoRef.current;
+    const { currentTime, duration } = usePlayerStore.getState();
     const copied = await copyText(JSON.stringify({
       title,
       src,
@@ -454,6 +461,14 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
           { label: getString("player_menu_copy_url"), icon: <Link size={18} />, action: () => copyVideoUrl(false) },
           { label: getString("player_menu_copy_url_at_time"), icon: <Link size={18} />, action: () => copyVideoUrl(true) },
         ]]),
+    [
+      { label: getString("player_menu_copy_frame"), icon: <Camera size={18} />, action: () => copyVideoFrame(videoRef.current, showCopied) },
+      {
+        label: getString("player_menu_save_frame"),
+        icon: <ImageDown size={18} />,
+        action: () => saveVideoFrame(videoRef.current, title, showCopied),
+      },
+    ],
     [
       { label: getString("player_menu_stats"), icon: <Info size={18} />, action: () => setStatsVisible((value) => !value) },
       { label: getString("player_menu_copy_debug"), icon: <Bug size={18} />, action: copyDebugInfo },
@@ -518,10 +533,8 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
       )}
 
       {statsVisible && (
-        <StatsForNerds
+        <PlayerStats
           videoRef={videoRef}
-          currentTime={currentTime}
-          duration={duration}
           playbackRate={playbackRate}
           qualityLabel={qualityLabel}
           mimeType={mimeType}

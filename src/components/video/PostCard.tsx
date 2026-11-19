@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { MessageSquare, Share2, ThumbsUp, X } from "lucide-react";
 import { getString } from "../../lib/i18n/index";
 import { formatCount } from "../../lib/utils";
-import { upgradeAvatarUrl } from "../../lib/thumbnails";
+import { upgradeAvatarUrl, avatarSize } from "../../lib/thumbnails";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 import { youtubePostUrl } from "../../lib/youtubeUrl";
 import { shareLink } from "../../lib/clipboard";
@@ -22,7 +22,7 @@ interface PostCardProps {
 export function PostCard({ post }: PostCardProps) {
   const [commentsOpen, setCommentsOpen] = useState(false);
   const showToast = useUiStore((state) => state.showToast);
-  const avatarUrl = useProxiedImageUrl(upgradeAvatarUrl(post.authorAvatar));
+  const avatarUrl = useProxiedImageUrl(upgradeAvatarUrl(post.authorAvatar, avatarSize(40)));
   const postUrl = youtubePostUrl(post.id);
   const likeLabel = formatCount(post.likesCountText) || getString("like");
   const commentCount = formatCount(post.commentCountText);

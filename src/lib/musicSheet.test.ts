@@ -1,6 +1,8 @@
 import { MotionGlobalConfig } from "framer-motion";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { APP_TITLEBAR_HEIGHT } from "./platform";
+
 import {
   clampPull,
   collapseSquash,
@@ -13,6 +15,7 @@ import {
   holdSheet,
   settleSheet,
   cardBox,
+  sheetBox,
   sheetOpacity,
   sheetProgress,
   sheetTarget,
@@ -135,5 +138,20 @@ describe("dragging the open player", () => {
   it("lands more squashed the further it was open", () => {
     expect(collapseSquash(0)).toBe(1);
     expect(collapseSquash(1)).toBeCloseTo(0.97);
+  });
+});
+
+describe("sheetBox", () => {
+  it("defaults to APP_TITLEBAR_HEIGHT when documentElement has no custom style", () => {
+    document.documentElement.style.removeProperty("--app-titlebar-height");
+    const box = sheetBox();
+    expect(box.top).toBe(APP_TITLEBAR_HEIGHT);
+  });
+
+  it("reads custom --app-titlebar-height from documentElement if present", () => {
+    document.documentElement.style.setProperty("--app-titlebar-height", "40px");
+    const box = sheetBox();
+    expect(box.top).toBe(40);
+    document.documentElement.style.removeProperty("--app-titlebar-height");
   });
 });

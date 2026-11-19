@@ -22,6 +22,7 @@ describe("useSheetDrag", () => {
 
   beforeEach(async () => {
     vi.useFakeTimers();
+    document.documentElement.style.setProperty("--app-titlebar-height", "0px");
     document.body.append(dock);
     vi.spyOn(dock, "getBoundingClientRect").mockReturnValue({ top: 900, right: 800, bottom: 972, left: 200 } as DOMRect);
     registerSheetDock(dock);
@@ -34,6 +35,7 @@ describe("useSheetDrag", () => {
   });
 
   afterEach(async () => {
+    document.documentElement.style.removeProperty("--app-titlebar-height");
     await act(async () => root.unmount());
     registerSheetDock(null);
     dock.remove();

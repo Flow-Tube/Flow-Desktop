@@ -41,6 +41,9 @@ PLAYER
 - Right-click the video and choose Copy frame to put the picture on screen on the clipboard, or Save frame to keep it as a PNG named after the video and the moment (#658). The frame keeps the video's own resolution.
 - The pop-out window's title and buttons sit on dark backings, like the mini player's, so they stay readable over a bright video (#664). They also show when you reach them with the keyboard.
 
+MUSIC
+- Fixed the full music player sliding under the title bar on Windows and Linux and leaving a coloured strip along the bottom of the window (#693). It now opens just below the title bar and fills the rest of the window.
+
 BACKUPS AND IMPORT
 - Fixed Flow closing while it read a Google Takeout export with a folder named in Russian, Ukrainian, Greek, Turkish, Vietnamese, Chinese, Japanese or Korean, such as My Activity (#661).
 

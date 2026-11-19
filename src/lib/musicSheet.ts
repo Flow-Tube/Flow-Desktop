@@ -1,5 +1,7 @@
 import { animate, motionValue } from "framer-motion";
 
+import { APP_TITLEBAR_HEIGHT } from "./platform";
+
 /**
  * How far the full player has grown out of the dock: 0 is the dock, 1 the whole window. The dock's
  * drag and the player's open and close all move this one value, as Android's player sheet does.
@@ -173,10 +175,17 @@ export function cardBox(progress: number, pull: number, dock: Box | null, sheet:
 
 /** The full player's box: the window below the title bar. */
 export function sheetBox(): Box {
-  const titlebar = Number.parseFloat(
-    getComputedStyle(document.documentElement).getPropertyValue("--app-titlebar-height"),
-  );
-  return { top: titlebar || 0, right: window.innerWidth, bottom: window.innerHeight, left: 0 };
+  const custom =
+    typeof document !== "undefined"
+      ? Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--app-titlebar-height"))
+      : NaN;
+  const titlebar = Number.isFinite(custom) ? custom : APP_TITLEBAR_HEIGHT;
+  return {
+    top: titlebar,
+    right: typeof window !== "undefined" ? window.innerWidth : 0,
+    bottom: typeof window !== "undefined" ? window.innerHeight : 0,
+    left: 0,
+  };
 }
 
 let dockElement: HTMLElement | null = null;

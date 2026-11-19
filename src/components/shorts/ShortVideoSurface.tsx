@@ -231,11 +231,11 @@ export function ShortVideoSurface({
   useEffect(() => {
     const video = videoRef.current;
     const audio = audioRef.current;
-    if (video) {
+    if (video && Math.abs(video.playbackRate - playbackRate) > 0.001) {
       video.playbackRate = playbackRate;
       video.preservesPitch = true;
     }
-    if (audio) {
+    if (audio && Math.abs(audio.playbackRate - playbackRate) > 0.001) {
       audio.playbackRate = playbackRate;
       audio.preservesPitch = true;
     }
@@ -307,7 +307,9 @@ export function ShortVideoSurface({
         audio.loop = shouldLoop;
         audio.muted = mutedRef.current;
         audio.volume = volumeRef.current;
-        audio.playbackRate = playbackRate;
+        if (Math.abs(audio.playbackRate - playbackRate) > 0.001) {
+          audio.playbackRate = playbackRate;
+        }
         audio.preservesPitch = true;
       }
 
@@ -429,7 +431,9 @@ export function ShortVideoSurface({
     if (audio.getAttribute("src") === audioUrl) return;
     lastAudioResyncAtRef.current = performance.now();
     audio.src = audioUrl;
-    audio.playbackRate = playbackRate;
+    if (Math.abs(audio.playbackRate - playbackRate) > 0.001) {
+      audio.playbackRate = playbackRate;
+    }
     audio.preservesPitch = true;
     audio.currentTime = video.currentTime;
     if (!video.paused && !userPausedRef.current) void audio.play().catch(() => {});

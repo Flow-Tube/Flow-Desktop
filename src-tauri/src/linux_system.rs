@@ -81,7 +81,8 @@ pub struct GraphicsReport {
     /// The startup tier this launch used (0 to 3), see `linux_startup`.
     pub tier: u8,
     pub tier_reason: &'static str,
-    /// How this tier gets the page to the screen: "gpu", "shared-memory" or "software".
+    /// How this tier gets the page to the screen: "gpu", "shared-memory", "software", or
+    /// "own-variables" when the user's own renderer variables decide it.
     pub render_path: &'static str,
     /// What a faster-graphics trial can do here: "none", "trial" (this launch is
     /// one), "available" or "suggested".

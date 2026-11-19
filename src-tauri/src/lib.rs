@@ -443,6 +443,7 @@ pub fn run() {
                 reason = boot_report.reason.as_str(),
                 render_path = boot_report.render_path.as_str(),
                 faster = boot_report.faster.as_str(),
+                own_variables = boot_report.own_variables,
                 libva_fallback,
                 "linux_startup_workarounds_applied"
             );

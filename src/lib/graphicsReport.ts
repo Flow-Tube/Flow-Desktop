@@ -6,7 +6,7 @@ import { isTauriEnv } from "./api/env";
 export interface GraphicsReport {
   tier: number;
   tierReason: string;
-  /** How this tier gets the page to the screen: "gpu", "shared-memory" or "software". */
+  /** How this tier gets the page to the screen: "gpu", "shared-memory", "software", or "own-variables" when the user's own renderer variables decide it. */
   renderPath: string;
   /** What a faster-graphics trial can do here: "none", "trial" (this launch is one), "available" or "suggested". */
   faster: string;
@@ -29,12 +29,14 @@ const TIER_REASONS: Record<string, string> = {
   "safe-graphics-launch": "--safe-graphics launch",
   trial: "faster graphics trial",
   "trial-kept": "kept after a faster graphics trial",
+  "own-variables": "started with your own variables",
 };
 
 const RENDER_PATHS: Record<string, string> = {
   gpu: "GPU",
   "shared-memory": "GPU through shared memory",
   software: "no GPU",
+  "own-variables": "path set by your WebKitGTK variables",
 };
 
 const MODES: Record<string, string> = { automatic: "Automatic", compatible: "Compatible", safe: "Safe" };
@@ -72,7 +74,7 @@ export function getGraphicsReport(): Promise<GraphicsReport | null> {
   return cached;
 }
 
-/** On a tier that copies every frame, or draws without the GPU, an effect that repaints a large area costs too much. */
+/** On a tier that copies every frame, or draws without the GPU, an effect that repaints a large area costs too much. A path the user's own variables set is unknown, so it counts as slow. */
 export function isSlowRenderPath(report: GraphicsReport | null): boolean {
   return Boolean(report) && report?.renderPath !== "gpu";
 }

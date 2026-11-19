@@ -17,6 +17,8 @@ mod errors;
 pub mod flow_neuro;
 #[cfg(any(target_os = "linux", test))]
 mod legacy_link_handler;
+#[cfg(any(target_os = "linux", all(test, unix)))]
+mod linux_open_files;
 #[cfg(any(target_os = "linux", test))]
 mod linux_startup;
 mod linux_system;
@@ -299,6 +301,9 @@ pub fn run() {
         cache_usage::tidy_artwork_at_launch(&dir, &cache_dirs);
     }
 
+    // Before the web view exists: its processes copy the limit when they start.
+    #[cfg(target_os = "linux")]
+    let open_file_limit = linux_open_files::raise();
     #[cfg(target_os = "linux")]
     let boot_report = linux_startup::begin(
         context.config().identifier.as_str(),
@@ -445,6 +450,8 @@ pub fn run() {
                 faster = boot_report.faster.as_str(),
                 own_variables = boot_report.own_variables,
                 libva_fallback,
+                open_files_before = open_file_limit.map(|limit| limit.before),
+                open_files_after = open_file_limit.map(|limit| limit.after),
                 "linux_startup_workarounds_applied"
             );
 

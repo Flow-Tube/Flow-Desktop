@@ -114,6 +114,15 @@ rpm and AppImage builds keep it in
 `~/.local/share/io.github.aedev.flow.desktop/` (Flow Beta adds `.beta` to
 the folder name).
 
+On NVIDIA's 580 driver, the part of Flow that draws the page leaks open
+files as it redraws, most of all while the window is resized. It is a driver
+bug, and WebKitGTK works around it in versions after 2.52. Linux lets a
+program hold 1024 open files unless it asks for more, so the limit used to be
+reached within minutes and Flow froze and reloaded with "Too many open
+files". Flow now raises its limit at start to what your system allows
+(524288 on most), and the leak takes far longer to matter. Updating the
+driver or WebKitGTK is what removes it.
+
 Advanced users can set the WebKitGTK variables themselves before starting
 Flow. Your own values always win. When you set one of the three
 `WEBKIT_*DMABUF*` variables below, Flow also sets none of the others, ignores

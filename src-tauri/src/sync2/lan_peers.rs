@@ -82,7 +82,8 @@ pub fn note(app: &AppHandle, met: &Met) {
     if let Some(reach) = &met.reach {
         remember(app, &met.peer, reach.clone());
     }
-    if met.taken > 0 {
+    // A new roster entry alone is enough: it may be the removal of this device.
+    if met.taken > 0 || met.entries > 0 {
         sync_soon_for(app, SyncTrigger::LanMeeting);
     }
 }

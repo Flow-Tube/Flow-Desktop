@@ -17,8 +17,8 @@ use super::held::HeldStore;
 use super::kdf::sha256;
 use super::keys::MemberSecrets;
 use super::lan_link::{
-    Framed, HELLO_WITHIN, Holder, Link, LiveSink, SESSION_PATH, hello_as_client, hello_as_server,
-    lan_socket_config,
+    Framed, HELLO_WITHIN, Holder, Link, LiveSink, SESSION_PATH, Standing, hello_as_client,
+    hello_as_server, lan_socket_config,
 };
 use super::paths::parse_log_path;
 use super::roster::{Entry, replay_roster};
@@ -60,11 +60,20 @@ fn is_blob_of(path: &str, bytes: &[u8]) -> bool {
         .is_some_and(|name| name == hex::encode(sha256(bytes)))
 }
 
-/// Pulls what `held` lacks from the peer behind `link`, and returns how many objects it took.
-pub async fn pull_from(held: &HeldStore, link: &Link, group: &[u8; 16]) -> Result<usize> {
+/// What one pull took that this device didn't hold.
+pub struct Pulled {
+    pub entries: usize,
+    pub objects: usize,
+}
+
+/// Pulls what `held` lacks from the peer behind `link`.
+pub async fn pull_from(held: &HeldStore, link: &Link, group: &[u8; 16]) -> Result<Pulled> {
+    let mut entries = 0;
     // From the start: an entry that lost can sit below this device's head, and its key still reads.
     for entry in link.roster(-1).await? {
-        held.hold_entry(&entry).await?;
+        if held.hold_entry(&entry).await? {
+            entries += 1;
+        }
     }
     let resolved = held.resolved().await?;
     for (epoch, kc, name) in key_names(&resolved)? {
@@ -102,7 +111,10 @@ pub async fn pull_from(held: &HeldStore, link: &Link, group: &[u8; 16]) -> Resul
             held.put_object(&path, bytes).await?;
         }
     }
-    Ok(taken)
+    Ok(Pulled {
+        entries,
+        objects: taken,
+    })
 }
 
 /// How long dialing a member may take (spec/live.md, Discovery).
@@ -118,10 +130,11 @@ const HELLOS_AT_ONCE: usize = 16;
 /// How soon to accept again after a failure such as running out of descriptors.
 const ACCEPT_AGAIN: Duration = Duration::from_millis(100);
 
-/// A session that ended: the member met, how many objects this device took from it, and where
-/// the member can be reached for the next one, when known.
+/// A session that ended: the member met, how many roster entries and objects this device took
+/// from it, and where the member can be reached for the next one, when known.
 pub struct Met {
     pub peer: String,
+    pub entries: usize,
     pub taken: usize,
     pub reach: Option<(String, u16)>,
 }
@@ -195,10 +208,11 @@ async fn pull_after_hello<T: Store>(
     for envelope in live {
         link.live(envelope.clone()).await?;
     }
-    let taken = pull_from(&held, &link, session.group()).await?;
+    let pulled = pull_from(&held, &link, session.group()).await?;
     Ok(Met {
         peer,
-        taken,
+        entries: pulled.entries,
+        taken: pulled.objects,
         reach: Some((address.to_owned(), port)),
     })
 }
@@ -224,7 +238,8 @@ pub async fn serve(
         let (pool, device, met, sink) = (pool.clone(), device.clone(), met.clone(), sink.clone());
         tokio::spawn(async move {
             match answer(stream, hello, &pool, &device, sink).await {
-                Ok(session) => met(session),
+                Ok(Some(session)) => met(session),
+                Ok(None) => {}
                 Err(error) => {
                     tracing::debug!(target: "flow::sync2", kind = error.kind(), "LAN session ended");
                 }
@@ -239,7 +254,7 @@ async fn answer(
     pool: &SqlitePool,
     device: &MemberSecrets,
     sink: LiveSink,
-) -> Result<Met> {
+) -> Result<Option<Met>> {
     let address = stream.peer_addr().ok().map(|peer| peer.ip().to_string());
     let first_message = async {
         let socket = accept_async_with_config(stream, Some(lan_socket_config()))
@@ -255,13 +270,21 @@ async fn answer(
     // Opening a session replays the roster, so a connection that says nothing doesn't cost that.
     let held = HeldStore::new(pool.clone());
     let mut session = Session::open_for_lan(pool, held.clone(), device).await?;
-    let (framed, peer, listening) = hello_as_server(socket, &first, &mut session, device).await?;
+    let (framed, peer, listening, standing) =
+        hello_as_server(socket, &first, &mut session, device).await?;
     drop(hello);
+    if standing == Standing::Removed {
+        // Served until it stops asking. Nothing is pulled from it and its address isn't kept.
+        drop(Link::spawn(framed, Holder::roster_only(held, &session)));
+        tracing::debug!(target: "flow::sync2", peer = %peer, "served the roster to a removed device");
+        return Ok(None);
+    }
     let link = Link::spawn(framed, Holder::of(held.clone(), &session, sink));
-    let taken = pull_from(&held, &link, session.group()).await?;
-    Ok(Met {
+    let pulled = pull_from(&held, &link, session.group()).await?;
+    Ok(Some(Met {
         peer,
-        taken,
+        entries: pulled.entries,
+        taken: pulled.objects,
         reach: address.zip(listening),
-    })
+    }))
 }

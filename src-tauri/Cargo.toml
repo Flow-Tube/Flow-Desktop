@@ -87,6 +87,8 @@ hpke = { version = "0.15", default-features = false, features = ["alloc", "aes",
 bip39 = "3"
 subtle = "2"
 hex = "0.4"
+# The computer's name in the default sync device name. Already in the tree through other crates.
+gethostname = "1.1"
 # Scrobbling: Last.fm's api_sig is an MD5 digest, and session keys and tokens live in the OS
 # keychain (macOS Keychain, Windows Credential Manager, the Secret Service on Linux).
 md-5 = "0.11"

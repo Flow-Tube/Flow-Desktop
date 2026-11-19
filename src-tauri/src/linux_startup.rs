@@ -147,6 +147,8 @@ pub enum TierReason {
     SafeGraphicsLaunch,
     Trial,
     TrialKept,
+    /// The user set a WebKitGTK renderer variable for this launch.
+    OwnVariables,
 }
 
 impl TierReason {
@@ -162,6 +164,7 @@ impl TierReason {
             Self::SafeGraphicsLaunch => "safe-graphics-launch",
             Self::Trial => "trial",
             Self::TrialKept => "trial-kept",
+            Self::OwnVariables => "own-variables",
         }
     }
 
@@ -179,6 +182,8 @@ pub enum RenderPath {
     /// GPU rendering, with every frame read back and copied through shared memory.
     SharedMemory,
     Software,
+    /// The user's own renderer variables decide it, and Flow does not second-guess them.
+    OwnVariables,
 }
 
 impl RenderPath {
@@ -188,6 +193,7 @@ impl RenderPath {
             Self::Gpu => "gpu",
             Self::SharedMemory => "shared-memory",
             Self::Software => "software",
+            Self::OwnVariables => "own-variables",
         }
     }
 
@@ -280,6 +286,12 @@ struct LaunchFacts {
 impl LaunchFacts {
     fn nvidia_preset(self) -> bool {
         self.nvidia_wayland && !self.user_set_dmabuf
+    }
+
+    /// The user set a renderer variable for this launch and did not ask for safe graphics,
+    /// so the variables decide how the page is drawn.
+    fn own_variables(self) -> bool {
+        self.user_set_dmabuf && !self.safe_graphics
     }
 
     /// The highest tier Flow moves to by itself. Tiers 2 and 3 turn the GPU off, and where
@@ -437,9 +449,30 @@ impl StartupState {
         }
     }
 
+    /// A launch under the user's own renderer variables. Everything Flow chose by itself
+    /// steps aside, so the variables decide the path, and nothing is recorded: a reporter's
+    /// tests of the GPU path crashed, were counted as failed launches, and the tier that
+    /// raised then overrode the same variables on the next try. The choice in Settings is
+    /// the user's too, and stays.
+    fn own_variables_launch(&self) -> LaunchPlan {
+        let tier = self.mode.floor();
+        LaunchPlan {
+            tier,
+            reason: if tier == 0 {
+                TierReason::OwnVariables
+            } else {
+                TierReason::Settings
+            },
+            trial: false,
+        }
+    }
+
     /// Decides this launch and records it. A trial launch is not counted as a
     /// failed startup: if it dies, only the trial failed.
     fn plan_launch(&mut self, version: &str, webkit: &str, facts: LaunchFacts) -> LaunchPlan {
+        if facts.own_variables() {
+            return self.own_variables_launch();
+        }
         // Still running when the last launch ended: nobody kept it.
         if self.trial.is_some_and(|trial| trial.running) {
             self.fail_trial(webkit);
@@ -486,6 +519,9 @@ impl StartupState {
     /// The same decision for a second launch while Flow runs, which is handed
     /// to the running window and must leave the record alone.
     fn peek_launch(&self, version: &str, facts: LaunchFacts) -> LaunchPlan {
+        if facts.own_variables() {
+            return self.own_variables_launch();
+        }
         let tier = self.choose_tier(version, facts);
         LaunchPlan {
             tier,
@@ -506,6 +542,7 @@ impl StartupState {
             return FasterGraphics::Trial;
         }
         if facts.safe_graphics
+            || facts.own_variables()
             || self
                 .trial_target(plan.tier, self.floor(facts), webkit)
                 .is_none()
@@ -544,6 +581,8 @@ pub struct BootReport {
     pub faster: FasterGraphics,
     /// The lowest tier a trial asked for later may use.
     pub floor: u8,
+    /// This launch runs under the user's own renderer variables and is not recorded.
+    pub own_variables: bool,
 }
 
 #[cfg(any(target_os = "linux", test))]
@@ -563,9 +602,14 @@ impl BootReport {
             safe_graphics: facts.safe_graphics,
             mode: state.mode,
             reason: plan.reason,
-            render_path: RenderPath::of(plan.tier, shm_transport),
+            render_path: if facts.own_variables() {
+                RenderPath::OwnVariables
+            } else {
+                RenderPath::of(plan.tier, shm_transport)
+            },
             faster: state.faster_graphics(plan, facts, webkit),
             floor: state.floor(facts),
+            own_variables: facts.own_variables(),
         }
     }
 }
@@ -578,6 +622,13 @@ static BOOT_REPORT: std::sync::OnceLock<BootReport> = std::sync::OnceLock::new()
 #[must_use]
 pub fn boot_report() -> Option<BootReport> {
     BOOT_REPORT.get().copied()
+}
+
+/// A launch under the user's own renderer variables says nothing about the tier Flow chose,
+/// so what happens in it is not written to the record.
+#[cfg(target_os = "linux")]
+fn runs_on_own_variables() -> bool {
+    boot_report().is_some_and(|report| report.own_variables)
 }
 
 /// Mirrors Tauri's `app_data_dir()` on Linux (`$XDG_DATA_HOME` or
@@ -656,6 +707,29 @@ fn tier_vars(
     vars
 }
 
+/// The variables that choose between the direct path, shared memory and no GPU buffers.
+const TRANSPORT_VARS: [&str; 3] = [
+    "WEBKIT_DISABLE_DMABUF_RENDERER",
+    "WEBKIT_FORCE_DMABUF_RENDERER",
+    "WEBKIT_DMABUF_RENDERER_FORCE_SHM",
+];
+
+/// What this launch sets. Where the user set one of [`TRANSPORT_VARS`], Flow sets none of
+/// them: its `FORCE_SHM=1` beside the user's `DISABLE_DMABUF_RENDERER=0` kept shared memory
+/// on and made the user's value do nothing.
+fn launch_vars(
+    tier: u8,
+    x11_available: bool,
+    shm_transport: bool,
+    user_set_transport: bool,
+) -> Vec<(&'static str, &'static str)> {
+    let mut vars = tier_vars(tier, x11_available, shm_transport);
+    if user_set_transport {
+        vars.retain(|(key, _)| !TRANSPORT_VARS.contains(key));
+    }
+    vars
+}
+
 /// An unknown WebKitGTK is treated as an older one, which keeps the whole ladder.
 fn nvidia_software_unreliable(nvidia: bool, version: Option<(u32, u32)>) -> bool {
     nvidia && version.is_some_and(|version| version >= NVIDIA_SOFTWARE_UNRELIABLE_SINCE)
@@ -714,13 +788,9 @@ impl LaunchFacts {
             || Path::new("/sys/module/nvidia_drm").exists();
         let wayland = std::env::var_os("WAYLAND_DISPLAY").is_some()
             && std::env::var("GDK_BACKEND").map_or(true, |backend| backend.contains("wayland"));
-        let user_set_dmabuf = [
-            "WEBKIT_DISABLE_DMABUF_RENDERER",
-            "WEBKIT_FORCE_DMABUF_RENDERER",
-            "WEBKIT_DMABUF_RENDERER_FORCE_SHM",
-        ]
-        .iter()
-        .any(|key| std::env::var_os(key).is_some());
+        let user_set_dmabuf = TRANSPORT_VARS
+            .iter()
+            .any(|key| std::env::var_os(key).is_some());
         let safe_graphics = std::env::args_os().any(|arg| arg == SAFE_GRAPHICS_ARG)
             || std::env::var_os("FLOW_SAFE_GRAPHICS").is_some_and(|value| value == "1");
         Self {
@@ -733,11 +803,11 @@ impl LaunchFacts {
 }
 
 #[cfg(target_os = "linux")]
-fn apply_tier(tier: u8, shm_transport: bool) {
+fn apply_tier(tier: u8, shm_transport: bool, user_set_transport: bool) {
     // SAFETY (every env write below): called at the very start of `run()`,
     // before the Tauri builder spawns any threads or initializes GTK/WebKitGTK.
     let x11 = x11_available(std::env::var_os("DISPLAY").as_deref());
-    for (key, value) in tier_vars(tier, x11, shm_transport) {
+    for (key, value) in launch_vars(tier, x11, shm_transport, user_set_transport) {
         if std::env::var_os(key).is_none() {
             unsafe { std::env::set_var(key, value) };
         }
@@ -852,7 +922,7 @@ pub fn begin(identifier: &str, version: &str) -> BootReport {
     } else {
         state.peek_launch(version, facts)
     };
-    apply_tier(plan.tier, shm_transport);
+    apply_tier(plan.tier, shm_transport, facts.user_set_dmabuf);
     if plan.trial {
         *trial_clock() = Some(TrialClock::Launching {
             gives_up: std::time::Instant::now() + std::time::Duration::from_secs(TRIAL_MOUNT_SECS),
@@ -873,6 +943,9 @@ pub fn begin(identifier: &str, version: &str) -> BootReport {
 /// crashes only end the trial.
 #[cfg(target_os = "linux")]
 pub fn record_crash_loop(identifier: &str) {
+    if runs_on_own_variables() {
+        return;
+    }
     let Some(dir) = data_dir(identifier) else {
         return;
     };
@@ -890,6 +963,9 @@ pub fn record_crash_loop(identifier: &str) {
 /// remembered once the user keeps it, so there it just notes the page is up.
 #[cfg(target_os = "linux")]
 pub fn confirm_render(identifier: &str, version: &str) {
+    if runs_on_own_variables() {
+        return;
+    }
     {
         let mut clock = trial_clock();
         if let Some(current) = *clock {
@@ -1016,8 +1092,8 @@ mod tests {
     use super::{
         BootReport, FailedTrial, FasterGraphics, GraphicsMode, LaunchFacts, LaunchLock, MAX_TIER,
         RenderPath, SCHEMA, StartupState, TierReason, drops_im_module, has_shm_transport,
-        load_state, nvidia_software_unreliable, save_state, tier_vars, try_launch_lock,
-        x11_available,
+        launch_vars, load_state, nvidia_software_unreliable, save_state, tier_vars,
+        try_launch_lock, x11_available,
     };
     use std::ffi::OsStr;
 
@@ -1633,12 +1709,113 @@ mod tests {
 
         let mut nvidia = current();
         assert_eq!(start(&mut nvidia, nvidia_wayland(), true), (1, false));
-        let own_choice = LaunchFacts {
-            nvidia_wayland: true,
+        // The same machine in an X11 session, where the preset does not apply.
+        assert_eq!(start(&mut nvidia, LaunchFacts::default(), true), (0, false));
+    }
+
+    fn own_variables() -> LaunchFacts {
+        LaunchFacts {
             user_set_dmabuf: true,
-            ..LaunchFacts::default()
+            ..nvidia_current()
+        }
+    }
+
+    /// A reporter's tests of the GPU path crashed, raised the tier, and the raised tier then
+    /// overrode the variables they were testing with.
+    #[test]
+    fn a_launch_on_the_users_own_variables_sets_aside_what_flow_chose() {
+        let mut state = StartupState {
+            failed_boots: 2,
+            reason: Some(TierReason::FailedLaunches),
+            ..older_record(2, V2)
         };
-        assert_eq!(start(&mut nvidia, own_choice, true), (0, false));
+        state.schema = SCHEMA;
+        let before = state.clone();
+
+        let plan = state.plan_launch(V2, WEBKIT, own_variables());
+        assert_eq!((plan.tier, plan.trial), (0, false));
+        assert_eq!(plan.reason, TierReason::OwnVariables);
+        assert_eq!(plan, state.peek_launch(V2, own_variables()));
+        // Nothing is recorded, so a crash here can't raise the tier of a later launch.
+        assert_eq!(state, before);
+
+        let report = BootReport::new(&state, plan, own_variables(), 2, WEBKIT, true);
+        assert!(report.own_variables);
+        assert_eq!(report.render_path, RenderPath::OwnVariables);
+        assert_eq!(report.faster, FasterGraphics::None);
+        assert_eq!(report.reason.as_str(), "own-variables");
+        assert_eq!(report.render_path.as_str(), "own-variables");
+
+        // Without the variables, the record decides again.
+        assert_eq!(start(&mut state, LaunchFacts::default(), true).0, 3);
+    }
+
+    #[test]
+    fn a_trial_waits_while_the_users_own_variables_are_in_charge() {
+        let mut state = older_record(1, V2);
+        state.schema = SCHEMA;
+        assert!(state.request_trial(1, 0, WEBKIT));
+        let queued = state.clone();
+        assert_eq!(start(&mut state, own_variables(), false), (0, false));
+        assert_eq!(state, queued);
+        assert_eq!(start(&mut state, LaunchFacts::default(), false), (0, true));
+    }
+
+    /// The choice in Settings and a safe graphics launch are the user's own too.
+    #[test]
+    fn the_users_own_variables_leave_their_other_choices_alone() {
+        let safe_mode = StartupState {
+            mode: GraphicsMode::Safe,
+            ..current()
+        };
+        let plan = safe_mode.peek_launch(V2, own_variables());
+        assert_eq!((plan.tier, plan.reason), (MAX_TIER, TierReason::Settings));
+
+        let safe_launch = LaunchFacts {
+            safe_graphics: true,
+            ..own_variables()
+        };
+        assert!(!safe_launch.own_variables());
+        let mut state = current();
+        let plan = state.plan_launch(V2, WEBKIT, safe_launch);
+        assert_eq!(
+            (plan.tier, plan.reason),
+            (MAX_TIER, TierReason::SafeGraphicsLaunch)
+        );
+        assert_eq!(state.failed_boots, 1);
+    }
+
+    #[test]
+    fn flow_sets_no_transport_variable_beside_one_the_user_set() {
+        let keys = |tier, user_set| -> Vec<&str> {
+            launch_vars(tier, true, true, user_set)
+                .into_iter()
+                .map(|(key, _)| key)
+                .collect()
+        };
+        assert_eq!(keys(1, true), ["__NV_DISABLE_EXPLICIT_SYNC"]);
+        assert_eq!(
+            keys(MAX_TIER, true),
+            [
+                "__NV_DISABLE_EXPLICIT_SYNC",
+                "WEBKIT_DISABLE_COMPOSITING_MODE",
+                "GDK_BACKEND"
+            ]
+        );
+        for tier in 0..=MAX_TIER {
+            assert_eq!(
+                launch_vars(tier, true, true, false),
+                tier_vars(tier, true, true)
+            );
+            assert_eq!(
+                launch_vars(tier, true, false, false),
+                tier_vars(tier, true, false)
+            );
+        }
+        assert_eq!(
+            launch_vars(1, true, false, true),
+            [("__NV_DISABLE_EXPLICIT_SYNC", "1")]
+        );
     }
 
     #[test]

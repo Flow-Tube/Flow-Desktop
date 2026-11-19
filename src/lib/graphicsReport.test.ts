@@ -39,6 +39,20 @@ describe("formatGraphics", () => {
   });
 });
 
+describe("a launch on the user's own variables", () => {
+  const own = { ...report, tierReason: "own-variables", renderPath: "own-variables" };
+
+  it("says so in place of a path Flow did not choose", () => {
+    expect(formatGraphics(own)).toBe(
+      "Tier 0 (started with your own variables), path set by your WebKitGTK variables, Automatic mode, x11, appimage, WebKitGTK 2.48.3",
+    );
+  });
+
+  it("counts as a slow path, since Flow can't tell", () => {
+    expect(isSlowRenderPath(own)).toBe(true);
+  });
+});
+
 describe("isSlowRenderPath", () => {
   it("is false off Linux and on the GPU path", () => {
     expect(isSlowRenderPath(null)).toBe(false);

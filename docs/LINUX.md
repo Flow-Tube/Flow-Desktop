@@ -115,12 +115,19 @@ rpm and AppImage builds keep it in
 the folder name).
 
 Advanced users can set the WebKitGTK variables themselves before starting
-Flow. Your own values always win:
+Flow. Your own values always win. When you set one of the three
+`WEBKIT_*DMABUF*` variables below, Flow also sets none of the others, ignores
+the graphics mode it chose or remembered by itself, and does not remember how
+that start went, so a test that crashes changes nothing for later starts.
+Your choice in Settings and "Start with safe graphics" still apply.
+Settings > About then says "started with your own variables":
 
 - `WEBKIT_DISABLE_DMABUF_RENDERER=1` turns off GPU buffer sharing, and `=0`
   turns it back on when Flow turned it off.
 - `WEBKIT_DISABLE_COMPOSITING_MODE=1` draws the page in software.
 - `WEBKIT_DMABUF_RENDERER_FORCE_SHM=1` copies frames through shared memory.
+- `WEBKIT_FORCE_DMABUF_RENDERER=1` keeps the direct GPU path where your
+  distribution's WebKitGTK turns it off.
 - `GDK_BACKEND=x11` runs the window through X11 or XWayland.
 - On NVIDIA, to try the direct GPU path yourself, start Flow with
   `WEBKIT_DMABUF_RENDERER_FORCE_SHM=0 __NV_DISABLE_EXPLICIT_SYNC=1`, and on

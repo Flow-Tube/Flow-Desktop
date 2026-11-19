@@ -120,6 +120,24 @@ describe("MediaEqEngine", () => {
     expect(ctx.sources.slice(1)).toEqual([video, audio, nextAudio]);
   });
 
+  it("never routes a video on WebKitGTK, which would knock its clock off and leak the element", async () => {
+    vi.doMock("../platform", () => ({ IS_LINUX_RUNTIME: true }));
+    try {
+      const { engine, available } = await freshEngine();
+      expect(available()).toBe(false);
+      const video = media<HTMLVideoElement>("video");
+      const audio = media<HTMLAudioElement>("audio");
+      engine.setElements([video, audio]);
+      engine.setEq(rock, true);
+      engine.setBoost(2);
+      video.dispatchEvent(new Event("play"));
+      await settle();
+      expect(contexts).toHaveLength(0);
+    } finally {
+      vi.doUnmock("../platform");
+    }
+  });
+
   it("falls back to plain playback when WebAudio returns silence", async () => {
     probeSignal = 0;
     const { engine, available } = await freshEngine();

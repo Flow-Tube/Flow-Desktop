@@ -134,6 +134,14 @@ Settings > About then says "started with your own variables":
   Debian, Ubuntu and Gentoo also `WEBKIT_FORCE_DMABUF_RENDERER=1`. Play a
   video before you rely on it.
 
+## Equalizer and Volume boost on videos
+
+On Linux the equalizer and Volume boost do not apply to videos and Shorts,
+and their settings show "Not available". WebKitGTK passes a video's sound to
+them about a second early, which pushed the sound out of step with the
+picture after a pause, and it never frees a video that used them, so Flow
+ran out of open files and reloaded. The equalizer still works for music.
+
 ## Video codecs
 
 Video plays through WebKitGTK and your system's GStreamer plugins. If sound

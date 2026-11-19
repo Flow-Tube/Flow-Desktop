@@ -27,7 +27,9 @@ use flow_desktop_lib::sync2::linking::{
 };
 use flow_desktop_lib::sync2::live_message::{LiveMessage, Now, PlayState};
 use flow_desktop_lib::sync2::live_seal::LiveKeys;
-use flow_desktop_lib::sync2::membership::{leave_group, member_keys, new_epoch, rename_device};
+use flow_desktop_lib::sync2::membership::{
+    leave_group, member_keys, new_epoch, remove_devices, rename_device,
+};
 use flow_desktop_lib::sync2::pairing::pairing_proof;
 use flow_desktop_lib::sync2::paths::log_path;
 use flow_desktop_lib::sync2::pipe::{Pipe, listen_on};
@@ -338,6 +340,78 @@ async fn a_leaving_member_passes_its_leave_to_a_member_it_reaches() {
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
     panic!("the member never pulled the leave");
+}
+
+/// `a` removes `b`, which hasn't heard of it yet.
+async fn b_removed(g: &Group) -> (SqlitePool, SqlitePool) {
+    let (pool_a, pool_b) = (holding(g).await, holding(g).await);
+    let session_a = Session::open(&pool_a, HeldStore::new(pool_a.clone()), &g.a)
+        .await
+        .unwrap();
+    remove_devices(&pool_a, &session_a, &g.a, &[hex::encode(g.b.did)])
+        .await
+        .unwrap();
+    (pool_a, pool_b)
+}
+
+#[tokio::test]
+async fn a_removed_device_learns_its_removal_over_lan_and_is_shut_out() {
+    let g = group().await;
+    let (pool_a, pool_b) = b_removed(&g).await;
+    let port = listening(&pool_a, &g.a).await;
+
+    // B still says hello under epoch 0, which A answers for a device it removed.
+    let met = meet(&pool_b, &g.b, ("127.0.0.1", port), None, &[], no_live())
+        .await
+        .unwrap();
+    assert_eq!(met.peer, hex::encode(g.a.did));
+    assert!(met.entries > 0, "the removal arrives, which starts a sync");
+
+    assert!(matches!(
+        Session::open(&pool_b, HeldStore::new(pool_b.clone()), &g.b).await,
+        Err(EngineError::Removed)
+    ));
+}
+
+#[tokio::test]
+async fn a_removed_device_is_served_the_roster_and_nothing_else() {
+    let g = group().await;
+    let (pool_a, pool_b) = b_removed(&g).await;
+    // Written after the removal: a member that met A would pull it.
+    watch(&pool_a, "aaaaaaaaaaa").await;
+    push(&pool_a, &g.a).await;
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let (told, mut heard) = tokio::sync::mpsc::unbounded_channel();
+    let met = move |met: Met| {
+        let _ = told.send(met.peer);
+    };
+    tokio::spawn(serve(listener, pool_a, g.a.clone(), met, no_live()));
+
+    let met = meet(&pool_b, &g.b, ("127.0.0.1", port), None, &[], no_live())
+        .await
+        .unwrap();
+    assert_eq!(met.taken, 0);
+    let held_b = HeldStore::new(pool_b.clone());
+    for seq in 1..=3 {
+        let path = log_path(&hex::encode(g.a.did), seq);
+        assert!(held_b.get_object(&path).await.unwrap().is_none());
+    }
+    // A neither pulls from B nor counts it as a member it met.
+    assert!(heard.try_recv().is_err());
+}
+
+#[tokio::test]
+async fn a_member_opens_no_session_with_a_device_it_removed() {
+    let g = group().await;
+    let (pool_a, pool_b) = b_removed(&g).await;
+    let port = listening(&pool_b, &g.b).await;
+
+    // B answers the lower epoch A falls back to, and A refuses it there.
+    assert!(matches!(
+        meet(&pool_a, &g.a, ("127.0.0.1", port), None, &[], no_live()).await,
+        Err(EngineError::Removed)
+    ));
 }
 
 fn loopback() -> Vec<String> {

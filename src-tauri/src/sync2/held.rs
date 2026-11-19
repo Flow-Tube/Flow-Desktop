@@ -47,18 +47,20 @@ impl HeldStore {
     }
 
     /// Keeps an entry under its store name; one already held is left as it is. Peers send entries
-    /// as JSON, so one that wouldn't read back is refused.
-    pub async fn hold_entry(&self, entry: &Entry) -> Result<()> {
+    /// as JSON, so one that wouldn't read back is refused. True when it wasn't held before.
+    pub async fn hold_entry(&self, entry: &Entry) -> Result<bool> {
         parse_entry(&serde_json::to_value(entry).map_err(|_| StoreError::Malformed)?)?;
         let seq = i64::try_from(entry.seq).map_err(|_| StoreError::Malformed)?;
-        sqlx::query("INSERT OR IGNORE INTO sync2_held_roster (name, seq, entry) VALUES (?, ?, ?)")
-            .bind(roster_path(entry.seq, &entry_hash(entry)))
-            .bind(seq)
-            .bind(String::from_utf8_lossy(&to_canonical_json(entry)).into_owned())
-            .execute(&self.pool)
-            .await
-            .map_err(StoreError::Local)?;
-        Ok(())
+        let held = sqlx::query(
+            "INSERT OR IGNORE INTO sync2_held_roster (name, seq, entry) VALUES (?, ?, ?)",
+        )
+        .bind(roster_path(entry.seq, &entry_hash(entry)))
+        .bind(seq)
+        .bind(String::from_utf8_lossy(&to_canonical_json(entry)).into_owned())
+        .execute(&self.pool)
+        .await
+        .map_err(StoreError::Local)?;
+        Ok(held.rows_affected() > 0)
     }
 
     pub async fn hold_key(&self, epoch: u32, kc: &str, name: &str, bytes: &[u8]) -> Result<()> {

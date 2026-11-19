@@ -211,6 +211,36 @@ fn device_key<S: Store>(session: &Session<'_, S>, did: &str) -> Result<[u8; 32]>
         .ok_or(EngineError::Removed)
 }
 
+/// The signing key of `did` when this device has applied its removal and it was a device in
+/// `epoch`, the one its hello came under. It hasn't read its removal yet, so it gets the roster
+/// and nothing else ([`Holder::roster_only`]).
+fn removed_device_key<S: Store>(
+    session: &Session<'_, S>,
+    did: &str,
+    epoch: u32,
+) -> Option<[u8; 32]> {
+    if session.roster().members.contains_key(did) {
+        return None;
+    }
+    session
+        .senders()
+        .get(did)
+        .filter(|sender| {
+            sender.role == Role::Device
+                && sender
+                    .until
+                    .is_some_and(|until| (sender.since..=until).contains(&epoch))
+        })
+        .map(|sender| sender.sig)
+}
+
+/// Whether the peer that said hello is a current device or one this device has seen removed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Standing {
+    Member,
+    Removed,
+}
+
 fn did_bytes(did: &str) -> Result<[u8; 16]> {
     hex::decode(did)
         .ok()
@@ -295,13 +325,13 @@ where
 }
 
 /// The advertising side: answers `first`, the peer's first message, under any epoch this device
-/// has a key for. Returns the peer and the port it listens on, when it said.
+/// has a key for. Returns the peer, the port it listens on when it said, and its standing.
 pub async fn hello_as_server<S, T>(
     mut socket: WsChannel<S>,
     first: &[u8],
     session: &mut Session<'_, T>,
     device: &MemberSecrets,
-) -> Result<(Framed<S>, String, Option<u16>)>
+) -> Result<(Framed<S>, String, Option<u16>, Standing)>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send,
     T: Store,
@@ -317,7 +347,13 @@ where
         .as_str()
         .ok_or(EngineError::Unexpected)?
         .to_owned();
-    let peer_key = device_key(session, &peer)?;
+    let (peer_key, standing) = match device_key(session, &peer) {
+        Ok(key) => (key, Standing::Member),
+        Err(error) => (
+            removed_device_key(session, &peer, epoch).ok_or(error)?,
+            Standing::Removed,
+        ),
+    };
     let client_nonce = field::<NONCE_SIZE>(&hello, "n")?;
     let listening = hello["p"].as_u64().and_then(|p| u16::try_from(p).ok());
     let (client, server) = (did_bytes(&peer)?, device.did);
@@ -361,7 +397,7 @@ where
         sent: 0,
         received: 0,
     };
-    Ok((framed, peer, listening))
+    Ok((framed, peer, listening, standing))
 }
 
 /// Where live envelopes that arrive in `live` requests go.
@@ -373,6 +409,8 @@ pub struct Holder {
     pub group: [u8; 16],
     pub senders: BTreeMap<String, Sender>,
     pub live: LiveSink,
+    /// The peer was removed, so only `roster` is answered.
+    pub peer_removed: bool,
 }
 
 impl Holder {
@@ -382,6 +420,17 @@ impl Holder {
             group: *session.group(),
             senders: session.senders().clone(),
             live,
+            peer_removed: false,
+        }
+    }
+
+    /// What a removed peer is served: the roster, so it reads its removal and stops
+    /// (spec/protocol.md, Removal). No keys, objects or live messages, and nothing it sends is
+    /// taken.
+    pub fn roster_only<T: Store>(store: HeldStore, session: &Session<'_, T>) -> Self {
+        Self {
+            peer_removed: true,
+            ..Self::of(store, session, Arc::new(|_| {}))
         }
     }
 
@@ -391,6 +440,29 @@ impl Holder {
             error: (!found).then(|| "not_found".to_owned()),
             ..Response::default()
         };
+        if self.peer_removed && !matches!(request, Request::Roster { .. }) {
+            // An empty listing rather than an error, so the peer's pull ends normally and it
+            // goes on to apply the roster it just took.
+            return Ok(match request {
+                Request::List { .. } => (
+                    Response {
+                        ok: true,
+                        paths: Some(Vec::new()),
+                        blobs: Some(Vec::new()),
+                        ..Response::default()
+                    },
+                    Vec::new(),
+                ),
+                Request::Put { .. } => (
+                    Response {
+                        error: Some("invalid".to_owned()),
+                        ..Response::default()
+                    },
+                    Vec::new(),
+                ),
+                _ => (found(false), Vec::new()),
+            });
+        }
         Ok(match request {
             Request::Roster { after } => (
                 Response {
@@ -641,9 +713,40 @@ mod tests {
             group: [0; 16],
             senders: BTreeMap::new(),
             live: Arc::new(|_| {}),
+            peer_removed: false,
         };
         let link = Link::spawn(framed, holder);
         assert!(matches!(link.roster(-1).await, Err(EngineError::TimedOut)));
+    }
+
+    #[tokio::test]
+    async fn a_removed_peer_is_answered_with_nothing_but_the_roster() {
+        let pool = sqlx::SqlitePool::connect_lazy("sqlite::memory:").unwrap();
+        let holder = Holder {
+            store: HeldStore::new(pool),
+            group: [0; 16],
+            senders: BTreeMap::new(),
+            live: Arc::new(|_| {}),
+            peer_removed: true,
+        };
+        let (kc, path) = ("k".to_owned(), "a/log/1".to_owned());
+        for request in [
+            Request::Key {
+                epoch: 0,
+                kc,
+                name: "chain".to_owned(),
+            },
+            Request::Get { path: path.clone() },
+            Request::Put { path },
+        ] {
+            let (response, bytes) = holder.answer(request, b"object").await.unwrap();
+            assert!(!response.ok && bytes.is_empty());
+        }
+        let vv = BTreeMap::from([("a".to_owned(), 0)]);
+        let (response, _) = holder.answer(Request::List { vv }, &[]).await.unwrap();
+        assert!(response.ok);
+        assert_eq!(response.paths, Some(Vec::new()));
+        assert_eq!(response.blobs, Some(Vec::new()));
     }
 
     #[test]

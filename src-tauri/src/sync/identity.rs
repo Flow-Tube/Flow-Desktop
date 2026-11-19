@@ -14,7 +14,8 @@ pub fn new_device_id() -> String {
     uuid::Uuid::new_v4().to_string()
 }
 
-/// A friendly default device name, e.g. `"Flow Desktop (Windows)"`.
+/// A friendly default device name with this computer's name, e.g. `"Flow Desktop (MY-PC -
+/// Windows)"`, so two installs read apart in a group. A debug build adds `Dev`.
 pub fn default_device_name() -> String {
     let os = match std::env::consts::OS {
         "windows" => "Windows",
@@ -22,7 +23,23 @@ pub fn default_device_name() -> String {
         "linux" => "Linux",
         other => other,
     };
-    format!("Flow Desktop ({os})")
+    let host = gethostname::gethostname()
+        .into_string()
+        .ok()
+        .and_then(|name| {
+            // `MacBook-Pro.local` reads as `MacBook-Pro`.
+            let short = name.split('.').next().unwrap_or_default().trim().to_owned();
+            (!short.is_empty() && short != "localhost").then_some(short)
+        });
+
+    let label = match (host, cfg!(debug_assertions)) {
+        (Some(host), true) => format!("{host} - {os}, Dev"),
+        (Some(host), false) => format!("{host} - {os}"),
+        (None, true) => format!("{os}, Dev"),
+        (None, false) => os.to_string(),
+    };
+
+    format!("Flow Desktop ({label})")
 }
 
 // Tests for this module live in `tests/sync_phase1.rs` (integration test) — see the note in

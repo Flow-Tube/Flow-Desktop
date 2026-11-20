@@ -1395,6 +1395,7 @@
   "settings_shortcuts_search": "Search shortcuts",
   "settings_shortcuts_edit_hint": "Click a key to change it, or + to add one. While Flow waits for a key, Esc cancels and Backspace removes it.",
   "settings_shortcuts_no_match": "No shortcut matches your search.",
+  "grid_columns_hint": "%s per row",
   "settings_group_trackpad": "Trackpad and mouse",
   "settings_trackpad_gestures": "Trackpad gestures",
   "settings_trackpad_gestures_desc": "Swipe sideways with two fingers to go back or forward, or over a video to move through it, turn the wheel over a seek bar to move by the seek step, and pinch a feed to change the size of its thumbnails. Pinch to zoom a video works either way.",

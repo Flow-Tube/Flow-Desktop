@@ -33,12 +33,12 @@ interface GestureEventLike extends UIEvent {
  * `onZoom` returns whether it took the event, and a taken event is cancelled, so the page never
  * zooms itself. A pinch is always cancelled, since the whole page would zoom otherwise.
  */
-export function listenForZoomInput(element: HTMLElement, onZoom: (input: ZoomInput) => boolean): () => void {
+export function listenForZoomInput(element: HTMLElement | Window, onZoom: (input: ZoomInput) => boolean): () => void {
   // Set while a WebKit pinch runs, so a wheel event WebKit may send alongside it isn't counted twice.
   let pinchScale: number | null = null;
 
-  const onWheel = (event: WheelEvent) => {
-    if (!(event.ctrlKey || event.metaKey) || pinchScale !== null) return;
+  const onWheel = (event: Event) => {
+    if (!(event instanceof WheelEvent) || !(event.ctrlKey || event.metaKey) || pinchScale !== null) return;
     const factor = wheelZoomFactor(event.deltaY, event.deltaMode);
     if (!onZoom({ factor, clientX: event.clientX, clientY: event.clientY })) return;
     event.preventDefault();

@@ -1,5 +1,5 @@
 import type { StringKey } from "../i18n/index";
-import { MUSIC_COMMANDS } from "../musicPlayerKeys";
+import { MUSIC_COMMANDS, MUSIC_DOCK_COMMANDS } from "../musicPlayerKeys";
 import { SHORTS_COMMANDS } from "../shortsKeys";
 import { TAB_COMMANDS } from "../tabs/tabShortcuts";
 import { VIDEO_COMMANDS } from "../videoPlayerKeys";
@@ -18,5 +18,6 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
   { scope: "tabs", title: "keyboard_shortcuts_tabs", commands: TAB_COMMANDS },
   { scope: "video", title: "keyboard_shortcuts_video", commands: VIDEO_COMMANDS },
   { scope: "music", title: "keyboard_shortcuts_music", commands: MUSIC_COMMANDS },
+  { scope: "dock", title: "keyboard_shortcuts_music_bar", commands: MUSIC_DOCK_COMMANDS },
   { scope: "shorts", title: "keyboard_shortcuts_shorts", commands: SHORTS_COMMANDS },
 ];

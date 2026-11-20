@@ -61,6 +61,31 @@ export const MUSIC_COMMANDS: readonly MusicCommand[] = [
   music("close", "keyboard_shortcut_close_player", ["Escape"], () => () => null, true),
 ];
 
+type DockCommand = ShortcutCommand<MusicPlayerKeyAction>;
+
+const dock = (id: string, label: DockCommand["label"], keys: readonly string[], action: DockCommand["action"]): DockCommand => ({
+  id: `dock.${id}`,
+  scope: "dock",
+  label,
+  keys,
+  action,
+});
+
+/**
+ * The music bar's keys, while the full player is closed. Space and the arrows stay with the page,
+ * which scrolls with them, so only letter keys are here.
+ */
+export const MUSIC_DOCK_COMMANDS: readonly DockCommand[] = [
+  dock("play-pause", "keyboard_shortcut_play_pause", ["K"], () => ({ kind: "toggle-play" })),
+  dock("mute", "keyboard_shortcut_mute", ["M"], () => ({ kind: "toggle-mute" })),
+  dock("next", "keyboard_shortcut_next", ["Shift+N"], () => ({ kind: "next" })),
+  dock("previous", "keyboard_shortcut_previous", ["Shift+P"], () => ({ kind: "previous" })),
+];
+
+export function musicDockKeyAction(event: KeyLike, isMac = IS_MACOS_RUNTIME): MusicPlayerKeyAction | null {
+  return findShortcut(MUSIC_DOCK_COMMANDS, event, isMac)?.action ?? null;
+}
+
 export function musicPlayerKeyAction(event: KeyLike, seekSeconds: number, isMac = IS_MACOS_RUNTIME): MusicPlayerKeyAction | null {
   return findShortcut(MUSIC_COMMANDS, event, isMac)?.action(seekSeconds) ?? null;
 }

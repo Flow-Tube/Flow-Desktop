@@ -20,6 +20,7 @@ import {
 import { BarSwipeReveal } from "./BarSwipeReveal";
 import { FullLayer } from "./FullLayer";
 import { MiniBar, MiniChrome, useMiniPlayer } from "./MiniLayer";
+import { useMusicDockKeyboard } from "../../../lib/useMusicDockKeyboard";
 
 const ENTER = { type: "spring", stiffness: 420, damping: 38, mass: 0.9 } as const;
 const REST_SHADOW = "0 8px 24px rgb(0 0 0 / 0.35)";
@@ -58,6 +59,7 @@ export function MusicPlayerSheet() {
   const mini = useMiniPlayer();
   const full = useFullPlayerShown();
   const visible = mini.visible || full.shown;
+  useMusicDockKeyboard(mini.visible && !full.open);
   const anchorRef = useRef<HTMLDivElement | null>(null);
   const restRadius = mini.visible ? mini.restRadius : 0;
 

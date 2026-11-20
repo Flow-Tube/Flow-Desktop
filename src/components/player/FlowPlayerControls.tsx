@@ -620,9 +620,10 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
           shouldShowControls ? "opacity-100" : "opacity-0"
         )}
       >
-        {/* The scrim only covers the band the controls sit in. Spread over the whole player it was
-            blended into every video frame, across every pixel of the picture. */}
-        <div className="absolute inset-x-0 bottom-0 -z-10 h-56 max-h-full bg-gradient-to-t from-chrome-black/85 via-chrome-black/40 to-transparent" />
+        {/* The scrim only covers the band the controls sit in, and that band shrinks with the player, so a
+            small player is not mostly shade (#719). Spread over the whole player it was also blended into
+            every video frame, across every pixel of the picture. */}
+        <div className="absolute inset-x-0 bottom-0 -z-10 h-[clamp(7rem,38%,12rem)] max-h-full bg-gradient-to-t from-chrome-black/70 via-chrome-black/25 to-transparent" />
         <div
           className="pointer-events-auto"
           onClick={(event) => event.stopPropagation()}

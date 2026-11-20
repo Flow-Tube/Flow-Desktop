@@ -36,7 +36,8 @@ import { isWatched as isWatchedPosition, type WatchedThreshold } from '../../lib
 import { ThumbnailWatchProgress } from './ThumbnailWatchProgress';
 import { VideoDetailsDialog } from './VideoDetailsDialog';
 import { useUiStore } from '../../store/useUiStore';
-import { showSaveFailedToast, showSaveToast } from '../../lib/saveToast';
+import { showSaveToast } from '../../lib/saveToast';
+import { toggleWatchLaterWithToast } from '../../lib/watchLaterToggle';
 import { usePlaylistModalStore } from '../../store/usePlaylistModalStore';
 import { usePlayerStore } from '../../store/usePlayerStore';
 import { useDownloadStore } from '../../store/useDownloadStore';
@@ -214,8 +215,6 @@ function VideoCardComponent({
   const isSavedToWatchLater = useWatchLaterStore((s) => s.ids.has(video.id));
   const isReminded = useUpcomingReminderStore((s) => s.ids.has(video.id));
   const toggleReminder = useUpcomingReminderStore((s) => s.toggle);
-  const saveToWatchLater = useWatchLaterStore((s) => s.add);
-  const removeFromWatchLater = useWatchLaterStore((s) => s.remove);
 
   const dearrowEnabled = useSettingsStore((s) => s.dearrowEnabled);
   const titleClampStyle = getTitleClampStyle(
@@ -391,36 +390,7 @@ function VideoCardComponent({
 
   const toastItem = { title: displayTitle, image: displayThumbnail, shape: "landscape" as const };
 
-  const handleToggleWatchLater = async () => {
-    const removing = isSavedToWatchLater;
-    try {
-      if (removing) {
-        await removeFromWatchLater(video.id);
-        showSaveToast({
-          destination: { kind: "watchLater" },
-          item: toastItem,
-          removed: true,
-          undo: () => saveToWatchLater(video),
-        });
-        return;
-      }
-
-      await saveToWatchLater(video);
-      showSaveToast({
-        destination: { kind: "watchLater" },
-        item: toastItem,
-        undo: () => removeFromWatchLater(video.id),
-      });
-    } catch (error) {
-      console.error("Failed to update Watch Later", error);
-      showSaveFailedToast({
-        destination: { kind: "watchLater" },
-        item: toastItem,
-        removed: removing,
-        retry: handleToggleWatchLater,
-      });
-    }
-  };
+  const handleToggleWatchLater = () => toggleWatchLaterWithToast(video, toastItem);
 
   const handleAddToQueue = () => {
     const player = usePlayerStore.getState();

@@ -67,6 +67,7 @@ DOWNLOADS
 - The download cards in the corner no longer re-measure the page on every progress update.
 
 FIXES
+- Keyboard shortcuts now work with an Arabic, Persian, Urdu, Russian, Greek or other non-Latin keyboard layout. K, J, L, M, F, the tab keys and Ctrl or Cmd+K are read by where they sit on the keyboard, as on YouTube.
 - Fixed hidden helper windows staying open until Flow quit when a video took too long to resolve, which made Flow use more memory the longer it ran.
 - Preparing playback for one video no longer waits behind a slow token request for another.
 - Fixed covers and artwork turning into placeholders after Flow had been open for about six hours.

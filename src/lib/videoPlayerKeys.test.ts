@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { VIDEO_KEY_BINDINGS, videoPlayerKeyAction } from "./videoPlayerKeys";
+import { videoPlayerKeyAction as actionFor } from "./videoPlayerKeys";
+
+const videoPlayerKeyAction = (key: string, shiftKey = false) => actionFor({ key, shiftKey });
 
 describe("videoPlayerKeyAction", () => {
   it("maps YouTube's player keys", () => {
@@ -42,8 +44,4 @@ describe("videoPlayerKeyAction", () => {
     expect(videoPlayerKeyAction("x")).toEqual({ kind: "zoom-reset" });
   });
 
-  it("gives every key one meaning", () => {
-    const keys = VIDEO_KEY_BINDINGS.flatMap((binding) => binding.keys.map((key) => `${binding.shift ? "shift+" : ""}${key}`));
-    expect(new Set(keys).size).toBe(keys.length);
-  });
 });

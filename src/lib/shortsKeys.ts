@@ -1,5 +1,7 @@
-import { shortcutKey, type ShortcutKeyEvent } from "./keyMap";
-import { keyBelongsToTarget } from "./musicPlayerKeys";
+import { IS_MACOS_RUNTIME } from "./platform";
+import type { KeyLike } from "./shortcuts/chord";
+import { DIGIT_CHORDS, findShortcut, type ShortcutCommand } from "./shortcuts/command";
+import { keyBelongsToTarget } from "./shortcuts/target";
 
 export type ShortsKeyAction =
   | { type: "page"; offset: 1 | -1 }
@@ -8,45 +10,40 @@ export type ShortsKeyAction =
   | { type: "seek"; direction: 1 | -1 }
   | { type: "jump"; tenths: number };
 
+type ShortsCommand = ShortcutCommand<ShortsKeyAction>;
+
+const shorts = (
+  id: string,
+  label: ShortsCommand["label"],
+  keys: readonly string[],
+  action: ShortsCommand["action"],
+  fixed?: boolean,
+): ShortsCommand => ({ id: `shorts.${id}`, scope: "shorts", label, keys, action, ...(fixed ? { fixed } : {}) });
+
 /** Up and Down page between Shorts, as on the web, so the volume stays with the wheel and the slider. */
-export function shortsKeyAction(event: ShortcutKeyEvent & { shiftKey: boolean }): ShortsKeyAction | null {
-  const key = shortcutKey(event);
-  if (event.shiftKey) {
-    if (key === "n") return { type: "page", offset: 1 };
-    if (key === "p") return { type: "page", offset: -1 };
-    return null;
-  }
-  switch (key) {
-    case "arrowup":
-      return { type: "page", offset: -1 };
-    case "arrowdown":
-      return { type: "page", offset: 1 };
-    case "m":
-      return { type: "mute" };
-    case " ":
-    case "k":
-      return { type: "toggle" };
-    case "arrowleft":
-    case "j":
-      return { type: "seek", direction: -1 };
-    case "arrowright":
-    case "l":
-      return { type: "seek", direction: 1 };
-    default:
-      return /^[0-9]$/.test(key) ? { type: "jump", tenths: Number(key) } : null;
-  }
+export const SHORTS_COMMANDS: readonly ShortsCommand[] = [
+  shorts("next", "keyboard_shortcut_next", ["ArrowDown", "Shift+N"], () => ({ type: "page", offset: 1 })),
+  shorts("previous", "keyboard_shortcut_previous", ["ArrowUp", "Shift+P"], () => ({ type: "page", offset: -1 })),
+  shorts("play-pause", "keyboard_shortcut_play_pause", ["Space", "K"], () => ({ type: "toggle" })),
+  shorts("mute", "keyboard_shortcut_mute", ["M"], () => ({ type: "mute" })),
+  shorts("seek-back", "keyboard_shortcut_seek_back", ["ArrowLeft", "J"], () => ({ type: "seek", direction: -1 })),
+  shorts("seek-forward", "keyboard_shortcut_seek_forward", ["ArrowRight", "L"], () => ({ type: "seek", direction: 1 })),
+  shorts("seek-percent", "keyboard_shortcut_seek_percent", DIGIT_CHORDS, (key) => ({ type: "jump", tenths: Number(key) }), true),
+];
+
+export function shortsKeyAction(event: KeyLike, isMac = IS_MACOS_RUNTIME): ShortsKeyAction | null {
+  return findShortcut(SHORTS_COMMANDS, event, isMac)?.action ?? null;
 }
 
 /**
  * Listens ahead of the video player's own keys, which would otherwise also reach a mini player
- * still running behind the Shorts page. Typing in a field, a focused control's own keys and keys
- * held with Ctrl, Alt or Meta stay with whatever has them, and a dialog on top of the page keeps
- * them all. Focus may still be outside a dialog, so the dialog check isn't on the key's target.
+ * still running behind the Shorts page. Typing in a field and a focused control's own keys stay
+ * with whatever has them, and a dialog on top of the page keeps them all. Focus may still be outside
+ * a dialog, so the dialog check isn't on the key's target.
  */
 export function listenForShortsKeys(handle: (action: ShortsKeyAction, event: KeyboardEvent) => boolean): () => void {
   const onKey = (event: KeyboardEvent) => {
     if (keyBelongsToTarget(event.target, event.key)) return;
-    if (event.ctrlKey || event.metaKey || event.altKey) return;
     if (document.querySelector('[aria-modal="true"]:not([aria-hidden="true"])')) return;
     const action = shortsKeyAction(event);
     if (!action || !handle(action, event)) return;

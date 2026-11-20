@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { SongItem } from '../types/music';
-import { shortcutKey } from './keyMap';
+import { shortcutKey } from './shortcuts/eventKey';
 
 const songId = (song: SongItem) => song.videoId ?? song.id;
 

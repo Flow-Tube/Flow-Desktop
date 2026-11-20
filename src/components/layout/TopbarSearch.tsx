@@ -4,7 +4,6 @@ import { Loader2, Search, X } from 'lucide-react';
 import { SearchSuggestionsPanel, suggestionOptionId } from '../search/SearchSuggestionsPanel';
 import { resolveChannelId } from '../../lib/api/youtube';
 import { getString } from '../../lib/i18n/index';
-import { IS_MACOS_RUNTIME } from '../../lib/platform';
 import { buildSuggestionColumns, isUnsupportedLink, type SuggestionRow } from '../../lib/searchSuggestions';
 import { useAiListMatcher } from '../../lib/aiList/useAiList';
 import { withoutAiMusic } from '../../lib/aiList/music';
@@ -18,7 +17,8 @@ import { useMusicHiddenFilter } from '../../store/useMusicActionsStore';
 import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
 import { useMusicEnabled } from '../../lib/useMusicContent';
 import { useSearchHistoryStore, useVisibleSearchHistory } from '../../store/useSearchHistoryStore';
-import { shortcutKey } from '../../lib/keyMap';
+import { appShortcut } from '../../lib/shortcuts/appCommands';
+import { IS_MACOS_RUNTIME } from '../../lib/platform';
 import { useSettingsSearchStore } from '../../store/useSettingsSearchStore';
 import type { SearchFilterState } from '../../lib/searchFilterState';
 import { useRunSearch } from '../../lib/useRunSearch';
@@ -95,7 +95,7 @@ export function TopbarSearch() {
       setOpen(true);
     };
     const onShortcut = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && shortcutKey(event) === 'k') {
+      if (appShortcut(event, IS_MACOS_RUNTIME)?.kind === 'search') {
         event.preventDefault();
         focusSearch();
       }

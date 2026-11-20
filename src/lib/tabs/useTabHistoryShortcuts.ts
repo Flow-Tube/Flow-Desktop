@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useTabsStore } from "../../store/useTabsStore";
-import { keyBelongsToTarget } from "../musicPlayerKeys";
+import { keyBelongsToTarget } from "../shortcuts/target";
 import { IS_MACOS_RUNTIME } from "../platform";
 import { historyDeltaForKey, historyDeltaForMouseButton } from "./historyShortcuts";
 

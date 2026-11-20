@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { keyBelongsToTarget, musicPlayerKeyAction, volumeAfterWheel } from "./musicPlayerKeys";
+import { musicPlayerKeyAction, volumeAfterWheel } from "./musicPlayerKeys";
 
 const press = (key: string, extra: Partial<{ shiftKey: boolean; ctrlKey: boolean; metaKey: boolean; altKey: boolean }> = {}) =>
   musicPlayerKeyAction({ key, shiftKey: false, ctrlKey: false, metaKey: false, altKey: false, ...extra }, 10);
@@ -21,26 +21,6 @@ describe("musicPlayerKeyAction", () => {
     expect(press("k", { metaKey: true })).toBeNull();
     expect(press("q", { ctrlKey: true })).toBeNull();
     expect(press("x")).toBeNull();
-  });
-
-  it("lets fields and sliders keep their own keys", () => {
-    const input = document.createElement("input");
-    expect(keyBelongsToTarget(input, "k")).toBe(true);
-    const slider = document.createElement("div");
-    slider.setAttribute("role", "slider");
-    expect(keyBelongsToTarget(slider, "ArrowLeft")).toBe(true);
-    expect(keyBelongsToTarget(slider, "k")).toBe(false);
-  });
-
-  it("gives Space and Enter to a button only while it shows keyboard focus", () => {
-    const button = document.createElement("button");
-    document.body.append(button);
-    expect(keyBelongsToTarget(button, " ")).toBe(false);
-    button.focus();
-    expect(keyBelongsToTarget(button, " ")).toBe(true);
-    expect(keyBelongsToTarget(button, "Enter")).toBe(true);
-    expect(keyBelongsToTarget(button, "k")).toBe(false);
-    button.remove();
   });
 
   it("turns the wheel into volume steps, clamped", () => {

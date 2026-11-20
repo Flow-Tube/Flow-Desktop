@@ -1,7 +1,8 @@
 import { useEffect } from "react";
 
 import { musicAudioEngine } from "./audio/musicAudioEngine";
-import { keyBelongsToTarget, musicPlayerKeyAction } from "./musicPlayerKeys";
+import { musicPlayerKeyAction } from "./musicPlayerKeys";
+import { keyBelongsToTarget } from "./shortcuts/target";
 import { SETTINGS } from "./settings/schema";
 import { useNumberPref } from "./usePreference";
 import { useMusicPlayerStore } from "../store/useMusicPlayerStore";

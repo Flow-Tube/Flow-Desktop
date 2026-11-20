@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 
 import { getString } from "../../lib/i18n/index";
-import { keyBelongsToTarget } from "../../lib/musicPlayerKeys";
+import { IS_MACOS_RUNTIME } from "../../lib/platform";
+import { appShortcut } from "../../lib/shortcuts/appCommands";
+import { keyBelongsToTarget } from "../../lib/shortcuts/target";
 import { InfoDialog } from "../ui/InfoDialog";
 import { KeyMapList } from "./KeyMapList";
 
@@ -12,7 +14,7 @@ export function KeyboardHelpHost() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "?" || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (appShortcut(event, IS_MACOS_RUNTIME)?.kind !== "help") return;
       if (keyBelongsToTarget(event.target, event.key)) return;
       event.preventDefault();
       setOpen((value) => !value);

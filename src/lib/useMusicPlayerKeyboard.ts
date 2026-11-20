@@ -6,6 +6,9 @@ import { keyBelongsToTarget } from "./shortcuts/target";
 import { SETTINGS } from "./settings/schema";
 import { useNumberPref } from "./usePreference";
 import { useMusicPlayerStore } from "../store/useMusicPlayerStore";
+import { useEqStore } from "../store/useEqStore";
+import { useLikesStore } from "../store/useLikesStore";
+import { toggleSongLikeWithToast } from "./songLikeToast";
 
 /**
  * The full player's keys, while it is open. Media keys are taken in the capture
@@ -62,6 +65,17 @@ export function useMusicPlayerKeyboard(enabled: boolean, onEscape: () => boolean
           break;
         case "toggle-queue":
           store.setViewState(store.viewState === "queue" ? "full" : "queue");
+          break;
+        case "toggle-lyrics":
+          store.setViewState(store.viewState === "lyrics" ? "full" : "lyrics");
+          break;
+        case "toggle-like":
+          if (store.currentTrack) {
+            void toggleSongLikeWithToast(store.currentTrack, useLikesStore.getState().isLikedSong(store.currentTrack));
+          }
+          break;
+        case "open-equalizer":
+          useEqStore.getState().setEditorOpen(true);
           break;
       }
     };

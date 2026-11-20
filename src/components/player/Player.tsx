@@ -97,7 +97,12 @@ import { useSubtitleSettingsSync } from "../../lib/useSubtitleSettingsSync";
 import { openPopoutPlayer } from "../../lib/pipHandoff";
 import { sleepTimerTakesEnd } from "../../lib/useSleepTimerDriver";
 import { usePlaybackStartSpeed } from "../../lib/playbackStartSpeed";
-import { VIDEO_FIT_CLASS } from "../../lib/videoFit";
+import { VIDEO_FIT_CLASS, VIDEO_FITS } from "../../lib/videoFit";
+import { copyVideoFrame, saveVideoFrame } from "../../lib/videoFrame";
+import { copyText } from "../../lib/clipboard";
+import { youtubeWatchUrl } from "../../lib/youtubeUrl";
+import { isLocalMediaId } from "../../lib/localMediaId";
+import { sendWatchCommand } from "../../lib/watchCommands";
 import { ambientShown } from "../../lib/ambient/ambientShown";
 import {
   formatPlaybackRate,
@@ -265,6 +270,9 @@ const BACK_BUFFER_PRUNE_SECONDS = 30;
 const PLAYER_LOG_MAX_CHARS = 500;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+/** Results of the player keys that copy or save something, such as "Frame saved". */
+const notifyPlayer = (message: string) => useUiStore.getState().showToast({ message });
 
 function extractCodecMimeType(mimeType?: string | null) {
   if (!mimeType) return null;
@@ -673,6 +681,8 @@ export const Player: React.FC<PlayerProps> = ({
   const sphericalPicked = sphericalChoice && sphericalChoice.videoId === currentVideoId ? sphericalChoice.shown : null;
   // The small player shows the flat picture, as on Android.
   const showsSpherical = !isPipMode && !sphericalUnavailable && (sphericalPicked ?? projection !== null);
+  const [statsVisible, setStatsVisible] = useState(false);
+  const toggleStats = useCallback(() => setStatsVisible((value) => !value), []);
   const zoom = useVideoZoom({
     videoRef,
     frameRef: contentRef,
@@ -2430,6 +2440,42 @@ export const Player: React.FC<PlayerProps> = ({
         case "seek-to-fraction":
           if (!isLive && duration > 0) seekTo(duration * action.fraction);
           break;
+        case "toggle-loop":
+          toggleLoopSetting();
+          break;
+        case "next-resize": {
+          const { videoFit: fit, setVideoFit } = usePlayerStore.getState();
+          setVideoFit(VIDEO_FITS[(VIDEO_FITS.indexOf(fit) + 1) % VIDEO_FITS.length]!);
+          break;
+        }
+        case "save-frame":
+          void saveVideoFrame(videoRef.current, zoom.visibleRect(), title, notifyPlayer);
+          break;
+        case "copy-frame":
+          void copyVideoFrame(videoRef.current, zoom.visibleRect(), notifyPlayer);
+          break;
+        case "copy-link-at-time": {
+          const id = usePlayerStore.getState().currentVideo?.id;
+          if (!id || isLocalMediaId(id)) break;
+          void copyText(youtubeWatchUrl(id, usePlayerStore.getState().currentTime)).then((copied) =>
+            notifyPlayer(getString(copied ? "player_timed_url_copied" : "player_url_copy_failed")),
+          );
+          break;
+        }
+        case "toggle-stats":
+          toggleStats();
+          break;
+        case "normal-speed":
+          setPlaybackRate(1);
+          break;
+        case "toggle-chapters": {
+          const { isChaptersPanelOpen, setIsChaptersPanelOpen } = usePlayerStore.getState();
+          setIsChaptersPanelOpen(!isChaptersPanelOpen);
+          break;
+        }
+        case "watch":
+          sendWatchCommand(action.command);
+          break;
         case "zoom-in":
           zoom.zoomBy(ZOOM_STEP);
           break;
@@ -2481,6 +2527,10 @@ export const Player: React.FC<PlayerProps> = ({
     togglePlay,
     volume,
     zoom,
+    toggleLoopSetting,
+    title,
+    toggleStats,
+    setPlaybackRate,
   ]);
 
   const handleLoadedMetadata = () => {
@@ -2801,6 +2851,8 @@ export const Player: React.FC<PlayerProps> = ({
         onCloseSettings={closeSettings}
         lookAround={showsSpherical ? lookAround : null}
         zoom={zoom}
+        statsVisible={statsVisible}
+        onToggleStats={toggleStats}
         wheelAction={wheelAction}
         onWheelVolume={wheelVolume}
       />

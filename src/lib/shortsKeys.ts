@@ -2,13 +2,15 @@ import { IS_MACOS_RUNTIME } from "./platform";
 import type { KeyLike } from "./shortcuts/chord";
 import { DIGIT_CHORDS, findShortcut, type ShortcutCommand } from "./shortcuts/command";
 import { keyBelongsToTarget } from "./shortcuts/target";
+import type { WatchCommand } from "./watchCommands";
 
 export type ShortsKeyAction =
   | { type: "page"; offset: 1 | -1 }
   | { type: "mute" }
   | { type: "toggle" }
   | { type: "seek"; direction: 1 | -1 }
-  | { type: "jump"; tenths: number };
+  | { type: "jump"; tenths: number }
+  | { type: "watch"; command: WatchCommand };
 
 type ShortsCommand = ShortcutCommand<ShortsKeyAction>;
 
@@ -28,6 +30,9 @@ export const SHORTS_COMMANDS: readonly ShortsCommand[] = [
   shorts("mute", "keyboard_shortcut_mute", ["M"], () => ({ type: "mute" })),
   shorts("seek-back", "keyboard_shortcut_seek_back", ["ArrowLeft", "J"], () => ({ type: "seek", direction: -1 })),
   shorts("seek-forward", "keyboard_shortcut_seek_forward", ["ArrowRight", "L"], () => ({ type: "seek", direction: 1 })),
+  shorts("like", "keyboard_shortcut_like", ["Shift+L"], () => ({ type: "watch", command: "like" })),
+  shorts("comments", "keyboard_shortcut_comments", ["C"], () => ({ type: "watch", command: "comments" })),
+  shorts("dislike", "keyboard_shortcut_dislike", [], () => ({ type: "watch", command: "dislike" })),
   shorts("seek-percent", "keyboard_shortcut_seek_percent", DIGIT_CHORDS, (key) => ({ type: "jump", tenths: Number(key) }), true),
 ];
 

@@ -93,6 +93,9 @@ type PlayerGestureOverlayProps = {
   lookAround?: { current: LookAround | null } | null;
   /** Free zoom: a pinch or Ctrl/Cmd and the wheel zoom, and a drag or two-finger scroll pans once zoomed. */
   zoom?: VideoZoom | null;
+  /** Stats for nerds, which the right-click menu and Shift+I both toggle. */
+  statsVisible: boolean;
+  onToggleStats: () => void;
   /** What a plain wheel over the video does while it isn't zoomed. */
   wheelAction?: PlayerWheelAction;
   /** One volume step from the wheel: -1 is louder, 1 is quieter. */
@@ -149,6 +152,8 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
   canDragFrame = false,
   lookAround = null,
   zoom = null,
+  statsVisible,
+  onToggleStats,
   wheelAction = "scroll",
   onWheelVolume,
   settingsOpen,
@@ -158,7 +163,6 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [copiedLabel, setCopiedLabel] = useState<string | null>(null);
   const [isBoosting, setIsBoosting] = useState(false);
-  const [statsVisible, setStatsVisible] = useState(false);
   const centerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -555,7 +559,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
       },
     ],
     [
-      { label: getString("player_menu_stats"), icon: <Info size={18} />, action: () => setStatsVisible((value) => !value) },
+      { label: getString("player_menu_stats"), icon: <Info size={18} />, action: onToggleStats },
       { label: getString("player_menu_copy_debug"), icon: <Bug size={18} />, action: copyDebugInfo },
     ],
   ];

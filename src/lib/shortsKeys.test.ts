@@ -21,6 +21,8 @@ describe("shortsKeyAction", () => {
     expect(shortsKeyAction(key("ArrowLeft"))).toEqual({ type: "seek", direction: -1 });
     expect(shortsKeyAction(key("l"))).toEqual({ type: "seek", direction: 1 });
     expect(shortsKeyAction(key("7"))).toEqual({ type: "jump", tenths: 7 });
+    expect(shortsKeyAction(key("L", true))).toEqual({ type: "watch", command: "like" });
+    expect(shortsKeyAction(key("c"))).toEqual({ type: "watch", command: "comments" });
     expect(shortsKeyAction(key("x"))).toBeNull();
     expect(shortsKeyAction(key("n"))).toBeNull();
   });

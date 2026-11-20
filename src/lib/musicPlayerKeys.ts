@@ -17,7 +17,10 @@ export type MusicPlayerKeyAction =
   | { kind: "previous" }
   | { kind: "toggle-shuffle" }
   | { kind: "cycle-repeat" }
-  | { kind: "toggle-queue" };
+  | { kind: "toggle-queue" }
+  | { kind: "toggle-lyrics" }
+  | { kind: "toggle-like" }
+  | { kind: "open-equalizer" };
 
 export const VOLUME_STEP = 0.05;
 
@@ -44,6 +47,9 @@ export const MUSIC_COMMANDS: readonly MusicCommand[] = [
   music("shuffle", "keyboard_shortcut_shuffle", ["S"], () => () => ({ kind: "toggle-shuffle" })),
   music("repeat", "keyboard_shortcut_repeat", ["R"], () => () => ({ kind: "cycle-repeat" })),
   music("queue", "keyboard_shortcut_queue", ["Q"], () => () => ({ kind: "toggle-queue" })),
+  music("like", "keyboard_shortcut_like", ["Shift+L"], () => () => ({ kind: "toggle-like" })),
+  music("lyrics", "keyboard_shortcut_lyrics", ["Y"], () => () => ({ kind: "toggle-lyrics" })),
+  music("equalizer", "keyboard_shortcut_equalizer", [], () => () => ({ kind: "open-equalizer" })),
   music(
     "seek-percent",
     "keyboard_shortcut_seek_percent",

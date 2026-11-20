@@ -44,4 +44,15 @@ describe("videoPlayerKeyAction", () => {
     expect(videoPlayerKeyAction("x")).toEqual({ kind: "zoom-reset" });
   });
 
+  it("adds loop, resize, frame, stats, like and Watch later keys", () => {
+    expect(videoPlayerKeyAction("r")).toEqual({ kind: "toggle-loop" });
+    expect(videoPlayerKeyAction("o")).toEqual({ kind: "next-resize" });
+    expect(videoPlayerKeyAction("S", true)).toEqual({ kind: "save-frame" });
+    expect(videoPlayerKeyAction("I", true)).toEqual({ kind: "toggle-stats" });
+    expect(videoPlayerKeyAction("L", true)).toEqual({ kind: "watch", command: "like" });
+    expect(videoPlayerKeyAction("W", true)).toEqual({ kind: "watch", command: "watch-later" });
+    // Lower-case l still seeks and w still looks around.
+    expect(videoPlayerKeyAction("l")).toEqual({ kind: "seek-forward" });
+    expect(videoPlayerKeyAction("w")).toEqual({ kind: "look", key: "w" });
+  });
 });

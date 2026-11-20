@@ -1,4 +1,5 @@
 import { IS_MACOS_RUNTIME } from "./platform";
+import type { WatchCommand } from "./watchCommands";
 import type { KeyLike } from "./shortcuts/chord";
 import { DIGIT_CHORDS, findShortcut, type ShortcutCommand } from "./shortcuts/command";
 
@@ -30,7 +31,16 @@ export type VideoPlayerKeyAction =
   | { kind: "zoom-in" }
   | { kind: "zoom-out" }
   | { kind: "zoom-reset" }
-  | { kind: "look"; key: string };
+  | { kind: "look"; key: string }
+  | { kind: "toggle-loop" }
+  | { kind: "next-resize" }
+  | { kind: "save-frame" }
+  | { kind: "copy-frame" }
+  | { kind: "copy-link-at-time" }
+  | { kind: "toggle-stats" }
+  | { kind: "normal-speed" }
+  | { kind: "toggle-chapters" }
+  | { kind: "watch"; command: WatchCommand };
 
 type VideoCommand = ShortcutCommand<VideoPlayerKeyAction>;
 
@@ -74,6 +84,19 @@ export const VIDEO_COMMANDS: readonly VideoCommand[] = [
   video("look-left", "keyboard_shortcut_look_left", ["A"], () => ({ kind: "look", key: "a" })),
   video("look-down", "keyboard_shortcut_look_down", ["S"], () => ({ kind: "look", key: "s" })),
   video("look-right", "keyboard_shortcut_look_right", ["D"], () => ({ kind: "look", key: "d" })),
+  video("loop", "keyboard_shortcut_loop", ["R"], () => ({ kind: "toggle-loop" })),
+  video("next-resize", "keyboard_shortcut_next_resize", ["O"], () => ({ kind: "next-resize" })),
+  video("save-frame", "keyboard_shortcut_save_frame", ["Shift+S"], () => ({ kind: "save-frame" })),
+  video("stats", "keyboard_shortcut_stats", ["Shift+I"], () => ({ kind: "toggle-stats" })),
+  video("like", "keyboard_shortcut_like", ["Shift+L"], () => ({ kind: "watch", command: "like" })),
+  video("watch-later", "keyboard_shortcut_watch_later", ["Shift+W"], () => ({ kind: "watch", command: "watch-later" })),
+  // Unbound until someone picks keys in Settings.
+  video("copy-frame", "keyboard_shortcut_copy_frame", [], () => ({ kind: "copy-frame" })),
+  video("copy-link-at-time", "keyboard_shortcut_copy_link_at_time", [], () => ({ kind: "copy-link-at-time" })),
+  video("normal-speed", "keyboard_shortcut_normal_speed", [], () => ({ kind: "normal-speed" })),
+  video("chapters", "keyboard_shortcut_chapters", [], () => ({ kind: "toggle-chapters" })),
+  video("dislike", "keyboard_shortcut_dislike", [], () => ({ kind: "watch", command: "dislike" })),
+  video("add-to-playlist", "keyboard_shortcut_add_to_playlist", [], () => ({ kind: "watch", command: "add-to-playlist" })),
   video(
     "seek-percent",
     "keyboard_shortcut_seek_percent",

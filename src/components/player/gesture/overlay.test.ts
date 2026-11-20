@@ -62,6 +62,8 @@ describe("PlayerGestureOverlay double-click vs single-click", () => {
       onRevealControls: vi.fn(),
       settingsOpen: false,
       onCloseSettings: vi.fn(),
+      statsVisible: false,
+      onToggleStats: vi.fn(),
       ...overrides,
     };
 

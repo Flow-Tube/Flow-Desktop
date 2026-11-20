@@ -17,6 +17,11 @@ describe("musicPlayerKeyAction", () => {
     expect(press("7")).toEqual({ kind: "seek-to-fraction", fraction: 0.7 });
   });
 
+  it("likes with Shift+L and shows lyrics with Y", () => {
+    expect(press("L", { shiftKey: true })).toEqual({ kind: "toggle-like" });
+    expect(press("y")).toEqual({ kind: "toggle-lyrics" });
+  });
+
   it("leaves shortcuts with modifiers to the system", () => {
     expect(press("k", { metaKey: true })).toBeNull();
     expect(press("q", { ctrlKey: true })).toBeNull();

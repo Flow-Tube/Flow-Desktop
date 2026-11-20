@@ -43,6 +43,7 @@ PLAYER
 - When the player has to switch to a backup stream, the saved log now says why.
 - Video already played is dropped from memory every 30 seconds instead of every 2 minutes.
 - The dark shade behind the player controls is lighter and covers only the bottom band they sit in, not the whole picture, and that band gets shorter in a small player (#719). The video stays bright while the controls show, and the shade costs less to draw.
+- Settings > Player > Shade behind the controls picks Standard, Light or Off (#719). With Off, the buttons, time and title get darker backings instead, so they stay readable on a bright video.
 - Right-click the video and choose Copy frame to put the picture on screen on the clipboard, or Save frame to keep it as a PNG named after the video and the moment (#658). The frame keeps the video's own resolution.
 - The pop-out window's title and buttons sit on dark backings, like the mini player's, so they stay readable over a bright video (#664). They also show when you reach them with the keyboard.
 - Swipe sideways with two fingers over a video to move back or forward through it, as in QuickTime Player, and turn the wheel over the seek bar to move by the seek step. Both follow the Trackpad gestures switch in Settings > Keyboard.

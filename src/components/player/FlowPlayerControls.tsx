@@ -65,6 +65,7 @@ import { usePlayerButton } from "../../lib/playerButtons";
 import { SETTINGS } from "../../lib/settings/schema";
 import { useNumberPref } from "../../lib/usePreference";
 import { useAppSettingsStore } from "../../store/useAppSettingsStore";
+import { controlsShade, controlsShadeClasses } from "../../lib/player/controlsShade";
 
 export interface FlowPlayerControlsProps {
   title?: string;
@@ -262,6 +263,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
   const showFullscreen = usePlayerButton("fullscreen");
   const frameStepEnabled = useAppSettingsStore((s) => s.values[SETTINGS.FRAME_STEP_BUTTONS_ENABLED] === "true");
   const idleStripEnabled = useAppSettingsStore((s) => s.values[SETTINGS.IDLE_PROGRESS_STRIP_ENABLED] !== "false");
+  const shade = controlsShadeClasses(controlsShade(useAppSettingsStore((s) => s.values[SETTINGS.PLAYER_CONTROLS_SHADE])));
   const [showRemaining, setShowRemaining] = useState(false);
   const showRemainingRef = useRef(showRemaining);
   showRemainingRef.current = showRemaining;
@@ -623,13 +625,15 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
         {/* The scrim only covers the band the controls sit in, and that band shrinks with the player, so a
             small player is not mostly shade (#719). Spread over the whole player it was also blended into
             every video frame, across every pixel of the picture. */}
-        <div className="absolute inset-x-0 bottom-0 -z-10 h-[clamp(7rem,38%,12rem)] max-h-full bg-gradient-to-t from-chrome-black/70 via-chrome-black/25 to-transparent" />
+        {shade.scrim && (
+          <div className={cx("absolute inset-x-0 bottom-0 -z-10 h-[clamp(7rem,38%,12rem)] max-h-full bg-gradient-to-t to-transparent", shade.scrim)} />
+        )}
         <div
           className="pointer-events-auto"
           onClick={(event) => event.stopPropagation()}
         >
           {title && (isFullscreen ? showFullscreenTitle : isPopOut) && (
-            <div dir="auto" className="mb-2 hidden max-w-[70%] truncate text-sm font-bold text-chrome-white/95 sm:block">
+            <div dir="auto" className={cx("mb-2 hidden max-w-[70%] truncate text-sm font-bold text-chrome-white/95 sm:block", shade.title && cx("w-fit rounded-full px-3 py-1", shade.title))}>
               {title}
             </div>
           )}
@@ -665,7 +669,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                       flexGrow: Math.max(0.1, segmentDuration),
                     }}
                   >
-                    <div className="relative h-[5px] w-full overflow-hidden rounded-full bg-chrome-white/25 transition-[height] duration-200 ease-[cubic-bezier(0.34,1.56,0.64,1)] group-hover/seg:h-[10px]">
+                    <div className={cx("relative h-[5px] w-full overflow-hidden rounded-full transition-[height] duration-200 ease-[cubic-bezier(0.34,1.56,0.64,1)] group-hover/seg:h-[10px]", shade.track)}>
                       {/* Buffered Fill for this Segment */}
                       <div
                         className="chapter-buffered-fill absolute inset-y-0 left-0 rounded-full bg-chrome-white/40 pointer-events-none transition-[width] duration-150"
@@ -763,7 +767,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                   type="button"
                   title={getString('previous')}
                   onClick={playPrevious}
-                  className="grid h-7 w-7 place-items-center rounded-full hover:bg-chrome-white/10"
+                  className={cx("grid h-7 w-7 place-items-center rounded-full hover:bg-chrome-white/10", shade.bare)}
                 >
                   <SkipBack size={19} fill="currentColor" />
                 </button>
@@ -772,7 +776,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                 type="button"
                 title={isPlaying ? "Pause" : "Play"}
                 onClick={togglePlay}
-                className="grid h-10 w-10 place-items-center rounded-full bg-chrome-black/20 text-chrome-white hover:bg-chrome-white/10 transition-transform active:scale-95"
+                className={cx("grid h-10 w-10 place-items-center rounded-full text-chrome-white hover:bg-chrome-white/10 transition-transform active:scale-95", shade.pill)}
               >
                 {isPlaying ? (
                   <Pause size={24} fill="currentColor" />
@@ -787,7 +791,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                     title={getString("player_previous_frame")}
                     aria-label={getString("player_previous_frame")}
                     onClick={() => stepFrame(-1)}
-                    className="grid h-7 w-7 place-items-center rounded-full hover:bg-chrome-white/10"
+                    className={cx("grid h-7 w-7 place-items-center rounded-full hover:bg-chrome-white/10", shade.bare)}
                   >
                     <ChevronLeft size={19} />
                   </button>
@@ -796,7 +800,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                     title={getString("player_next_frame")}
                     aria-label={getString("player_next_frame")}
                     onClick={() => stepFrame(1)}
-                    className="grid h-7 w-7 place-items-center rounded-full hover:bg-chrome-white/10"
+                    className={cx("grid h-7 w-7 place-items-center rounded-full hover:bg-chrome-white/10", shade.bare)}
                   >
                     <ChevronRight size={19} />
                   </button>
@@ -807,14 +811,14 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                   type="button"
                   title={getString('next')}
                   onClick={() => playNext()}
-                  className="grid h-7 w-7 place-items-center rounded-full hover:bg-chrome-white/10"
+                  className={cx("grid h-7 w-7 place-items-center rounded-full hover:bg-chrome-white/10", shade.bare)}
                 >
                   <SkipForward size={19} fill="currentColor" />
                 </button>
               )}
 
               {showVolume && (
-              <div ref={volumeWheelRef} className="group/volume hidden items-center sm:flex bg-chrome-black/20 rounded-full hover:pr-2">
+              <div ref={volumeWheelRef} className={cx("group/volume hidden items-center sm:flex rounded-full hover:pr-2", shade.pill)}>
                 <button
                   type="button"
                   title={getString('music_mute')}
@@ -849,7 +853,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                   role={isLive ? undefined : "button"}
                   title={isLive ? undefined : getString("player_time_toggle")}
                   onClick={isLive ? undefined : () => setShowRemaining((value) => !value)}
-                  className={cx("whitespace-nowrap text-xs font-semibold text-chrome-white sm:text-sm bg-chrome-black/20 rounded-full px-2 py-1 tabular-nums", !isLive && "cursor-pointer")}
+                  className={cx("whitespace-nowrap text-xs font-semibold text-chrome-white sm:text-sm rounded-full px-2 py-1 tabular-nums", shade.pill, !isLive && "cursor-pointer")}
                 >
                   <span ref={currentTimeRef} />
                   {!isLive && (
@@ -865,7 +869,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                     type="button"
                     title={getString('player_go_to_live')}
                     onClick={seekToLiveEdge}
-                    className="flex items-center gap-1 whitespace-nowrap rounded-full bg-chrome-black/20 px-2 py-1 text-xs font-bold uppercase tracking-wide text-chrome-white hover:bg-chrome-white/10"
+                    className={cx("flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-1 text-xs font-bold uppercase tracking-wide text-chrome-white hover:bg-chrome-white/10", shade.pill)}
                   >
                     <span ref={liveDotRef} className="live-dot h-1.5 w-1.5 rounded-full bg-chrome-red-500 animate-pulse" />
                     {getString("live_badge")}
@@ -877,14 +881,14 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                 ref={showChapters ? chapterPillRef : undefined}
                 type="button"
                 onClick={() => togglePanel("chapters")}
-                className="hidden items-center gap-1.5 text-xs font-medium text-chrome-white sm:text-sm bg-chrome-black/20 hover:bg-chrome-white/10 rounded-full px-2 py-1 transition-all select-none cursor-pointer active:scale-95 group/pill max-w-[150px] sm:max-w-[260px] truncate"
+                className={cx("hidden items-center gap-1.5 text-xs font-medium text-chrome-white sm:text-sm hover:bg-chrome-white/10 rounded-full px-2 py-1 transition-all select-none cursor-pointer active:scale-95 group/pill max-w-[150px] sm:max-w-[260px] truncate", shade.pill)}
               >
                 <span className="chapter-title truncate"></span>
                 <ChevronRight size={14} className="text-chrome-zinc-400 group-hover/pill:text-chrome-white transition-colors shrink-0" />
               </button>
             </div>
 
-            <div className="flex items-center gap-1 sm:gap-2 bg-chrome-black/20 rounded-full px-1 py-1">
+            <div className={cx("flex items-center gap-1 sm:gap-2 rounded-full px-1 py-1", shade.pill)}>
               {isFullscreen && showChapters && (
                 <button
                   type="button"

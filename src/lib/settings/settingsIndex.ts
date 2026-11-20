@@ -108,6 +108,7 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     { title: "settings_pip_always_on_top", summary: "settings_pip_always_on_top_desc" },
     { title: "settings_pip_on_minimize", summary: "settings_pip_on_minimize_desc" },
     { title: "settings_fullscreen_title", summary: "settings_fullscreen_title_desc" },
+    { title: "settings_controls_shade", summary: "settings_controls_shade_desc", keywords: ["dim", "dark", "scrim", "overlay"] },
     { title: "settings_ambient_mode", summary: "settings_ambient_mode_desc" },
     { title: "settings_ambient_glow", summary: "settings_ambient_glow_desc" },
     { title: "settings_adaptive_player", summary: "settings_adaptive_player_desc" },

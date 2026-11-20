@@ -112,6 +112,7 @@ const DESKTOP_ONLY: &[&str] = &[
     "mini_player_size",
     "paid_promotion_label",
     "idle_progress_strip_enabled",
+    "player_controls_shade",
     "frame_step_buttons_enabled",
     "show_fullscreen_title",
     "player_button_next_previous",

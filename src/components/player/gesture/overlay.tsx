@@ -512,12 +512,17 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
             : []),
         ]]
       : []),
+    // A zoomed video copies and saves the part on screen.
     [
-      { label: getString("player_menu_copy_frame"), icon: <Camera size={18} />, action: () => copyVideoFrame(videoRef.current, showCopied) },
+      {
+        label: getString("player_menu_copy_frame"),
+        icon: <Camera size={18} />,
+        action: () => copyVideoFrame(videoRef.current, zoom?.visibleRect() ?? null, showCopied),
+      },
       {
         label: getString("player_menu_save_frame"),
         icon: <ImageDown size={18} />,
-        action: () => saveVideoFrame(videoRef.current, title, showCopied),
+        action: () => saveVideoFrame(videoRef.current, zoom?.visibleRect() ?? null, title, showCopied),
       },
     ],
     [

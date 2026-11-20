@@ -13,17 +13,29 @@ export class FrameCaptureError extends Error {
   }
 }
 
-/** The picture on screen now, at the video's own resolution, as a PNG. Drawn at once, so later frames don't replace it. */
-export function captureFrame(video: HTMLVideoElement | null): Promise<Blob> {
+/** A part of the video in its own pixels: what a zoomed player shows. */
+export interface FrameArea {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * The picture on screen now, at the video's own resolution, as a PNG: all of it, or only `area` when
+ * the video is zoomed. Drawn at once, so later frames don't replace it.
+ */
+export function captureFrame(video: HTMLVideoElement | null, area: FrameArea | null = null): Promise<Blob> {
   if (!video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || video.videoWidth <= 0 || video.videoHeight <= 0) {
     return Promise.reject(new FrameCaptureError("notReady"));
   }
   const canvas = document.createElement("canvas");
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
+  canvas.width = area?.width ?? video.videoWidth;
+  canvas.height = area?.height ?? video.videoHeight;
   const context = canvas.getContext("2d");
   if (!context) return Promise.reject(new FrameCaptureError("notReady"));
-  context.drawImage(video, 0, 0);
+  if (area) context.drawImage(video, area.x, area.y, area.width, area.height, 0, 0, area.width, area.height);
+  else context.drawImage(video, 0, 0);
   return new Promise((resolve, reject) => {
     try {
       canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new FrameCaptureError("notReady"))), "image/png");
@@ -53,8 +65,12 @@ const problemMessage = (error: unknown, fallback: Parameters<typeof getString>[0
   );
 
 /** Copies the frame on screen. Call it inside the click: WebKit only lets a clipboard write start there. */
-export function copyVideoFrame(video: HTMLVideoElement | null, notify: (message: string) => void): Promise<void> {
-  const image = captureFrame(video);
+export function copyVideoFrame(
+  video: HTMLVideoElement | null,
+  area: FrameArea | null,
+  notify: (message: string) => void,
+): Promise<void> {
+  const image = captureFrame(video, area);
   const problem = image.then(
     () => null,
     (error: unknown) => error,
@@ -67,12 +83,13 @@ export function copyVideoFrame(video: HTMLVideoElement | null, notify: (message:
 /** Asks where to save the frame on screen as a PNG named after the video and the moment. */
 export async function saveVideoFrame(
   video: HTMLVideoElement | null,
+  area: FrameArea | null,
   title: string | undefined,
   notify: (message: string) => void,
 ): Promise<void> {
   const seconds = video?.currentTime ?? 0;
   try {
-    const blob = await captureFrame(video);
+    const blob = await captureFrame(video, area);
     if (await savePngImage(await blobToBase64(blob), frameFileName(title, seconds), getString("player_frame_save_title"))) {
       notify(getString("player_frame_saved"));
     }

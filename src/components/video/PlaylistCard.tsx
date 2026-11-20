@@ -21,7 +21,7 @@ import { MediaMenu, type MediaMenuAction } from '../ui/MediaMenu';
 import { ColorWash, COLOR_WASH_HOST } from '../ui/ColorWash';
 import { SoftBackdrop } from '../ui/SoftBackdrop';
 import { useHoverWashColor } from '../../lib/useHoverWashColor';
-import { backgroundTabClickProps, openedInBackgroundTab } from '../../lib/openTarget';
+import { backgroundTabClickProps, cardKeyboardProps, openedInBackgroundTab } from '../../lib/openTarget';
 import { openActions } from '../common/openActions';
 import { alignToEnd, growFromPoint } from '../../lib/direction';
 
@@ -282,7 +282,9 @@ export function PlaylistCard({
   return (
     <div
       ref={cardRef}
-      className={`group ${COLOR_WASH_HOST} flex cursor-pointer flex-col gap-3`}
+      className={`group ${COLOR_WASH_HOST} flex cursor-pointer flex-col gap-3 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary`}
+      {...cardKeyboardProps(() => (onClick ? onClick(playlist) : navigate(playlistRoute)), onClick ? null : playlistRoute)}
+      aria-label={playlist.title}
       onMouseEnter={wash.onMouseEnter}
       onMouseLeave={wash.onMouseLeave}
       onClick={(event) => {

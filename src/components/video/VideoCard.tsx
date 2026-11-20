@@ -48,7 +48,7 @@ import { formatPublishedText, formatYouTubeRelativeTime } from '../../lib/publis
 import { ColorWash, COLOR_WASH_HOST } from '../ui/ColorWash';
 import { CardPills, ChannelLabel, CollabAvatars, UpcomingBadge } from "./CardMeta";
 import { collaboratorsByline } from "../../lib/collaborators";
-import { backgroundTabClickProps, openedInBackgroundTab, routeForVideo } from '../../lib/openTarget';
+import { backgroundTabClickProps, cardKeyboardProps, openedInBackgroundTab, routeForVideo } from '../../lib/openTarget';
 import { openActions } from '../common/openActions';
 import { isLocalMediaId } from '../../lib/localMediaId';
 import { alignToEnd, growFromPoint } from "../../lib/direction";
@@ -204,6 +204,7 @@ function VideoCardComponent({
     }
   }, [video, navigate, onPlay, route]);
   const tabClickProps = useMemo(() => backgroundTabClickProps(route), [route]);
+  const cardKeys = useMemo(() => cardKeyboardProps(() => play(), route), [play, route]);
 
   useEffect(() => {
     if (video.isLive) markLive(video.id);
@@ -700,9 +701,11 @@ function VideoCardComponent({
       >
         <ColorWash active={isHovered} color={dominantColor} alpha={0.2} spread="row" />
         <div
-          className="relative aspect-video w-40 shrink-0 cursor-pointer overflow-hidden rounded-xl bg-surface-container"
+          className="relative aspect-video w-40 shrink-0 cursor-pointer overflow-hidden rounded-xl bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           onClick={play}
           {...tabClickProps}
+          {...cardKeys}
+          aria-label={displayTitle}
         >
           {displayThumbnail ? (
             <img
@@ -943,9 +946,11 @@ function VideoCardComponent({
     >
       <ColorWash active={isHovered} color={dominantColor} alpha={0.2} />
       <div
-        className="relative w-full aspect-video rounded-xl overflow-hidden bg-chrome-zinc-900 cursor-pointer"
+        className="relative w-full aspect-video rounded-xl overflow-hidden bg-chrome-zinc-900 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         onClick={play}
-          {...tabClickProps}
+        {...tabClickProps}
+        {...cardKeys}
+        aria-label={displayTitle}
       >
         {displayThumbnail ? (
           <img

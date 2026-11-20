@@ -4,7 +4,7 @@ import { MUSIC_COMMANDS, musicPlayerKeyAction } from "../musicPlayerKeys";
 import { VIDEO_COMMANDS, videoPlayerKeyAction } from "../videoPlayerKeys";
 import { SHORTCUT_GROUPS } from "./catalog";
 import { parseChord, pressedChord, type KeyLike } from "./chord";
-import { commandKeys, findShortcut } from "./command";
+import { chordIds, commandKeys, findShortcut } from "./command";
 import { chordCaption, shortcutRows } from "./format";
 
 const sources = import.meta.glob(["../../components/player/Player.tsx", "../useMusicPlayerKeyboard.ts"], {
@@ -28,7 +28,10 @@ describe("shortcut catalog", () => {
     for (const group of SHORTCUT_GROUPS) {
       for (const command of group.commands) {
         for (const text of commandKeys(command, isMac)) {
-          expect(findShortcut(group.commands, pressFor(text, isMac), isMac)?.command.id, `${command.id} ${text}`).toBe(command.id);
+          const [first, second] = text.split(" ");
+          if (second) expect(findShortcut(group.commands, pressFor(first!, isMac), isMac), `${command.id} ${text}`).toBeNull();
+          const match = findShortcut(group.commands, pressFor(second ?? first!, isMac), isMac);
+          expect(match?.command.id, `${command.id} ${text}`).toBe(command.id);
         }
       }
     }
@@ -39,7 +42,7 @@ describe("shortcut catalog", () => {
     expect(new Set(ids).size).toBe(ids.length);
     for (const isMac of [false, true]) {
       for (const group of SHORTCUT_GROUPS) {
-        const chords = group.commands.flatMap((command) => commandKeys(command, isMac).map((text) => JSON.stringify(pressedChord(parseChord(text)!, isMac))));
+        const chords = group.commands.flatMap((command) => commandKeys(command, isMac).map((text) => chordIds(text, isMac)!.join(" ")));
         expect(new Set(chords).size, group.scope).toBe(chords.length);
       }
     }

@@ -1,7 +1,7 @@
 import type { ShortcutOverrides } from "./bindings";
 import { SHORTCUT_GROUPS } from "./catalog";
 import { chordId, parseChord, pressedChord } from "./chord";
-import { commandKeys, type ShortcutCommand, type ShortcutScope } from "./command";
+import { chordIds, commandKeys, type ShortcutCommand, type ShortcutScope } from "./command";
 
 /** The players sit on top of each other, and the one in front takes its keys first, so they may share keys. */
 const LAYERED_SCOPES: ReadonlySet<ShortcutScope> = new Set(["video", "music", "shorts"]);
@@ -29,6 +29,12 @@ export function isReservedChord(text: string, scope: ShortcutScope, isMac: boole
   return reserved.some((other) => pressedId(other, isMac) === id);
 }
 
+/** Two keys clash when they are the same, or when one is the first key of the other's sequence. */
+function clashes(a: string[], b: string[]): boolean {
+  if (a.join(" ") === b.join(" ")) return true;
+  return (a.length === 1 && b.length === 2 && b[0] === a[0]) || (b.length === 1 && a.length === 2 && a[0] === b[0]);
+}
+
 /** The command that already answers `text` where `command` would, or null when the key is free. */
 export function conflictFor(
   command: ShortcutCommand<unknown>,
@@ -36,13 +42,16 @@ export function conflictFor(
   isMac: boolean,
   overrides: ShortcutOverrides,
 ): ShortcutCommand<unknown> | null {
-  const id = pressedId(text, isMac);
-  if (!id) return null;
+  const ids = chordIds(text, isMac);
+  if (!ids) return null;
   for (const group of SHORTCUT_GROUPS) {
     if (group.scope !== command.scope && LAYERED_SCOPES.has(group.scope) && LAYERED_SCOPES.has(command.scope)) continue;
     for (const other of group.commands) {
       if (other.id === command.id) continue;
-      if (commandKeys(other, isMac, overrides).some((key) => pressedId(key, isMac) === id)) return other;
+      if (commandKeys(other, isMac, overrides).some((key) => {
+        const otherIds = chordIds(key, isMac);
+        return !!otherIds && clashes(ids, otherIds);
+      })) return other;
     }
   }
   return null;

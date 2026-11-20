@@ -38,6 +38,7 @@ import { useChunkedList } from "../lib/localMedia/useChunkedList";
 import type { SubscribedChannel, SubscriptionGroup } from "../store/useSubscriptionStore";
 import type { VideoSummary } from "../types/video";
 import { Checkbox } from "../components/ui/Checkbox";
+import { usePageRefresh } from "../lib/pageRefresh";
 
 interface SubscriptionsProps {
   onPlay: (video: VideoSummary) => void;
@@ -201,6 +202,11 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
     if (!selectedGroupName) return null;
     return subscriptionGroups.find((group) => group.name === selectedGroupName) || null;
   }, [selectedGroupName, subscriptionGroups]);
+  usePageRefresh(() => {
+    if (scanProgress != null || feedLoading) return;
+    if (selectedGroup) void refreshChannels(selectedGroup.channelIds);
+    else refreshFeed();
+  });
 
   useEffect(() => {
     // Before the groups load, every saved name looks unknown.

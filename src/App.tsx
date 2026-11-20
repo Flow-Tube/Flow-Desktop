@@ -84,6 +84,8 @@ import { MusicTrayController } from "./components/tray/MusicTrayController";
 import { ShellPagesController } from "./components/tray/ShellPagesController";
 import { GlobalMediaKeysController } from "./components/shortcuts/GlobalMediaKeysController";
 import { KeyboardHelpHost } from "./components/shortcuts/KeyboardHelpHost";
+import { SequenceHint } from "./components/shortcuts/SequenceHint";
+import { useAppShortcuts } from "./lib/shortcuts/useAppShortcuts";
 import { CrashReportHost } from "./components/diagnostics/CrashReportHost";
 import { ScrobbleController } from "./components/scrobbling/ScrobbleController";
 import { HistorySettleController } from "./components/sync/HistorySettleController";
@@ -95,7 +97,7 @@ import { UpdateManager } from "./components/updater/UpdateManager";
 import { ConfirmHost } from "./components/common/ConfirmHost";
 import { NoteEditorHost } from "./components/note/NoteEditorHost";
 import { ThemeController } from "./lib/useTheme";
-import { useTabHistoryShortcuts } from "./lib/tabs/useTabHistoryShortcuts";
+import { useTabHistoryMouseButtons } from "./lib/tabs/useTabHistoryMouseButtons";
 import { installTabPlaybackSync } from "./lib/tabs/tabPlayback";
 import { useTabShortcuts } from "./lib/tabs/useTabShortcuts";
 import { useActiveTabTitle } from "./lib/tabs/useActiveTabTitle";
@@ -148,7 +150,8 @@ function App() {
   useSlowGraphicsNotice(IS_MAIN_WINDOW && IS_LINUX_RUNTIME && location.pathname !== "/onboarding");
   useStartupSubscriptionRefresh();
   useImageProxyBootstrap();
-  useTabHistoryShortcuts();
+  useTabHistoryMouseButtons();
+  useAppShortcuts();
   useEffect(installTabPlaybackSync, []);
   useTabShortcuts();
   useActiveTabTitle();
@@ -398,6 +401,7 @@ function App() {
       <ProfileSwitchOverlay />
       <NoteEditorHost />
       <KeyboardHelpHost />
+      <SequenceHint />
       <ConfirmHost />
       <ToastHost />
     </div>

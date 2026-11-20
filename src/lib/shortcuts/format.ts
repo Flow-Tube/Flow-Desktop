@@ -34,6 +34,8 @@ function keyFace(key: string): string {
  * "Ctrl + Shift + N" elsewhere.
  */
 export function chordCaption(text: string, isMac: boolean): string {
+  const parts = text.trim().split(/\s+/);
+  if (parts.length === 2) return getString("keyboard_key_then", chordCaption(parts[0]!, isMac), chordCaption(parts[1]!, isMac));
   const chord = parseChord(text);
   if (!chord) return text;
   const face = keyFace(chord.key);

@@ -40,7 +40,7 @@ export function parseChord(text: string): Chord | null {
   const parts = text.split("+").map((part) => part.trim().toLowerCase());
   const key = parts.pop();
   let chord: Chord | null = null;
-  if (key && parts.every((part) => MODIFIERS.has(part))) {
+  if (key && !/\s/.test(key) && parts.every((part) => MODIFIERS.has(part))) {
     chord = {
       key: KEY_NAMES[key] ?? key,
       mod: parts.includes("mod"),
@@ -84,6 +84,9 @@ export const chordId = (chord: PressedChord) =>
 export const shiftIsPartOfKey = (key: string) => key.length === 1 && !/[a-z]/.test(key);
 
 const MODIFIER_KEYS = new Set(["shift", "control", "alt", "meta", "os", "altgraph", "capslock", "fn"]);
+
+/** Shift, Ctrl and the like pressed on their own, on the way to a chord. */
+export const isModifierKey = (key: string) => MODIFIER_KEYS.has(key.toLowerCase());
 const NAMED_FOR_TEXT: Record<string, string> = { " ": "Space", "+": "Plus" };
 
 /**
@@ -92,7 +95,7 @@ const NAMED_FOR_TEXT: Record<string, string> = { " ": "Space", "+": "Plus" };
  */
 export function chordFromEvent(event: KeyLike, isMac: boolean): string | null {
   const key = eventChord(event).key;
-  if (MODIFIER_KEYS.has(key)) return null;
+  if (isModifierKey(key)) return null;
   const parts: string[] = [];
   const mod = isMac ? event.metaKey : event.ctrlKey;
   if (mod) parts.push("Mod");

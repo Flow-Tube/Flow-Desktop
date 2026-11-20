@@ -2,6 +2,9 @@ import { useAppSettingsStore } from "../../store/useAppSettingsStore";
 import { SETTINGS } from "../settings/schema";
 import { parseChord } from "./chord";
 
+const isKeyText = (text: unknown) =>
+  typeof text === "string" && text.trim().split(/\s+/).length <= 2 && text.trim().split(/\s+/).every((part) => parseChord(part));
+
 /** The keys a person picked for a command, by command id. An empty list leaves the command unbound. */
 export type ShortcutOverrides = Readonly<Record<string, readonly string[]>>;
 
@@ -26,7 +29,7 @@ export function parseOverrides(raw: string | undefined): ShortcutOverrides {
   if (!value || typeof value !== "object" || Array.isArray(value)) return NO_OVERRIDES;
   const overrides: Record<string, readonly string[]> = {};
   for (const [id, keys] of Object.entries(value)) {
-    if (Array.isArray(keys) && keys.every((key) => typeof key === "string" && parseChord(key))) overrides[id] = keys;
+    if (Array.isArray(keys) && keys.every(isKeyText)) overrides[id] = keys;
   }
   return Object.keys(overrides).length > 0 ? overrides : NO_OVERRIDES;
 }

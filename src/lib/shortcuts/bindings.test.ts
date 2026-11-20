@@ -97,7 +97,7 @@ describe("conflicts", () => {
   it("finds the command already on a key", () => {
     expect(conflictFor(videoCommand("video.theater"), "M", false, {})?.id).toBe("video.mute");
     expect(conflictFor(videoCommand("video.theater"), "Mod+T", false, {})?.id).toBe("tabs.new");
-    expect(conflictFor(videoCommand("video.theater"), "G", false, {})).toBeNull();
+    expect(conflictFor(videoCommand("video.theater"), "U", false, {})).toBeNull();
   });
 
   it("lets the players share keys, since the one in front takes them", () => {
@@ -105,8 +105,8 @@ describe("conflicts", () => {
   });
 
   it("counts a person's own keys", () => {
-    expect(conflictFor(videoCommand("video.theater"), "G", false, { "video.mute": ["G"] })?.id).toBe("video.mute");
-    expect(conflictFor(videoCommand("video.theater"), "M", false, { "video.mute": ["G"] })).toBeNull();
+    expect(conflictFor(videoCommand("video.theater"), "U", false, { "video.mute": ["U"] })?.id).toBe("video.mute");
+    expect(conflictFor(videoCommand("video.theater"), "M", false, { "video.mute": ["U"] })).toBeNull();
   });
 
   it("keeps system and typing keys", () => {

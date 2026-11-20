@@ -1,6 +1,6 @@
 import type { StringKey } from "../i18n/index";
 import { currentShortcutSettings, NO_OVERRIDES, type ShortcutOverrides, type ShortcutSettings } from "./bindings";
-import { chordId, eventChord, parseChord, pressedChord, shiftIsPartOfKey, type Chord, type KeyLike } from "./chord";
+import { chordId, eventChord, isModifierKey, parseChord, pressedChord, shiftIsPartOfKey, type Chord, type KeyLike } from "./chord";
 
 export type ShortcutScope = "app" | "tabs" | "video" | "music" | "shorts";
 
@@ -12,7 +12,10 @@ export interface ShortcutCommand<Action> {
   id: string;
   scope: ShortcutScope;
   label: StringKey;
-  /** Chords as `parseChord` reads them; the first is the one shown first. */
+  /**
+   * Chords as `parseChord` reads them; the first is the one shown first. Two chords with a space
+   * between them are a sequence: "G H" is G, then H.
+   */
   keys: readonly string[];
   /** Replaces `keys` on macOS. */
   macKeys?: readonly string[];
@@ -48,6 +51,21 @@ export function setShortcutRecording(on: boolean): void {
   recording = on;
 }
 
+/** How long the second key of a sequence may wait for the first. */
+export const SEQUENCE_MS = 1200;
+const SEQUENCE_START = "start:";
+
+/** The ids of a key text's chords, one for a single chord and two for a sequence; null if it doesn't parse. */
+export function chordIds(text: string, isMac: boolean): string[] | null {
+  const ids: string[] = [];
+  for (const part of text.trim().split(/\s+/)) {
+    const chord = parseChord(part);
+    if (!chord) return null;
+    ids.push(chordId(pressedChord(chord, isMac)));
+  }
+  return ids.length > 0 && ids.length <= 2 ? ids : null;
+}
+
 type ChordIndex = Map<string, ShortcutCommand<unknown>>;
 const indexes = new WeakMap<readonly ShortcutCommand<unknown>[], WeakMap<ShortcutSettings, Record<string, ChordIndex>>>();
 
@@ -66,8 +84,11 @@ function index<Action>(
     built = new Map();
     for (const command of commands) {
       for (const text of commandKeys(command, isMac, settings.overrides)) {
-        const chord = parseChord(text);
-        if (chord && (settings.singleKeys || !isSingleKey(chord))) built.set(chordId(pressedChord(chord, isMac)), command);
+        const ids = chordIds(text, isMac);
+        const first = parseChord(text.trim().split(/\s+/)[0] ?? "");
+        if (!ids || !first || (!settings.singleKeys && isSingleKey(first))) continue;
+        built.set(ids.join(" "), command);
+        if (ids.length === 2) built.set(SEQUENCE_START + ids[0], command);
       }
     }
     platforms[platform] = built;
@@ -80,7 +101,19 @@ export interface ShortcutMatch<Action> {
   action: Action;
 }
 
-/** The command `event` presses in `commands`, with its modifiers matched exactly. */
+const sequences = new WeakMap<readonly ShortcutCommand<unknown>[], { first: string; at: number }>();
+
+/** True while `commands` waits for the second key of a sequence, such as the H after G. */
+export function awaitingSequence(commands: readonly ShortcutCommand<unknown>[], now = Date.now()): boolean {
+  const pending = sequences.get(commands);
+  return !!pending && now - pending.at < SEQUENCE_MS;
+}
+
+/**
+ * The command `event` presses in `commands`, with its modifiers matched exactly. A key that starts a
+ * sequence matches nothing yet; the table then waits for the next key (see `awaitingSequence`). Call
+ * it once per key press for a table with sequences, since it keeps that wait.
+ */
 export function findShortcut<Action>(
   commands: readonly ShortcutCommand<Action>[],
   event: KeyLike,
@@ -88,11 +121,23 @@ export function findShortcut<Action>(
   settings: ShortcutSettings = currentShortcutSettings(),
 ): ShortcutMatch<Action> | null {
   if (recording || commands.length === 0) return null;
+  // Shift held down on the way to `?` mustn't end a sequence that is waiting.
+  if (isModifierKey(event.key)) return null;
   const byChord = index(commands, isMac, settings);
   const pressed = eventChord(event);
-  let command = byChord.get(chordId(pressed));
-  if (!command && pressed.shift && shiftIsPartOfKey(pressed.key)) {
-    command = byChord.get(chordId({ ...pressed, shift: false }));
+  const ids = [chordId(pressed)];
+  if (pressed.shift && shiftIsPartOfKey(pressed.key)) ids.push(chordId({ ...pressed, shift: false }));
+  const lookup = (prefix: string) => ids.map((id) => byChord.get(prefix + id)).find(Boolean);
+
+  const pending = sequences.get(commands);
+  sequences.delete(commands);
+  if (pending && Date.now() - pending.at < SEQUENCE_MS) {
+    const second = lookup(`${pending.first} `);
+    if (second) return { command: second, action: second.action(pressed.key) };
   }
-  return command ? { command, action: command.action(pressed.key) } : null;
+  const command = lookup("");
+  if (command) return { command, action: command.action(pressed.key) };
+  const startsSequence = ids.find((id) => byChord.has(SEQUENCE_START + id));
+  if (startsSequence) sequences.set(commands, { first: startsSequence, at: Date.now() });
+  return null;
 }

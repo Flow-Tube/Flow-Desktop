@@ -38,6 +38,7 @@ import { HomeFeedMessage } from "../components/home/HomeFeedMessage";
 import { HomeFeedButton } from "../components/home/HomeFeedButton";
 import { HomeChipRow } from "../components/home/HomeChipRow";
 import { HomeMixCard } from "../components/home/HomeMixCard";
+import { usePageRefresh } from "../lib/pageRefresh";
 
 interface HomeProps {
   onPlay: (video: VideoSummary) => void;
@@ -101,6 +102,7 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
     setRefreshing(true);
     void refresh().finally(() => setRefreshing(false));
   }, [refresh]);
+  usePageRefresh(handleRefresh);
 
   const { feed: chipFeed, reload: reloadChip } = chips;
   useEffect(() => {

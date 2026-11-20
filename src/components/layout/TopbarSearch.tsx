@@ -17,15 +17,14 @@ import { useMusicHiddenFilter } from '../../store/useMusicActionsStore';
 import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
 import { useMusicEnabled } from '../../lib/useMusicContent';
 import { useSearchHistoryStore, useVisibleSearchHistory } from '../../store/useSearchHistoryStore';
-import { appShortcut } from '../../lib/shortcuts/appCommands';
-import { IS_MACOS_RUNTIME } from '../../lib/platform';
+import { useSearchShortcutCaption } from '../../lib/shortcuts/useSearchShortcutCaption';
 import { useSettingsSearchStore } from '../../store/useSettingsSearchStore';
 import type { SearchFilterState } from '../../lib/searchFilterState';
 import { useRunSearch } from '../../lib/useRunSearch';
 
-const SHORTCUT_LABEL = IS_MACOS_RUNTIME ? '⌘K' : 'Ctrl K';
 
 export function TopbarSearch() {
+  const searchKey = useSearchShortcutCaption();
   const navigate = useNavigate();
   const location = useLocation();
   // Only the Settings page itself; Import, Discover channels and Diagnostics live under /settings/ too.
@@ -94,19 +93,11 @@ export function TopbarSearch() {
       inputRef.current?.select();
       setOpen(true);
     };
-    const onShortcut = (event: KeyboardEvent) => {
-      if (appShortcut(event, IS_MACOS_RUNTIME)?.kind === 'search') {
-        event.preventDefault();
-        focusSearch();
-      }
-    };
     document.addEventListener('mousedown', onOutside);
-    window.addEventListener('keydown', onShortcut);
     window.addEventListener(FOCUS_SEARCH_EVENT, focusSearch);
     return () => {
       window.removeEventListener(FOCUS_SEARCH_EVENT, focusSearch);
       document.removeEventListener('mousedown', onOutside);
-      window.removeEventListener('keydown', onShortcut);
     };
   }, []);
 
@@ -314,11 +305,11 @@ export function TopbarSearch() {
           >
             <X className="h-4 w-4" />
           </button>
-        ) : (
-          <kbd className="hidden shrink-0 rounded-md border border-chrome-neutral-700 px-1.5 py-0.5 font-sans text-[11px] font-medium text-chrome-neutral-500 lg:block">
-            {SHORTCUT_LABEL}
+        ) : searchKey ? (
+          <kbd dir="ltr" className="hidden shrink-0 rounded-md border border-chrome-neutral-700 px-1.5 py-0.5 font-sans text-[11px] font-medium text-chrome-neutral-500 lg:block">
+            {searchKey}
           </kbd>
-        )}
+        ) : null}
       </form>
 
       {panelVisible ? (

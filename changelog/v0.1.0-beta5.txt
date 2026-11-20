@@ -56,6 +56,9 @@ KEYBOARD AND GESTURES
 - The keyboard shortcuts list (press ? or open Settings > Keyboard) now shows every key in Flow, including Shorts, tabs and windows, Back and Forward, and search. On macOS it shows keys the way the Mac menus do, such as ⇧⌘N.
 - Change any shortcut in Settings > Keyboard: click a key and press the new one, add a second key with +, or reset one or all. If the key is already taken, Flow names the command that has it and offers to move it. Your keys are kept in Flow backups.
 - Single-key shortcuts in Settings > Keyboard turns off keys such as K, M and ? that act without Ctrl, Alt or Cmd, for speech input or to avoid pressing them by accident.
+- New keys: / or Ctrl+K (Cmd+K) to search, Ctrl+, (Cmd+,) for Settings, Ctrl+B (Cmd+B) to show or hide the side rail, and G then a letter to go to a page, such as G then H for Home or G then S for Subscriptions.
+- Ctrl+R (Cmd+R) and F5 refresh Home, Subscriptions, Explore and Music instead of reloading the whole app, so playback no longer stops.
+- Ctrl+Shift+T (Cmd+Shift+T) reopens the last closed tab, and Ctrl+Page Up or Page Down (Alt+Cmd+Left or Right on macOS) move between tabs.
 
 BACKUPS AND IMPORT
 - Fixed Flow closing while it read a Google Takeout export with a folder named in Russian, Ukrainian, Greek, Turkish, Vietnamese, Chinese, Japanese or Korean, such as My Activity (#661).

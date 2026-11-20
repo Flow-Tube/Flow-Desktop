@@ -63,6 +63,7 @@ KEYBOARD AND GESTURES
 - More player keys: R loops the video, O switches between Fit, Fill and Zoom, Shift+S saves the frame, Shift+I shows Stats for nerds, Shift+L likes and Shift+W saves to Watch later. In the music player Shift+L likes the song and Y shows the lyrics, and in Shorts Shift+L likes and C opens the comments.
 - Copy frame, Copy link at this moment, Normal speed, Chapters, Dislike, Save to a playlist and Equalizer can also get keys of your own in Settings > Keyboard.
 - K, M, Shift+N and Shift+P now play or pause, mute and skip music while only the music bar shows. Before, music answered keys only with the full player open.
+- Turn the wheel over the music player's progress bar to move by the seek step. Shift and the wheel still move by 5 seconds.
 - Video and playlist cards can now be reached with Tab. On any card the arrow keys move to the next card that way, across grids and shelves, Enter opens it and Ctrl+Enter (Cmd+Enter) opens it in a new tab.
 - Settings > Appearance > Interface size makes everything in Flow larger or smaller, from 67% to 200%. Ctrl and = or - (Cmd on macOS) change it from anywhere, and Ctrl+0 (Cmd+0) goes back to 100%.
 - Swipe sideways with two fingers on a trackpad to go back or forward, as in Safari and Edge. An arrow fills in at the edge as you swipe. Rows that scroll sideways and the player keep their own swipes, and Settings > Keyboard > Trackpad gestures turns it off.

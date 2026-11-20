@@ -52,6 +52,9 @@ PLAYER
 MUSIC
 - Fixed the full music player sliding under the title bar on Windows and Linux and leaving a coloured strip along the bottom of the window (#693). It now opens just below the title bar and fills the rest of the window.
 
+KEYBOARD AND GESTURES
+- The keyboard shortcuts list (press ? or open Settings > Keyboard) now shows every key in Flow, including Shorts, tabs and windows, Back and Forward, and search. On macOS it shows keys the way the Mac menus do, such as ⇧⌘N.
+
 BACKUPS AND IMPORT
 - Fixed Flow closing while it read a Google Takeout export with a folder named in Russian, Ukrainian, Greek, Turkish, Vietnamese, Chinese, Japanese or Korean, such as My Activity (#661).
 

@@ -2,6 +2,7 @@ import type { StringKey } from "../i18n/index";
 import { IS_LINUX_RUNTIME } from "../platform";
 import { MINI_PLAYER_SIZES } from "../miniPlayerSize";
 import { PLAYER_WHEEL_ACTIONS } from "../player/wheelAction";
+import { CONTROLS_SHADES } from "../player/controlsShade";
 
 export type SettingValueType = "boolean" | "number" | "string" | "json";
 export type SettingArea =
@@ -102,6 +103,7 @@ export const SETTINGS = {
   PAID_PROMOTION_LABEL: "paid_promotion_label",
   IDLE_PROGRESS_STRIP_ENABLED: "idle_progress_strip_enabled",
   FRAME_STEP_BUTTONS_ENABLED: "frame_step_buttons_enabled",
+  PLAYER_CONTROLS_SHADE: "player_controls_shade",
   AUTO_PIP_ENABLED: "auto_pip_enabled",
   MANUAL_PIP_BUTTON_ENABLED: "manual_pip_button_enabled",
   PIP_SEPARATE_WINDOW: "pip_separate_window",
@@ -390,6 +392,7 @@ export const SETTING_SCOPES = {
   [SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED]: "profile",
   [SETTINGS.PAID_PROMOTION_LABEL]: "profile",
   [SETTINGS.IDLE_PROGRESS_STRIP_ENABLED]: "device",
+  [SETTINGS.PLAYER_CONTROLS_SHADE]: "device",
   [SETTINGS.FRAME_STEP_BUTTONS_ENABLED]: "device",
   [SETTINGS.AUTO_PIP_ENABLED]: "profile",
   [SETTINGS.MANUAL_PIP_BUTTON_ENABLED]: "profile",
@@ -756,6 +759,7 @@ export const SETTING_DEFINITIONS = [
   bool(SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED, "player", true, "wired"),
   bool(SETTINGS.PAID_PROMOTION_LABEL, "player", false, "wired"),
   bool(SETTINGS.IDLE_PROGRESS_STRIP_ENABLED, "player", true, "wired"),
+  str(SETTINGS.PLAYER_CONTROLS_SHADE, "player", "standard", "wired", CONTROLS_SHADES),
   bool(SETTINGS.FRAME_STEP_BUTTONS_ENABLED, "player", false, "wired"),
   bool(SETTINGS.AUTO_PIP_ENABLED, "player", true, "wired"),
   bool(SETTINGS.MANUAL_PIP_BUTTON_ENABLED, "player", true, "wired"),

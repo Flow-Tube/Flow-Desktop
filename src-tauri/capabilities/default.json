@@ -16,6 +16,7 @@
     "core:window:allow-set-background-color",
     "core:window:allow-start-dragging",
     "core:window:allow-start-resize-dragging",
+    "core:webview:allow-set-webview-zoom",
     "dialog:default",
     "dialog:allow-open",
     "dialog:allow-save",

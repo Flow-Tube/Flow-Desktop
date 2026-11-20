@@ -59,6 +59,7 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     { title: "settings_theme_light_mode" },
     { title: "settings_theme_dark_mode" },
     { title: "settings_theme_dark_style", keywords: ["amoled", "black"] },
+    { title: "settings_interface_zoom", summary: "settings_interface_zoom_desc", keywords: ["zoom", "scale", "size", "bigger", "smaller"] },
     { title: "settings_app_font", summary: "settings_app_font_desc", keywords: ["typeface", "condensed", "serif", "inter"] },
     { title: "font_choose_file", keywords: ["custom font", "ttf", "otf", "typeface"] },
     { title: "settings_highlight_new", summary: "settings_highlight_new_desc" },

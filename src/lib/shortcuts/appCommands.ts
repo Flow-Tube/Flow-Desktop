@@ -9,7 +9,8 @@ export type AppShortcut =
   | { kind: "settings" }
   | { kind: "side-rail" }
   | { kind: "refresh" }
-  | { kind: "go"; path: string };
+  | { kind: "go"; path: string }
+  | { kind: "interface-zoom"; step: -1 | 0 | 1 };
 
 type AppCommand = ShortcutCommand<AppShortcut>;
 
@@ -37,6 +38,9 @@ export const APP_COMMANDS: readonly AppCommand[] = [
   app("settings", "keyboard_shortcut_settings", ["Mod+,"], () => ({ kind: "settings" })),
   app("side-rail", "keyboard_shortcut_side_rail", ["Mod+B"], () => ({ kind: "side-rail" })),
   app("help", "keyboard_shortcut_help", ["?"], () => ({ kind: "help" })),
+  app("interface-larger", "keyboard_shortcut_interface_larger", ["Mod+=", "Mod+Plus"], () => ({ kind: "interface-zoom", step: 1 })),
+  app("interface-smaller", "keyboard_shortcut_interface_smaller", ["Mod+-"], () => ({ kind: "interface-zoom", step: -1 })),
+  app("interface-reset", "keyboard_shortcut_interface_reset", ["Mod+0"], () => ({ kind: "interface-zoom", step: 0 })),
   go("home", "keyboard_shortcut_go_home", "H", "/"),
   go("subscriptions", "keyboard_shortcut_go_subscriptions", "S", "/subscriptions"),
   go("music", "keyboard_shortcut_go_music", "M", "/music"),

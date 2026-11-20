@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 
 import { useTabsStore } from "../../store/useTabsStore";
 import { useUiStore } from "../../store/useUiStore";
+import { getString } from "../i18n/index";
+import { currentInterfaceZoom, setInterfaceZoom, stepInterfaceZoom } from "../interfaceZoom";
 import { refreshPage } from "../pageRefresh";
 import { IS_MACOS_RUNTIME } from "../platform";
 import { FOCUS_SEARCH_EVENT } from "../windowEvents";
@@ -77,6 +79,12 @@ export function useAppShortcuts(): void {
           if (modalOpen()) return;
           navigateRef.current("/settings");
           break;
+        case "interface-zoom": {
+          const zoom = stepInterfaceZoom(currentInterfaceZoom(), shortcut.step);
+          void setInterfaceZoom(zoom);
+          useUiStore.getState().showToast({ message: getString("interface_zoom_toast", `${Math.round(zoom * 100)}%`) });
+          break;
+        }
         case "go":
           if (modalOpen()) return;
           navigateRef.current(shortcut.path);

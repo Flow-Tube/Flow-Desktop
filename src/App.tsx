@@ -87,6 +87,7 @@ import { KeyboardHelpHost } from "./components/shortcuts/KeyboardHelpHost";
 import { SequenceHint } from "./components/shortcuts/SequenceHint";
 import { useAppShortcuts } from "./lib/shortcuts/useAppShortcuts";
 import { useCardArrowKeys } from "./lib/useCardArrowKeys";
+import { useInterfaceZoom } from "./lib/interfaceZoom";
 import { CrashReportHost } from "./components/diagnostics/CrashReportHost";
 import { ScrobbleController } from "./components/scrobbling/ScrobbleController";
 import { HistorySettleController } from "./components/sync/HistorySettleController";
@@ -154,6 +155,7 @@ function App() {
   useTabHistoryMouseButtons();
   useAppShortcuts();
   useCardArrowKeys();
+  useInterfaceZoom();
   useEffect(installTabPlaybackSync, []);
   useTabShortcuts();
   useActiveTabTitle();

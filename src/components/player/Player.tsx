@@ -84,6 +84,8 @@ import { AmbientGlow } from "./AmbientGlow";
 import { useUiStore } from "../../store/useUiStore";
 import { SphericalView, type LookAround } from "./SphericalView";
 import { useVideoZoom } from "../../lib/player/useVideoZoom";
+import { playerWheelAction } from "../../lib/player/wheelAction";
+import { wheelVolumeChange } from "../../lib/wheelVolume";
 import { PAN_KEY_STEPS, ZOOM_STEP } from "../../lib/player/videoZoom";
 import type { Projection } from "../../lib/spherical/view";
 import { useLookSpeed } from "../../lib/spherical/useLookSpeed";
@@ -470,6 +472,7 @@ export const Player: React.FC<PlayerProps> = ({
   const speedSliderEnabled = useAppSettingsStore((state) => state.values[SETTINGS.SPEED_SLIDER_ENABLED] === "true");
   const seekIntervalSetting = useAppSettingsStore((state) => state.values[SETTINGS.DOUBLE_TAP_SEEK_SECONDS] ?? "10");
   const doubleClickSeek = useAppSettingsStore((state) => state.values[SETTINGS.DOUBLE_CLICK_SEEK_ENABLED] !== "false");
+  const wheelAction = useAppSettingsStore((state) => playerWheelAction(state.values[SETTINGS.PLAYER_WHEEL_ACTION]));
   const subtitlesEnabled = useAppSettingsStore((state) => state.values[SETTINGS.SUBTITLES_ENABLED] === "true");
   const preferredAudioLanguage = useAppSettingsStore((state) => state.values[SETTINGS.PREFERRED_AUDIO_LANGUAGE]);
   const preferredSubtitleLanguage = useAppSettingsStore((state) => state.values[SETTINGS.PREFERRED_SUBTITLE_LANGUAGE] ?? "en");
@@ -649,6 +652,16 @@ export const Player: React.FC<PlayerProps> = ({
     (hasSelectedAlternateAudio || (!!selectedQuality && !selectedQuality.hasAudio));
 
   const { level: volumeLevelNow, maxLevel, setLevel: setVolumeLevel, gain: boostGain } = useVolumeLevel();
+  // The same steps as the wheel over the volume slider: up is louder, and up from muted unmutes.
+  const wheelVolume = useCallback(
+    (step: -1 | 1) => {
+      const change = wheelVolumeChange(volumeLevelNow, muted, step, maxLevel);
+      if (change.unmute) setMuted(false);
+      if (change.volume !== undefined) setVolumeLevel(change.volume);
+      showVolumeFeedback(change.volume ?? volumeLevelNow, change.unmute ? false : muted);
+    },
+    [maxLevel, muted, setMuted, setVolumeLevel, showVolumeFeedback, volumeLevelNow],
+  );
   useVideoEq(videoRef, audioRef, usesExternalAudio ? selectedAudioTrack?.localUrl ?? null : null, boostGain);
   useReportVideoAspect(videoRef, currentVideoId);
   const adaptiveEnabled = useAppSettingsStore((state) => state.values[SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED] !== "false");
@@ -2790,6 +2803,8 @@ export const Player: React.FC<PlayerProps> = ({
         onCloseSettings={closeSettings}
         lookAround={showsSpherical ? lookAround : null}
         zoom={zoom}
+        wheelAction={wheelAction}
+        onWheelVolume={wheelVolume}
       />
 
       {pendingQualitySwitch && (

@@ -29,7 +29,9 @@ import type { LookAround } from "../SphericalView";
 import { seekSideAt, type SeekDirection, type SeekFeedback as SeekFeedbackState } from "../../../lib/seekFeedback";
 import { SeekFeedback } from "./SeekFeedback";
 import { ZoomReadout } from "./ZoomReadout";
-import { listenForZoomInput } from "../../../lib/gestures/pinch";
+import { listenForZoomInput, wheelZoomFactor } from "../../../lib/gestures/pinch";
+import type { PlayerWheelAction } from "../../../lib/player/wheelAction";
+import { newWheelGesture, wheelStep } from "../../../lib/wheelVolume";
 import { ZOOM_STEP } from "../../../lib/player/videoZoom";
 import type { VideoZoom } from "../../../lib/player/useVideoZoom";
 import { PlayerContextMenu, type PlayerContextMenuItem } from "./PlayerContextMenu";
@@ -91,6 +93,10 @@ type PlayerGestureOverlayProps = {
   lookAround?: { current: LookAround | null } | null;
   /** Free zoom: a pinch or Ctrl/Cmd and the wheel zoom, and a drag or two-finger scroll pans once zoomed. */
   zoom?: VideoZoom | null;
+  /** What a plain wheel over the video does while it isn't zoomed. */
+  wheelAction?: PlayerWheelAction;
+  /** One volume step from the wheel: -1 is louder, 1 is quieter. */
+  onWheelVolume?: (step: -1 | 1) => void;
 };
 
 const LINE_PX = 33;
@@ -143,6 +149,8 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
   canDragFrame = false,
   lookAround = null,
   zoom = null,
+  wheelAction = "scroll",
+  onWheelVolume,
   settingsOpen,
   onCloseSettings,
 }) => {
@@ -179,30 +187,51 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
     return () => layer.removeEventListener("wheel", onWheel);
   }, [lookAround]);
 
+  const onWheelVolumeRef = useRef(onWheelVolume);
+  onWheelVolumeRef.current = onWheelVolume;
+
   // A pinch or Ctrl/Cmd and the wheel zooms about the pointer. Once zoomed, a plain two-finger
-  // scroll pans the picture, as in Photos and Maps, instead of scrolling the page under it.
+  // scroll pans the picture, as in Photos and Maps, unless the wheel itself is set to zoom. Unzoomed,
+  // the plain wheel does what the "Wheel over the video" setting says; "scroll" leaves it to the page.
   useEffect(() => {
     const layer = layerRef.current;
-    if (!layer || !zoom?.enabled) return;
-    const stopZoom = listenForZoomInput(layer, ({ factor, clientX, clientY }) => {
-      zoom.zoomBy(factor, clientX, clientY);
-      onRevealControls();
-      return true;
-    });
+    if (!layer || lookAround) return;
+    const stopZoom = zoom?.enabled
+      ? listenForZoomInput(layer, ({ factor, clientX, clientY }) => {
+          zoom.zoomBy(factor, clientX, clientY);
+          onRevealControls();
+          return true;
+        })
+      : null;
+    const volumeGesture = newWheelGesture();
     const onWheel = (event: WheelEvent) => {
-      if (event.ctrlKey || event.metaKey || !zoom.isZoomed()) return;
+      if (event.ctrlKey || event.metaKey) return;
       const unit = event.deltaMode === 1 ? LINE_PX : 1;
-      const dx = (event.deltaX || (event.shiftKey ? event.deltaY : 0)) * unit;
-      const dy = (event.shiftKey ? 0 : event.deltaY) * unit;
+      if (zoom?.enabled && wheelAction === "zoom") {
+        if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) return;
+        event.preventDefault();
+        zoom.zoomBy(wheelZoomFactor(event.deltaY, event.deltaMode), event.clientX, event.clientY);
+        onRevealControls();
+        return;
+      }
+      if (zoom?.isZoomed()) {
+        const dx = (event.deltaX || (event.shiftKey ? event.deltaY : 0)) * unit;
+        const dy = (event.shiftKey ? 0 : event.deltaY) * unit;
+        event.preventDefault();
+        zoom.panBy(-dx, -dy);
+        return;
+      }
+      if (wheelAction !== "volume" || Math.abs(event.deltaY) < Math.abs(event.deltaX)) return;
       event.preventDefault();
-      zoom.panBy(-dx, -dy);
+      const step = wheelStep(volumeGesture, event.deltaY, event.deltaMode, event.timeStamp);
+      if (step !== 0) onWheelVolumeRef.current?.(step);
     };
     layer.addEventListener("wheel", onWheel, { passive: false });
     return () => {
-      stopZoom();
+      stopZoom?.();
       layer.removeEventListener("wheel", onWheel);
     };
-  }, [zoom, onRevealControls]);
+  }, [lookAround, zoom, wheelAction, onRevealControls]);
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // A second click can arrive after the first one's toggle fired, and then has to undo it.
   const toggledByFirstClickRef = useRef(false);

@@ -5,6 +5,7 @@ export type TabShortcut =
   | { kind: "new" }
   | { kind: "new-window" }
   | { kind: "close" }
+  | { kind: "reopen" }
   | { kind: "cycle"; step: 1 | -1 }
   | { kind: "select"; position: number }
   | { kind: "select-last" };
@@ -17,15 +18,18 @@ const tab = (
   keys: readonly string[],
   action: TabCommand["action"],
   fixed?: boolean,
-): TabCommand => ({ id: `tabs.${id}`, scope: "tabs", label, keys, action, ...(fixed ? { fixed } : {}) });
+  macKeys?: readonly string[],
+): TabCommand => ({ id: `tabs.${id}`, scope: "tabs", label, keys, action, ...(fixed ? { fixed } : {}), ...(macKeys ? { macKeys } : {}) });
 
 /** Browser tab and window keys. Mod is Cmd on macOS and Ctrl elsewhere; Ctrl+Tab cycles everywhere, as in browsers. */
 export const TAB_COMMANDS: readonly TabCommand[] = [
   tab("new", "keyboard_shortcut_tab_new", ["Mod+T"], () => ({ kind: "new" })),
   tab("new-window", "keyboard_shortcut_new_window", ["Mod+Shift+N"], () => ({ kind: "new-window" })),
   tab("close", "keyboard_shortcut_tab_close", ["Mod+W"], () => ({ kind: "close" })),
-  tab("next", "keyboard_shortcut_tab_next", ["Ctrl+Tab"], () => ({ kind: "cycle", step: 1 })),
-  tab("previous", "keyboard_shortcut_tab_previous", ["Ctrl+Shift+Tab"], () => ({ kind: "cycle", step: -1 })),
+  tab("reopen", "keyboard_shortcut_tab_reopen", ["Mod+Shift+T"], () => ({ kind: "reopen" })),
+  // Ctrl+Page Down and Up as in Windows and Linux browsers, Alt+Cmd+arrows as in Chrome on macOS.
+  tab("next", "keyboard_shortcut_tab_next", ["Ctrl+Tab", "Ctrl+PageDown"], () => ({ kind: "cycle", step: 1 }), false, ["Ctrl+Tab", "Mod+Alt+ArrowRight"]),
+  tab("previous", "keyboard_shortcut_tab_previous", ["Ctrl+Shift+Tab", "Ctrl+PageUp"], () => ({ kind: "cycle", step: -1 }), false, ["Ctrl+Shift+Tab", "Mod+Alt+ArrowLeft"]),
   tab(
     "select",
     "keyboard_shortcut_tab_select",

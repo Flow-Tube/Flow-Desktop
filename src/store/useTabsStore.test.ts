@@ -56,7 +56,23 @@ describe("useTabsStore tabs", () => {
       playerTabId: null,
       parked: {},
       titles: {},
+      closedTabs: [],
     });
+  });
+
+  it("reopens the last closed tab with its back and forward list", () => {
+    const other = useTabsStore.getState().openTab("/feed", { activate: true });
+    useTabsStore.getState().push("/music");
+    useTabsStore.getState().closeTab(other);
+    expect(useTabsStore.getState().activeId).toBe("tab-1");
+    useTabsStore.getState().reopenClosedTab();
+    const state = useTabsStore.getState();
+    expect(state.activeId).toBe(other);
+    expect(paths()).toEqual(["/feed", "/music"]);
+    expect(index()).toBe(1);
+    expect(state.closedTabs).toEqual([]);
+    useTabsStore.getState().reopenClosedTab();
+    expect(useTabsStore.getState().tabs).toHaveLength(2);
   });
 
   it("opens a background tab after the current one, or a foreground one when asked", () => {

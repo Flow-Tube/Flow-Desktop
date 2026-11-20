@@ -714,6 +714,19 @@
   --motion-page: 0ms;
 }
 
+/*
+  A card changes at once under the pointer there, with no fade. Each fade asks for a frame every
+  16 ms while it runs, and the wash is an opacity fade under the card, which makes WebKitGTK lift
+  the card into layers of its own for that time (three of them, seen on 2.52.6). Measured over 24
+  hovers: 669 frames and 1592 waits on the GPU with the fades, 85 and 273 without. On the
+  shared-memory path every frame is a copy of the whole window, and NVIDIA's 580 driver leaks an
+  open file on those waits. A feed scrolling under a still pointer hovers every card it passes.
+*/
+:root[data-light-effects] .color-wash-host,
+:root[data-light-effects] .color-wash-host * {
+  transition: none !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .music-wave-bar {
     animation: none;

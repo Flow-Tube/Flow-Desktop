@@ -17,6 +17,7 @@ function globalKeysDescription(unavailable: boolean): string {
 export function KeyboardSettings() {
   const [globalKeys, setGlobalKeys] = useBoolPref(SETTINGS.GLOBAL_MEDIA_KEYS_ENABLED);
   const [singleKeys, setSingleKeys] = useBoolPref(SETTINGS.SINGLE_KEY_SHORTCUTS_ENABLED, true);
+  const [gestures, setGestures] = useBoolPref(SETTINGS.TRACKPAD_GESTURES_ENABLED, true);
   const unavailable = useGlobalMediaKeysSupported() === false;
 
   return (
@@ -31,6 +32,11 @@ export function KeyboardSettings() {
         </SettingItem>
         <SettingItem title={getString("settings_single_key_shortcuts")} description={getString("settings_single_key_shortcuts_desc")}>
           <ToggleSwitch checked={singleKeys} onChange={setSingleKeys} />
+        </SettingItem>
+      </SettingsGroup>
+      <SettingsGroup title={getString("settings_group_trackpad")}>
+        <SettingItem title={getString("settings_trackpad_gestures")} description={getString("settings_trackpad_gestures_desc")}>
+          <ToggleSwitch checked={gestures} onChange={setGestures} />
         </SettingItem>
       </SettingsGroup>
       <ShortcutSettingsList />

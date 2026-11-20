@@ -85,6 +85,7 @@ import { ShellPagesController } from "./components/tray/ShellPagesController";
 import { GlobalMediaKeysController } from "./components/shortcuts/GlobalMediaKeysController";
 import { KeyboardHelpHost } from "./components/shortcuts/KeyboardHelpHost";
 import { SequenceHint } from "./components/shortcuts/SequenceHint";
+import { SwipeNavigationHost } from "./components/shortcuts/SwipeNavigationHost";
 import { useAppShortcuts } from "./lib/shortcuts/useAppShortcuts";
 import { useCardArrowKeys } from "./lib/useCardArrowKeys";
 import { useInterfaceZoom } from "./lib/interfaceZoom";
@@ -406,6 +407,7 @@ function App() {
       <NoteEditorHost />
       <KeyboardHelpHost />
       <SequenceHint />
+      <SwipeNavigationHost />
       <ConfirmHost />
       <ToastHost />
     </div>

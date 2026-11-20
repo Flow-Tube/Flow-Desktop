@@ -58,9 +58,12 @@ import { getString } from "../../lib/i18n/index";
 import { isAtLiveEdge, liveEdgePosition, liveWindow, readLiveTiming, secondsBehindLive } from "../../lib/liveEdge";
 import { Slider } from "../ui/Slider";
 import { useWheelVolume } from "../../lib/useWheelVolume";
+import { useWheelSeek } from "../../lib/useWheelSeek";
+import { useTrackpadGesturesEnabled } from "../../lib/gestures/trackpadGestures";
 import { useVolumeLevel } from "../../lib/audio/volumeBoost";
 import { usePlayerButton } from "../../lib/playerButtons";
 import { SETTINGS } from "../../lib/settings/schema";
+import { useNumberPref } from "../../lib/usePreference";
 import { useAppSettingsStore } from "../../store/useAppSettingsStore";
 
 export interface FlowPlayerControlsProps {
@@ -317,6 +320,9 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
   const seekBarActiveRef = useRef(false);
   const drawSeekBarRef = useRef<() => void>(() => {});
   const currentTimeRef = useRef<HTMLSpanElement>(null);
+  const [seekStep] = useNumberPref(SETTINGS.DOUBLE_TAP_SEEK_SECONDS, 10);
+  const trackpadGestures = useTrackpadGesturesEnabled();
+  const seekWheelRef = useWheelSeek({ enabled: trackpadGestures && !isLive, step: seekStep, duration, seekTo });
   const durationTimeRef = useRef<HTMLSpanElement>(null);
   const hoverPillRef = useRef<HTMLDivElement>(null);
   const hoverTextRef = useRef<HTMLSpanElement>(null);
@@ -628,6 +634,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
           )}
 
           <div
+            ref={seekWheelRef}
             data-progress-track
             className="group/seekbar relative flex h-6 cursor-pointer items-center"
             onMouseMove={handleProgressMove}

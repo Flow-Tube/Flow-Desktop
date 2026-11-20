@@ -1397,7 +1397,7 @@
   "settings_shortcuts_no_match": "No shortcut matches your search.",
   "settings_group_trackpad": "Trackpad and mouse",
   "settings_trackpad_gestures": "Trackpad gestures",
-  "settings_trackpad_gestures_desc": "Swipe sideways with two fingers to go back or forward, or over a video to move through it, and pinch a feed to change the size of its thumbnails. Pinch to zoom a video works either way.",
+  "settings_trackpad_gestures_desc": "Swipe sideways with two fingers to go back or forward, or over a video to move through it, turn the wheel over a seek bar to move by the seek step, and pinch a feed to change the size of its thumbnails. Pinch to zoom a video works either way.",
   "settings_single_key_shortcuts": "Single-key shortcuts",
   "settings_single_key_shortcuts_desc": "Keys such as K, M and ? act on their own, without Ctrl, Alt or Cmd. Turn this off if you use speech input or press keys by accident. Keys with a modifier, the arrows and Space keep working.",
   "keyboard_shortcuts_video": "Video player",

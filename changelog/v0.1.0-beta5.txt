@@ -62,6 +62,7 @@ KEYBOARD AND GESTURES
 - More player keys: R loops the video, O switches between Fit, Fill and Zoom, Shift+S saves the frame, Shift+I shows Stats for nerds, Shift+L likes and Shift+W saves to Watch later. In the music player Shift+L likes the song and Y shows the lyrics, and in Shorts Shift+L likes and C opens the comments.
 - Copy frame, Copy link at this moment, Normal speed, Chapters, Dislike, Save to a playlist and Equalizer can also get keys of your own in Settings > Keyboard.
 - K, M, Shift+N and Shift+P now play or pause, mute and skip music while only the music bar shows. Before, music answered keys only with the full player open.
+- Video and playlist cards can now be reached with Tab. On any card the arrow keys move to the next card that way, across grids and shelves, Enter opens it and Ctrl+Enter (Cmd+Enter) opens it in a new tab.
 
 BACKUPS AND IMPORT
 - Fixed Flow closing while it read a Google Takeout export with a folder named in Russian, Ukrainian, Greek, Turkish, Vietnamese, Chinese, Japanese or Korean, such as My Activity (#661).

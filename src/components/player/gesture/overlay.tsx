@@ -32,6 +32,7 @@ import { ZoomReadout } from "./ZoomReadout";
 import { listenForZoomInput, wheelZoomFactor } from "../../../lib/gestures/pinch";
 import type { PlayerWheelAction } from "../../../lib/player/wheelAction";
 import { newWheelGesture, wheelStep } from "../../../lib/wheelVolume";
+import { newWheelGestureState, trackWheelGesture } from "../../../lib/gestures/wheelAxis";
 import { ZOOM_STEP } from "../../../lib/player/videoZoom";
 import type { VideoZoom } from "../../../lib/player/useVideoZoom";
 import { PlayerContextMenu, type PlayerContextMenuItem } from "./PlayerContextMenu";
@@ -100,9 +101,12 @@ type PlayerGestureOverlayProps = {
   wheelAction?: PlayerWheelAction;
   /** One volume step from the wheel: -1 is louder, 1 is quieter. */
   onWheelVolume?: (step: -1 | 1) => void;
+  /** A sideways two-finger swipe over the unzoomed video moves through it, as in QuickTime Player. */
+  swipeToScrub?: boolean;
 };
 
 const LINE_PX = 33;
+const SCRUB_FLUSH_MS = 80;
 
 function formatTime(seconds: number) {
   if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
@@ -156,6 +160,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
   onToggleStats,
   wheelAction = "scroll",
   onWheelVolume,
+  swipeToScrub = false,
   settingsOpen,
   onCloseSettings,
 }) => {
@@ -193,6 +198,8 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
 
   const onWheelVolumeRef = useRef(onWheelVolume);
   onWheelVolumeRef.current = onWheelVolume;
+  const seekByRef = useRef(seekBy);
+  seekByRef.current = seekBy;
 
   // A pinch or Ctrl/Cmd and the wheel zooms about the pointer. Once zoomed, a plain two-finger
   // scroll pans the picture, as in Photos and Maps, unless the wheel itself is set to zoom. Unzoomed,
@@ -208,9 +215,36 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
         })
       : null;
     const volumeGesture = newWheelGesture();
+    const scrubGesture = newWheelGestureState();
+    let pendingSeconds = 0;
+    let flushTimer: number | undefined;
+    // Seeks are gathered for a moment, so a swipe doesn't ask the stream for dozens of positions.
+    const scrubBy = (px: number) => {
+      const { duration } = usePlayerStore.getState();
+      if (!(duration > 0) || layer.clientWidth <= 0) return;
+      // A swipe across the whole video moves through a third of it, and never less than 0.05 s per pixel.
+      pendingSeconds += px * Math.max(0.05, duration / (layer.clientWidth * 3));
+      if (flushTimer !== undefined) return;
+      flushTimer = window.setTimeout(() => {
+        flushTimer = undefined;
+        seekByRef.current(pendingSeconds);
+        pendingSeconds = 0;
+        onRevealControls();
+      }, SCRUB_FLUSH_MS);
+    };
     const onWheel = (event: WheelEvent) => {
       if (event.ctrlKey || event.metaKey) return;
       const unit = event.deltaMode === 1 ? LINE_PX : 1;
+      if (swipeToScrub && !event.shiftKey && !zoom?.isZoomed()) {
+        trackWheelGesture(scrubGesture, event.deltaX, event.deltaY, event.deltaMode, event.timeStamp);
+        const sideways = scrubGesture.axis === "x" || (scrubGesture.axis === null && Math.abs(event.deltaX) > Math.abs(event.deltaY));
+        if (sideways) {
+          event.preventDefault();
+          // Fingers moving right pull the video back, as dragging a timeline would.
+          if (scrubGesture.axis === "x") scrubBy(event.deltaX * unit);
+          return;
+        }
+      }
       if (zoom?.enabled && wheelAction === "zoom") {
         if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) return;
         event.preventDefault();
@@ -234,8 +268,9 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
     return () => {
       stopZoom?.();
       layer.removeEventListener("wheel", onWheel);
+      window.clearTimeout(flushTimer);
     };
-  }, [lookAround, zoom, wheelAction, onRevealControls]);
+  }, [lookAround, zoom, wheelAction, swipeToScrub, onRevealControls]);
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // A second click can arrive after the first one's toggle fired, and then has to undo it.
   const toggledByFirstClickRef = useRef(false);

@@ -11,6 +11,7 @@ vi.mock("../../../store/usePlayerStore", () => ({
   usePlayerStore: {
     getState: () => ({
       currentVideo: { id: "test-vid" },
+      duration: 600,
     }),
   },
 }));
@@ -390,6 +391,40 @@ describe("PlayerGestureOverlay double-click vs single-click", () => {
     it("keeps the default cursor everywhere else", () => {
       renderOverlay();
       expect(host.querySelector("[class*='z-[15]']")?.className).toContain("cursor-default");
+    });
+  });
+
+  describe("trackpad swipes", () => {
+    const swipe = (layer: Element, deltaX: number, deltaY = 0) => {
+      const event = new WheelEvent("wheel", { deltaX, deltaY, bubbles: true, cancelable: true });
+      act(() => {
+        layer.dispatchEvent(event);
+      });
+      return event;
+    };
+
+    it("moves through the video with a sideways swipe", () => {
+      const seekBy = vi.fn();
+      renderOverlay({ seekBy, swipeToScrub: true });
+      const layer = host.querySelector("[class*='z-[15]']")!;
+      Object.defineProperty(layer, "clientWidth", { value: 1000 });
+      for (let step = 0; step < 5; step += 1) swipe(layer, -20);
+      act(() => {
+        vi.advanceTimersByTime(200);
+      });
+      expect(seekBy).toHaveBeenCalled();
+      expect(seekBy.mock.calls[0]![0]).toBeLessThan(0);
+    });
+
+    it("leaves an up and down scroll to the page", () => {
+      const seekBy = vi.fn();
+      renderOverlay({ seekBy, swipeToScrub: true });
+      const layer = host.querySelector("[class*='z-[15]']")!;
+      expect(swipe(layer, 0, 40).defaultPrevented).toBe(false);
+      act(() => {
+        vi.advanceTimersByTime(200);
+      });
+      expect(seekBy).not.toHaveBeenCalled();
     });
   });
 });

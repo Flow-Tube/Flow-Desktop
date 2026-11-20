@@ -84,6 +84,7 @@ import { useUiStore } from "../../store/useUiStore";
 import { SphericalView, type LookAround } from "./SphericalView";
 import { useVideoZoom } from "../../lib/player/useVideoZoom";
 import { playerWheelAction } from "../../lib/player/wheelAction";
+import { useTrackpadGesturesEnabled } from "../../lib/gestures/trackpadGestures";
 import { wheelVolumeChange } from "../../lib/wheelVolume";
 import { PAN_KEY_STEPS, ZOOM_STEP } from "../../lib/player/videoZoom";
 import type { Projection } from "../../lib/spherical/view";
@@ -480,6 +481,7 @@ export const Player: React.FC<PlayerProps> = ({
   const seekIntervalSetting = useAppSettingsStore((state) => state.values[SETTINGS.DOUBLE_TAP_SEEK_SECONDS] ?? "10");
   const doubleClickSeek = useAppSettingsStore((state) => state.values[SETTINGS.DOUBLE_CLICK_SEEK_ENABLED] !== "false");
   const wheelAction = useAppSettingsStore((state) => playerWheelAction(state.values[SETTINGS.PLAYER_WHEEL_ACTION]));
+  const trackpadGestures = useTrackpadGesturesEnabled();
   const subtitlesEnabled = useAppSettingsStore((state) => state.values[SETTINGS.SUBTITLES_ENABLED] === "true");
   const preferredAudioLanguage = useAppSettingsStore((state) => state.values[SETTINGS.PREFERRED_AUDIO_LANGUAGE]);
   const preferredSubtitleLanguage = useAppSettingsStore((state) => state.values[SETTINGS.PREFERRED_SUBTITLE_LANGUAGE] ?? "en");
@@ -2855,6 +2857,7 @@ export const Player: React.FC<PlayerProps> = ({
         onToggleStats={toggleStats}
         wheelAction={wheelAction}
         onWheelVolume={wheelVolume}
+        swipeToScrub={trackpadGestures}
       />
 
       {pendingQualitySwitch && (

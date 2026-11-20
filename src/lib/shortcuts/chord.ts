@@ -82,3 +82,25 @@ export const chordId = (chord: PressedChord) =>
  * or without it. For letters and named keys Shift is its own modifier: Shift+N isn't N.
  */
 export const shiftIsPartOfKey = (key: string) => key.length === 1 && !/[a-z]/.test(key);
+
+const MODIFIER_KEYS = new Set(["shift", "control", "alt", "meta", "os", "altgraph", "capslock", "fn"]);
+const NAMED_FOR_TEXT: Record<string, string> = { " ": "Space", "+": "Plus" };
+
+/**
+ * The chord a key press makes, written as it is stored: Cmd on macOS and Ctrl elsewhere become
+ * `Mod`, so a backup means the same on the other system. Null while only modifiers are held.
+ */
+export function chordFromEvent(event: KeyLike, isMac: boolean): string | null {
+  const key = eventChord(event).key;
+  if (MODIFIER_KEYS.has(key)) return null;
+  const parts: string[] = [];
+  const mod = isMac ? event.metaKey : event.ctrlKey;
+  if (mod) parts.push("Mod");
+  if (isMac ? event.ctrlKey : event.metaKey) parts.push(isMac ? "Ctrl" : "Meta");
+  if (event.altKey) parts.push("Alt");
+  // `?` already says Shift was held; N doesn't.
+  if (event.shiftKey && !shiftIsPartOfKey(key)) parts.push("Shift");
+  const name = NAMED_FOR_TEXT[key] ?? (key.length === 1 ? key.toUpperCase() : event.key);
+  parts.push(name);
+  return parts.join("+");
+}

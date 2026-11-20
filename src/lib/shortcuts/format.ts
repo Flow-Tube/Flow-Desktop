@@ -1,5 +1,6 @@
 import { getString, type StringKey } from "../i18n/index";
 import { parseChord } from "./chord";
+import { NO_OVERRIDES, type ShortcutOverrides } from "./bindings";
 import { DIGIT_CHORDS, commandKeys, type ShortcutCommand } from "./command";
 
 const NAMED_KEYS: Record<string, StringKey> = {
@@ -56,11 +57,15 @@ export interface ShortcutRow {
   caps: string[];
 }
 
-const isDigitRow = (keys: readonly string[]) => keys.length === DIGIT_CHORDS.length && DIGIT_CHORDS.every((digit) => keys.includes(digit));
+export const isDigitRow = (keys: readonly string[]) => keys.length === DIGIT_CHORDS.length && DIGIT_CHORDS.every((digit) => keys.includes(digit));
 
-export function shortcutRows(commands: readonly ShortcutCommand<unknown>[], isMac: boolean): ShortcutRow[] {
+export function shortcutRows(
+  commands: readonly ShortcutCommand<unknown>[],
+  isMac: boolean,
+  overrides: ShortcutOverrides = NO_OVERRIDES,
+): ShortcutRow[] {
   return commands.map((command) => {
-    const keys = commandKeys(command, isMac);
+    const keys = commandKeys(command, isMac, overrides);
     return {
       id: command.id,
       label: getString(command.label),

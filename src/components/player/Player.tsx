@@ -132,10 +132,11 @@ import {
 import {
   SOURCE_SWITCH_TIMEOUT_MS,
   hasMediaPlaybackProgressed,
+  BUFFERING_SPINNER_DELAY_MS,
   hasSourceSwitchTimedOut,
   shouldEnterMediaBuffering,
 } from "../../lib/mediaBuffering";
-import { freezeVideoFrame, waitForVideoFrame } from "../../lib/videoFreeze";
+import { useFrameHold } from "../../lib/player/useFrameHold";
 import {
   canAutoHidePlayerChrome,
   PLAYER_CHROME_HIDE_DELAY_MS,
@@ -564,11 +565,8 @@ export const Player: React.FC<PlayerProps> = ({
   const [isPip, setIsPip] = useState(false);
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
-  const freezeCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [isHoldingFrame, setIsHoldingFrame] = useState(false);
-  const isHoldingFrameRef = useRef(false);
-  const cancelWaitFrameRef = useRef<(() => void) | null>(null);
   const bufferingTimerRef = useRef<number | null>(null);
+  const frameHold = useFrameHold(videoRef);
 
   // Every exit from buffering has to drop both the flag and the clock reading
   // it started from; leaving one behind is what strands the spinner.
@@ -582,36 +580,6 @@ export const Player: React.FC<PlayerProps> = ({
     setIsBuffering(false);
   }, []);
 
-  const holdCurrentFrame = useCallback(() => {
-    if (isHoldingFrameRef.current) return;
-    const video = videoRef.current;
-    const canvas = freezeCanvasRef.current;
-    if (freezeVideoFrame(video, canvas)) {
-      isHoldingFrameRef.current = true;
-      setIsHoldingFrame(true);
-      cancelWaitFrameRef.current?.();
-      cancelWaitFrameRef.current = waitForVideoFrame(video, () => {
-        isHoldingFrameRef.current = false;
-        setIsHoldingFrame(false);
-        cancelWaitFrameRef.current = null;
-      });
-    }
-  }, []);
-
-  const releaseHeldFrame = useCallback(() => {
-    if (!isHoldingFrameRef.current) return;
-    cancelWaitFrameRef.current?.();
-    const video = videoRef.current;
-    cancelWaitFrameRef.current = waitForVideoFrame(
-      video,
-      () => {
-        isHoldingFrameRef.current = false;
-        setIsHoldingFrame(false);
-        cancelWaitFrameRef.current = null;
-      },
-      100,
-    );
-  }, []);
   const [selectedCaptionId, setSelectedCaptionId] = useState<string>("off");
   const [selectedAudioTrackId, setSelectedAudioTrackId] = useState<string | null>(null);
   const [hasStartedPlayback, setHasStartedPlayback] = useState(false);
@@ -1106,16 +1074,12 @@ export const Player: React.FC<PlayerProps> = ({
 
   const selectPlaybackRate = useCallback((nextRate: number) => {
     const normalizedRate = normalizePlaybackRate(nextRate);
-    const video = videoRef.current;
-    if (video && Math.abs(video.playbackRate - normalizedRate) > 0.001) {
-      holdCurrentFrame();
-    }
     setPlaybackRate(normalizedRate);
     notePickedSpeed(normalizedRate);
     if (rememberPlaybackSpeed) {
       void setSettingValue(SETTINGS.PLAYBACK_SPEED, formatPlaybackRate(normalizedRate));
     }
-  }, [holdCurrentFrame, notePickedSpeed, rememberPlaybackSpeed, setPlaybackRate]);
+  }, [notePickedSpeed, rememberPlaybackSpeed, setPlaybackRate]);
 
   const toggleLoopSetting = useCallback(() => {
     void setSettingValue(SETTINGS.VIDEO_LOOP_ENABLED, String(!videoLoopEnabled));
@@ -1386,7 +1350,6 @@ export const Player: React.FC<PlayerProps> = ({
     const video = videoRef.current;
     const audio = audioRef.current;
     if (!video) return;
-    holdCurrentFrame();
     let nextTime: number;
     if (isLive && video.seekable.length) {
       const { start, end } = liveWindow(video);
@@ -1397,7 +1360,9 @@ export const Player: React.FC<PlayerProps> = ({
       nextTime = dur > 0 ? Math.min(Math.max(time, 0), dur) : Math.max(time, 0);
       nextTime = sponsorSkipTarget(nextTime) ?? nextTime;
     }
-    video.currentTime = nextTime;
+    frameHold.around({ kind: "seek", target: nextTime }, () => {
+      video.currentTime = nextTime;
+    });
     if (audio) {
       audioHoldRef.current = false;
       lastAudioResyncAtRef.current = performance.now();
@@ -1407,7 +1372,7 @@ export const Player: React.FC<PlayerProps> = ({
       }
     }
     setCurrentTime(nextTime);
-  }, [duration, holdCurrentFrame, isLive, setCurrentTime, sponsorSkipTarget]);
+  }, [duration, frameHold, isLive, setCurrentTime, sponsorSkipTarget]);
 
   // Letting go of the seek bar inside such a segment skips it too.
   const wasScrubbingRef = useRef(false);
@@ -2106,13 +2071,13 @@ export const Player: React.FC<PlayerProps> = ({
 
       mediaBufferingRef.current = true;
       bufferingStartedAtRef.current = video.currentTime;
-      if (bufferingTimerRef.current === null && !isBuffering) {
+      if (bufferingTimerRef.current === null) {
         bufferingTimerRef.current = window.setTimeout(() => {
           bufferingTimerRef.current = null;
           if (mediaBufferingRef.current) {
             setIsBuffering(true);
           }
-        }, 200);
+        }, BUFFERING_SPINNER_DELAY_MS);
       }
       if (waitingSinceRef.current === null) waitingSinceRef.current = Date.now();
       stallCountRef.current += 1;
@@ -2140,7 +2105,6 @@ export const Player: React.FC<PlayerProps> = ({
       });
     };
     const resumeExternalAudio = (eventName: string) => {
-      releaseHeldFrame();
       clearMediaBuffering();
       waitingSinceRef.current = null;
       if (playbackStartAtRef.current === null) playbackStartAtRef.current = Date.now();
@@ -2169,19 +2133,9 @@ export const Player: React.FC<PlayerProps> = ({
         audioTime: audio.currentTime,
       });
     };
-    const onVideoCanPlay = () => {
-      releaseHeldFrame();
-      resumeExternalAudio("html-video-canplay");
-    };
-    const onVideoPlaying = () => {
-      releaseHeldFrame();
-      resumeExternalAudio("html-video-playing");
-    };
-    const onVideoSeeked = () => {
-      releaseHeldFrame();
-    };
+    const onVideoCanPlay = () => resumeExternalAudio("html-video-canplay");
+    const onVideoPlaying = () => resumeExternalAudio("html-video-playing");
     const onVideoSeeking = () => {
-      holdCurrentFrame();
       lastSeekAtRef.current = Date.now();
       clearMediaBuffering();
       waitingSinceRef.current = null;
@@ -2226,7 +2180,6 @@ export const Player: React.FC<PlayerProps> = ({
     video.addEventListener("canplay", onVideoCanPlay);
     video.addEventListener("playing", onVideoPlaying);
     video.addEventListener("seeking", onVideoSeeking);
-    video.addEventListener("seeked", onVideoSeeked);
     video.addEventListener("error", onVideoError);
 
     return () => {
@@ -2235,16 +2188,13 @@ export const Player: React.FC<PlayerProps> = ({
       video.removeEventListener("canplay", onVideoCanPlay);
       video.removeEventListener("playing", onVideoPlaying);
       video.removeEventListener("seeking", onVideoSeeking);
-      video.removeEventListener("seeked", onVideoSeeked);
       video.removeEventListener("error", onVideoError);
     };
   }, [
     clearMediaBuffering,
-    holdCurrentFrame,
     logPlayerEvent,
     playbackRate,
     realignExternalAudioClock,
-    releaseHeldFrame,
     resumeExternalAudioPlayback,
     usesExternalAudio,
   ]);
@@ -2264,6 +2214,7 @@ export const Player: React.FC<PlayerProps> = ({
     retrySourceFiredRef.current = false;
 
     clearMediaBuffering();
+    frameHold.release();
     videoProgressSampleRef.current = null;
     postSwitchRealignPendingRef.current = true;
 
@@ -2276,14 +2227,6 @@ export const Player: React.FC<PlayerProps> = ({
       sourceSwitchingRef.current = false;
       setHasStartedPlayback(false);
       setIsSourceSwitching(false);
-      isHoldingFrameRef.current = false;
-      setIsHoldingFrame(false);
-      cancelWaitFrameRef.current?.();
-      cancelWaitFrameRef.current = null;
-      const freezeCanvas = freezeCanvasRef.current;
-      if (freezeCanvas) {
-        freezeCanvas.getContext("2d")?.clearRect(0, 0, freezeCanvas.width, freezeCanvas.height);
-      }
       if (video && Number.isFinite(video.currentTime) && video.currentTime !== 0) {
         try {
           video.currentTime = 0;
@@ -2297,7 +2240,7 @@ export const Player: React.FC<PlayerProps> = ({
         }
       }
     }
-  }, [clearMediaBuffering, mediaIdentity, resumeTime]);
+  }, [clearMediaBuffering, frameHold, mediaIdentity, resumeTime]);
 
   useEffect(() => {
     if (!isSourceSwitching) return;
@@ -2393,9 +2336,10 @@ export const Player: React.FC<PlayerProps> = ({
     const audio = audioRef.current;
     if (video) {
       if (Math.abs(video.playbackRate - playbackRate) > 0.001) {
-        holdCurrentFrame();
-        video.playbackRate = playbackRate;
-        video.preservesPitch = true;
+        frameHold.around({ kind: "rate" }, () => {
+          video.playbackRate = playbackRate;
+          video.preservesPitch = true;
+        });
       }
     }
     if (audio) {
@@ -2404,7 +2348,7 @@ export const Player: React.FC<PlayerProps> = ({
         audio.preservesPitch = true;
       }
     }
-  }, [holdCurrentFrame, playbackRate]);
+  }, [frameHold, playbackRate]);
 
   useEffect(() => () => {
     const controller = windowFullscreenControllerRef.current;
@@ -2418,8 +2362,6 @@ export const Player: React.FC<PlayerProps> = ({
       window.clearTimeout(bufferingTimerRef.current);
       bufferingTimerRef.current = null;
     }
-    cancelWaitFrameRef.current?.();
-    cancelWaitFrameRef.current = null;
   }, []);
 
   useEffect(() => {
@@ -2893,15 +2835,14 @@ export const Player: React.FC<PlayerProps> = ({
         }}
         className={cx("relative z-10 h-full w-full", VIDEO_FIT_CLASS[isPipMode ? "fit" : videoFit], showsSpherical && "opacity-0")}
       />
-      <canvas
-        ref={freezeCanvasRef}
-        aria-hidden="true"
-        className={cx(
-          "pointer-events-none absolute inset-0 z-10 h-full w-full",
-          VIDEO_FIT_CLASS[isPipMode ? "fit" : videoFit],
-          (!isHoldingFrame || showsSpherical) && "hidden",
-        )}
-      />
+      {frameHold.enabled && !showsSpherical && (
+        <canvas
+          ref={frameHold.canvasRef}
+          hidden
+          aria-hidden="true"
+          className={cx("pointer-events-none absolute inset-0 z-10 h-full w-full", VIDEO_FIT_CLASS[isPipMode ? "fit" : videoFit])}
+        />
+      )}
       {showsSpherical && (
         <SphericalView
           videoRef={videoRef}

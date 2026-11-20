@@ -46,6 +46,7 @@ PLAYER
 - The pop-out window's title and buttons sit on dark backings, like the mini player's, so they stay readable over a bright video (#664). They also show when you reach them with the keyboard.
 - Zoom into a video with a trackpad pinch or Ctrl (Cmd on macOS) and the wheel, then drag or scroll with two fingers to move around it (#700). Z zooms in, Shift+Z zooms out, X goes back to the whole picture, and W, A, S and D move a zoomed video. Zoom goes from 1x to 6x, as on Android, and stops for a moment where the picture fills the screen.
 - A short read-out shows the zoom level, and the right-click menu has Zoom in, Zoom out and Reset zoom. Copy frame and Save frame keep only the zoomed part, at the video's own resolution. Captions keep their size, and each new video starts at 1x.
+- Settings > Player > Wheel over the video picks what the mouse wheel or a two-finger scroll does with the pointer on the video: scroll the page as before, change the volume, or zoom.
 - Space and Enter on a button you reached with Tab now press that button instead of pausing the video, and the arrow keys on a focused slider or seek bar no longer also seek or change the volume. A button clicked with the mouse still leaves Space to the player, and the same now holds in Shorts and the music player.
 
 MUSIC

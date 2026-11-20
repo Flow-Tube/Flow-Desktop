@@ -129,6 +129,8 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   ]),
   ...rows("keyboard", [
     { title: "settings_global_media_keys", summary: "settings_global_media_keys_desc", keywords: ["hotkey", "shortcut", "keyboard", "media"] },
+    { title: "settings_single_key_shortcuts", summary: "settings_single_key_shortcuts_desc", keywords: ["shortcut", "speech", "accessibility"] },
+    { title: "settings_shortcuts_search", summary: "settings_shortcuts_edit_hint", keywords: ["shortcut", "hotkey", "keyboard", "rebind", "customize", "keys"] },
   ]),
   ...rows("music", [
     { title: "music_equalizer", summary: "settings_music_equalizer_desc" },

@@ -1,16 +1,19 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 
 import { getString } from "../../lib/i18n/index";
 import { IS_MACOS_RUNTIME } from "../../lib/platform";
 import { appShortcut } from "../../lib/shortcuts/appCommands";
 import { keyBelongsToTarget } from "../../lib/shortcuts/target";
+import { Button } from "../ui/Button";
 import { InfoDialog } from "../ui/InfoDialog";
 import { KeyMapList } from "./KeyMapList";
 
 /** `?` opens the key list from anywhere, unless the key is being typed into something. */
 export function KeyboardHelpHost() {
   const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -26,7 +29,23 @@ export function KeyboardHelpHost() {
   return (
     <AnimatePresence>
       {open && (
-        <InfoDialog title={getString("keyboard_shortcuts_title")} closeLabel={getString("close")} onClose={() => setOpen(false)} wide>
+        <InfoDialog
+          title={getString("keyboard_shortcuts_title")}
+          closeLabel={getString("close")}
+          onClose={() => setOpen(false)}
+          wide
+          footer={
+            <Button
+              variant="tonal"
+              onClick={() => {
+                setOpen(false);
+                navigate("/settings", { state: { settingsCategory: "keyboard" } });
+              }}
+            >
+              {getString("keyboard_shortcuts_customize")}
+            </Button>
+          }
+        >
           <KeyMapList />
         </InfoDialog>
       )}

@@ -2,6 +2,7 @@ import { useMemo } from "react";
 
 import { getString } from "../../lib/i18n/index";
 import { IS_MACOS_RUNTIME } from "../../lib/platform";
+import { useShortcutSettings } from "../../lib/shortcuts/bindings";
 import { SHORTCUT_GROUPS } from "../../lib/shortcuts/catalog";
 import { shortcutRows, type ShortcutRow } from "../../lib/shortcuts/format";
 
@@ -33,9 +34,16 @@ function KeyMap({ title, rows }: { title: string; rows: ShortcutRow[] }) {
 
 /** Every key in the app, read from the same tables the app acts on. */
 export function KeyMapList() {
+  const { overrides } = useShortcutSettings();
   const groups = useMemo(
-    () => SHORTCUT_GROUPS.map((group) => ({ scope: group.scope, title: getString(group.title), rows: shortcutRows(group.commands, IS_MACOS_RUNTIME) })),
-    [],
+    () =>
+      SHORTCUT_GROUPS.map((group) => ({
+        scope: group.scope,
+        title: getString(group.title),
+        // A command someone left without keys has nothing to show here.
+        rows: shortcutRows(group.commands, IS_MACOS_RUNTIME, overrides).filter((row) => row.caps.length > 0),
+      })),
+    [overrides],
   );
   return (
     <div className="grid grid-cols-1 gap-6 md:grid-cols-2">

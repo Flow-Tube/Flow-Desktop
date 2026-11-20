@@ -103,6 +103,7 @@ const DESKTOP_ONLY: &[&str] = &[
     "speed_slider_enabled",
     "double_tap_seek_seconds",
     "double_click_seek_enabled",
+    "player_wheel_action",
     "subtitle_font_scale",
     "subtitle_bold",
     "mini_player_show_skip_controls",

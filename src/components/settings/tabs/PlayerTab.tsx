@@ -55,6 +55,7 @@ export function PlayerTab() {
 
   const [doubleTapSeek, setDoubleTapSeek] = useNumberPref(SETTINGS.DOUBLE_TAP_SEEK_SECONDS, 10);
   const [doubleClickSeek, setDoubleClickSeek] = useBoolPref(SETTINGS.DOUBLE_CLICK_SEEK_ENABLED, true);
+  const [wheelAction, setWheelAction] = usePreference(SETTINGS.PLAYER_WHEEL_ACTION, 'scroll');
 
   const [subtitles, setSubtitles] = useBoolPref(SETTINGS.SUBTITLES_ENABLED, false);
   const [subtitleLang, setSubtitleLang] = usePreference(SETTINGS.PREFERRED_SUBTITLE_LANGUAGE, 'en');
@@ -171,6 +172,13 @@ export function PlayerTab() {
         </SettingItem>
         <SettingItem title={getString('settings_double_click_seek')} description={getString('settings_double_click_seek_desc')}>
           <ToggleSwitch checked={doubleClickSeek} onChange={setDoubleClickSeek} />
+        </SettingItem>
+        <SettingItem title={getString('settings_player_wheel')} description={getString('settings_player_wheel_desc')}>
+          <Select value={wheelAction} onChange={setWheelAction} options={[
+            { value: 'scroll', label: getString('settings_player_wheel_scroll') },
+            { value: 'volume', label: getString('settings_player_wheel_volume') },
+            { value: 'zoom', label: getString('settings_player_wheel_zoom') },
+          ]} />
         </SettingItem>
       </SettingsGroup>
 

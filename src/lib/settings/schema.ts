@@ -1,6 +1,7 @@
 import type { StringKey } from "../i18n/index";
 import { IS_LINUX_RUNTIME } from "../platform";
 import { MINI_PLAYER_SIZES } from "../miniPlayerSize";
+import { PLAYER_WHEEL_ACTIONS } from "../player/wheelAction";
 
 export type SettingValueType = "boolean" | "number" | "string" | "json";
 export type SettingArea =
@@ -68,6 +69,7 @@ export const SETTINGS = {
   SPEED_SLIDER_ENABLED: "speed_slider_enabled",
   DOUBLE_TAP_SEEK_SECONDS: "double_tap_seek_seconds",
   DOUBLE_CLICK_SEEK_ENABLED: "double_click_seek_enabled",
+  PLAYER_WHEEL_ACTION: "player_wheel_action",
   SUBTITLES_ENABLED: "subtitles_enabled",
   PREFERRED_SUBTITLE_LANGUAGE: "preferred_subtitle_language",
   SUBTITLE_FONT_SCALE: "subtitle_font_scale",
@@ -352,6 +354,7 @@ export const SETTING_SCOPES = {
   [SETTINGS.SPEED_SLIDER_ENABLED]: "profile",
   [SETTINGS.DOUBLE_TAP_SEEK_SECONDS]: "device",
   [SETTINGS.DOUBLE_CLICK_SEEK_ENABLED]: "device",
+  [SETTINGS.PLAYER_WHEEL_ACTION]: "device",
   [SETTINGS.SUBTITLES_ENABLED]: "profile",
   [SETTINGS.PREFERRED_SUBTITLE_LANGUAGE]: "profile",
   [SETTINGS.SUBTITLE_FONT_SCALE]: "profile",
@@ -713,6 +716,7 @@ export const SETTING_DEFINITIONS = [
   bool(SETTINGS.SPEED_SLIDER_ENABLED, "player", false, "wired"),
   num(SETTINGS.DOUBLE_TAP_SEEK_SECONDS, "player", 10, "wired", 5, 30),
   bool(SETTINGS.DOUBLE_CLICK_SEEK_ENABLED, "player", true, "wired"),
+  str(SETTINGS.PLAYER_WHEEL_ACTION, "player", "scroll", "wired", PLAYER_WHEEL_ACTIONS),
   bool(SETTINGS.SUBTITLES_ENABLED, "player", false, "wired"),
   str(SETTINGS.PREFERRED_SUBTITLE_LANGUAGE, "player", "en", "wired"),
   str(SETTINGS.SUBTITLE_FONT_SCALE, "player", "100", "wired", ["50", "75", "100", "150", "200", "300", "400"]),

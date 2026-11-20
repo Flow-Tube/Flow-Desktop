@@ -64,8 +64,10 @@ const media = <T extends HTMLMediaElement>(tag: "video" | "audio", cors = true):
 
 const rock = graphSpec(selectPreset(defaultEqState(), "builtin:rock"), false);
 
-async function freshEngine() {
+// The platform is pinned so the suite reads the same on a Linux runner as anywhere else.
+async function freshEngine(linux = false) {
   vi.resetModules();
+  vi.doMock("../platform", () => ({ IS_LINUX_RUNTIME: linux }));
   const module = await import("./mediaEqEngine");
   return { engine: new module.MediaEqEngine(), available: module.videoEqAvailable };
 }
@@ -86,6 +88,7 @@ afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  vi.doUnmock("../platform");
 });
 
 describe("MediaEqEngine", () => {
@@ -118,6 +121,19 @@ describe("MediaEqEngine", () => {
     engine.setElements([video, nextAudio]);
     await settle();
     expect(ctx.sources.slice(1)).toEqual([video, audio, nextAudio]);
+  });
+
+  it("never routes a video on WebKitGTK, which would knock its clock off and leak the element", async () => {
+    const { engine, available } = await freshEngine(true);
+    expect(available()).toBe(false);
+    const video = media<HTMLVideoElement>("video");
+    const audio = media<HTMLAudioElement>("audio");
+    engine.setElements([video, audio]);
+    engine.setEq(rock, true);
+    engine.setBoost(2);
+    video.dispatchEvent(new Event("play"));
+    await settle();
+    expect(contexts).toHaveLength(0);
   });
 
   it("falls back to plain playback when WebAudio returns silence", async () => {

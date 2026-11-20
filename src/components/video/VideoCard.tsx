@@ -36,7 +36,8 @@ import { isWatched as isWatchedPosition, type WatchedThreshold } from '../../lib
 import { ThumbnailWatchProgress } from './ThumbnailWatchProgress';
 import { VideoDetailsDialog } from './VideoDetailsDialog';
 import { useUiStore } from '../../store/useUiStore';
-import { showSaveFailedToast, showSaveToast } from '../../lib/saveToast';
+import { showSaveToast } from '../../lib/saveToast';
+import { toggleWatchLaterWithToast } from '../../lib/watchLaterToggle';
 import { usePlaylistModalStore } from '../../store/usePlaylistModalStore';
 import { usePlayerStore } from '../../store/usePlayerStore';
 import { useDownloadStore } from '../../store/useDownloadStore';
@@ -47,7 +48,7 @@ import { formatPublishedText, formatYouTubeRelativeTime } from '../../lib/publis
 import { ColorWash, COLOR_WASH_HOST } from '../ui/ColorWash';
 import { CardPills, ChannelLabel, CollabAvatars, UpcomingBadge } from "./CardMeta";
 import { collaboratorsByline } from "../../lib/collaborators";
-import { backgroundTabClickProps, openedInBackgroundTab, routeForVideo } from '../../lib/openTarget';
+import { backgroundTabClickProps, cardKeyboardProps, openedInBackgroundTab, routeForVideo } from '../../lib/openTarget';
 import { openActions } from '../common/openActions';
 import { isLocalMediaId } from '../../lib/localMediaId';
 import { alignToEnd, growFromPoint } from "../../lib/direction";
@@ -203,6 +204,7 @@ function VideoCardComponent({
     }
   }, [video, navigate, onPlay, route]);
   const tabClickProps = useMemo(() => backgroundTabClickProps(route), [route]);
+  const cardKeys = useMemo(() => cardKeyboardProps(() => play(), route), [play, route]);
 
   useEffect(() => {
     if (video.isLive) markLive(video.id);
@@ -214,8 +216,6 @@ function VideoCardComponent({
   const isSavedToWatchLater = useWatchLaterStore((s) => s.ids.has(video.id));
   const isReminded = useUpcomingReminderStore((s) => s.ids.has(video.id));
   const toggleReminder = useUpcomingReminderStore((s) => s.toggle);
-  const saveToWatchLater = useWatchLaterStore((s) => s.add);
-  const removeFromWatchLater = useWatchLaterStore((s) => s.remove);
 
   const dearrowEnabled = useSettingsStore((s) => s.dearrowEnabled);
   const titleClampStyle = getTitleClampStyle(
@@ -391,36 +391,7 @@ function VideoCardComponent({
 
   const toastItem = { title: displayTitle, image: displayThumbnail, shape: "landscape" as const };
 
-  const handleToggleWatchLater = async () => {
-    const removing = isSavedToWatchLater;
-    try {
-      if (removing) {
-        await removeFromWatchLater(video.id);
-        showSaveToast({
-          destination: { kind: "watchLater" },
-          item: toastItem,
-          removed: true,
-          undo: () => saveToWatchLater(video),
-        });
-        return;
-      }
-
-      await saveToWatchLater(video);
-      showSaveToast({
-        destination: { kind: "watchLater" },
-        item: toastItem,
-        undo: () => removeFromWatchLater(video.id),
-      });
-    } catch (error) {
-      console.error("Failed to update Watch Later", error);
-      showSaveFailedToast({
-        destination: { kind: "watchLater" },
-        item: toastItem,
-        removed: removing,
-        retry: handleToggleWatchLater,
-      });
-    }
-  };
+  const handleToggleWatchLater = () => toggleWatchLaterWithToast(video, toastItem);
 
   const handleAddToQueue = () => {
     const player = usePlayerStore.getState();
@@ -730,9 +701,11 @@ function VideoCardComponent({
       >
         <ColorWash active={isHovered} color={dominantColor} alpha={0.2} spread="row" />
         <div
-          className="relative aspect-video w-40 shrink-0 cursor-pointer overflow-hidden rounded-xl bg-surface-container"
+          className="relative aspect-video w-40 shrink-0 cursor-pointer overflow-hidden rounded-xl bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           onClick={play}
           {...tabClickProps}
+          {...cardKeys}
+          aria-label={displayTitle}
         >
           {displayThumbnail ? (
             <img
@@ -973,9 +946,11 @@ function VideoCardComponent({
     >
       <ColorWash active={isHovered} color={dominantColor} alpha={0.2} />
       <div
-        className="relative w-full aspect-video rounded-xl overflow-hidden bg-chrome-zinc-900 cursor-pointer"
+        className="relative w-full aspect-video rounded-xl overflow-hidden bg-chrome-zinc-900 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         onClick={play}
-          {...tabClickProps}
+        {...tabClickProps}
+        {...cardKeys}
+        aria-label={displayTitle}
       >
         {displayThumbnail ? (
           <img

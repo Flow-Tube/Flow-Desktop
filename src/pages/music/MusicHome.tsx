@@ -33,6 +33,7 @@ import { getString } from '../../lib/i18n/index';
 import { episodeAsSong } from '../../lib/searchResults';
 import { useGridStyle } from '../../lib/useGridColumns';
 import type { AlbumItem, ArtistItem, MoodAndGenreItem, MusicHomeChip, PlaylistItem, PodcastItem, SongItem, YTItem } from '../../types/music';
+import { usePageRefresh } from '../../lib/pageRefresh';
 
 const songsOf = (items: YTItem[]): SongItem[] =>
   items.flatMap((i) => (i.type === 'song' ? [i] : i.type === 'episode' ? [episodeAsSong(i)] : []));
@@ -57,6 +58,7 @@ export default function MusicHome() {
   const navigate = useNavigate();
   const playQueue = useMusicPlayerStore((s) => s.playQueue);
   const { data, loading, error, reload, loadMore, hasMore, loadingMore, loadMoreError } = useMusicHome();
+  usePageRefresh(() => void reload());
   const personalization = useMusicPersonalization();
   const discoverySections = useMusicDiscoverySections();
   const [chartCountry] = usePreference(SETTINGS.TRENDING_REGION, 'US');

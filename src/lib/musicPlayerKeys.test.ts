@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { keyBelongsToTarget, musicPlayerKeyAction, volumeAfterWheel } from "./musicPlayerKeys";
+import { musicPlayerKeyAction, volumeAfterWheel } from "./musicPlayerKeys";
 
 const press = (key: string, extra: Partial<{ shiftKey: boolean; ctrlKey: boolean; metaKey: boolean; altKey: boolean }> = {}) =>
   musicPlayerKeyAction({ key, shiftKey: false, ctrlKey: false, metaKey: false, altKey: false, ...extra }, 10);
@@ -17,20 +17,15 @@ describe("musicPlayerKeyAction", () => {
     expect(press("7")).toEqual({ kind: "seek-to-fraction", fraction: 0.7 });
   });
 
+  it("likes with Shift+L and shows lyrics with Y", () => {
+    expect(press("L", { shiftKey: true })).toEqual({ kind: "toggle-like" });
+    expect(press("y")).toEqual({ kind: "toggle-lyrics" });
+  });
+
   it("leaves shortcuts with modifiers to the system", () => {
     expect(press("k", { metaKey: true })).toBeNull();
     expect(press("q", { ctrlKey: true })).toBeNull();
     expect(press("x")).toBeNull();
-  });
-
-  it("lets fields and sliders keep their own keys", () => {
-    const input = document.createElement("input");
-    expect(keyBelongsToTarget(input, "k")).toBe(true);
-    const slider = document.createElement("div");
-    slider.setAttribute("role", "slider");
-    expect(keyBelongsToTarget(slider, "ArrowLeft")).toBe(true);
-    expect(keyBelongsToTarget(slider, "k")).toBe(false);
-    expect(keyBelongsToTarget(document.createElement("button"), " ")).toBe(true);
   });
 
   it("turns the wheel into volume steps, clamped", () => {

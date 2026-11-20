@@ -44,6 +44,18 @@ describe("captureFrame", () => {
     expect(toBlob).toHaveBeenCalledWith(expect.any(Function), "image/png");
   });
 
+  it("draws only the zoomed area, still at the video's resolution", async () => {
+    const drawImage = vi.fn();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({ drawImage } as unknown as CanvasRenderingContext2D);
+    vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation(function (this: HTMLCanvasElement, done: BlobCallback) {
+      expect([this.width, this.height]).toEqual([960, 540]);
+      done(new Blob(["png"], { type: "image/png" }));
+    });
+    const source = video();
+    await captureFrame(source, { x: 480, y: 270, width: 960, height: 540 });
+    expect(drawImage).toHaveBeenCalledWith(source, 480, 270, 960, 540, 0, 0, 960, 540);
+  });
+
   it("says when the video's source forbids reading it", async () => {
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({ drawImage: vi.fn() } as unknown as CanvasRenderingContext2D);
     vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation(() => {

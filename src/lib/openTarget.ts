@@ -1,6 +1,8 @@
-import type { MouseEvent as ReactMouseEvent } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from "react";
 import { readStreamInfoEntry } from "./streamResolution";
 import { wantsBackgroundTab } from "./clickIntent";
+import { CARD_FOCUS_ATTR } from "./cardNavigation";
+import { IS_MACOS_RUNTIME } from "./platform";
 import { tabsEnabled } from "./tabs/tabsEnabled";
 import { shortsPlayerDisabledNow } from "./useShortsContent";
 import { openAppWindow, type WindowVideoHandoff } from "./api/appWindow";
@@ -110,4 +112,23 @@ export function openedInBackgroundTab(event: ReactMouseEvent | undefined, route:
   event.preventDefault();
   event.stopPropagation();
   return true;
+}
+
+/**
+ * Makes a card's main element reachable with Tab and the arrow keys: Enter opens it, and
+ * Cmd+Enter (Ctrl+Enter elsewhere) opens it in a background tab, as Cmd-click does.
+ */
+export function cardKeyboardProps(open: () => void, route: string | null) {
+  return {
+    tabIndex: 0,
+    role: "link" as const,
+    [CARD_FOCUS_ATTR]: "",
+    onKeyDown: (event: ReactKeyboardEvent) => {
+      if (event.key !== "Enter" || event.altKey || event.shiftKey) return;
+      event.preventDefault();
+      const wantsTab = IS_MACOS_RUNTIME ? event.metaKey : event.ctrlKey;
+      if (wantsTab && route && openInNewTab(route)) return;
+      open();
+    },
+  };
 }

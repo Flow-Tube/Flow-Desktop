@@ -35,6 +35,7 @@ import type { ShortItem, ShortsPanelState } from "../../types/shorts";
 import type { ShortVideoSummary, VideoDetails, VideoSummary } from "../../types/video";
 import type { RydData } from "../../lib/api/foss";
 import { useOriginalTitle } from "../../lib/useOriginalTitle";
+import { useWatchCommands } from "../../lib/watchCommands";
 
 interface ShortActionBarProps {
   short: ShortItem;
@@ -121,6 +122,11 @@ export function ShortActionBar({
     ],
   );
   const { state, like, dislike } = useVideoReactions(video, { channelId: short.channelId ?? null });
+  // Only the Short on screen has its action bar mounted, so it alone answers Shift+L.
+  useWatchCommands((command) => {
+    if (command === "like") like();
+    else if (command === "dislike") dislike();
+  });
   useEffect(() => {
     likeFromSurfaceRef.current = () => {
       if (state !== "liked") like();

@@ -1,6 +1,7 @@
 import type { StringKey } from "../i18n/index";
 import { IS_LINUX_RUNTIME } from "../platform";
 import { MINI_PLAYER_SIZES } from "../miniPlayerSize";
+import { PLAYER_WHEEL_ACTIONS } from "../player/wheelAction";
 
 export type SettingValueType = "boolean" | "number" | "string" | "json";
 export type SettingArea =
@@ -43,6 +44,7 @@ export const SETTINGS = {
   THEME_DARK_ID: "theme_dark_id",
   THEME_DARK_STYLE: "theme_dark_style",
   APP_FONT: "app_font",
+  INTERFACE_ZOOM: "interface_zoom",
   APP_FONT_CUSTOM_NAME: "app_font_custom_name",
   EXPRESSIVE_SLIDERS_ENABLED: "expressive_sliders_enabled",
   CUSTOM_THEMES: "custom_themes",
@@ -68,6 +70,7 @@ export const SETTINGS = {
   SPEED_SLIDER_ENABLED: "speed_slider_enabled",
   DOUBLE_TAP_SEEK_SECONDS: "double_tap_seek_seconds",
   DOUBLE_CLICK_SEEK_ENABLED: "double_click_seek_enabled",
+  PLAYER_WHEEL_ACTION: "player_wheel_action",
   SUBTITLES_ENABLED: "subtitles_enabled",
   PREFERRED_SUBTITLE_LANGUAGE: "preferred_subtitle_language",
   SUBTITLE_FONT_SCALE: "subtitle_font_scale",
@@ -292,6 +295,9 @@ export const SETTINGS = {
   DISCORD_RPC_MODE: "discord_rpc_mode",
   MUSIC_TRAY_ENABLED: "music_tray_enabled",
   GLOBAL_MEDIA_KEYS_ENABLED: "global_media_keys_enabled",
+  KEYBOARD_BINDINGS: "keyboard_bindings",
+  SINGLE_KEY_SHORTCUTS_ENABLED: "single_key_shortcuts_enabled",
+  TRACKPAD_GESTURES_ENABLED: "trackpad_gestures_enabled",
   LINKED_AUTO_SYNC: "linked_auto_sync",
   SCROBBLE_NOW_PLAYING: "scrobble_now_playing",
   SCROBBLE_LOVE_LIKES: "scrobble_love_likes",
@@ -328,6 +334,7 @@ export const SETTING_SCOPES = {
   [SETTINGS.THEME_DARK_ID]: "profile",
   [SETTINGS.THEME_DARK_STYLE]: "profile",
   [SETTINGS.APP_FONT]: "profile",
+  [SETTINGS.INTERFACE_ZOOM]: "device",
   [SETTINGS.APP_FONT_CUSTOM_NAME]: "profile",
   [SETTINGS.EXPRESSIVE_SLIDERS_ENABLED]: "profile",
   [SETTINGS.CUSTOM_THEMES]: "profile",
@@ -352,6 +359,7 @@ export const SETTING_SCOPES = {
   [SETTINGS.SPEED_SLIDER_ENABLED]: "profile",
   [SETTINGS.DOUBLE_TAP_SEEK_SECONDS]: "device",
   [SETTINGS.DOUBLE_CLICK_SEEK_ENABLED]: "device",
+  [SETTINGS.PLAYER_WHEEL_ACTION]: "device",
   [SETTINGS.SUBTITLES_ENABLED]: "profile",
   [SETTINGS.PREFERRED_SUBTITLE_LANGUAGE]: "profile",
   [SETTINGS.SUBTITLE_FONT_SCALE]: "profile",
@@ -569,6 +577,9 @@ export const SETTING_SCOPES = {
   [SETTINGS.DISCORD_RPC_MODE]: "device",
   [SETTINGS.MUSIC_TRAY_ENABLED]: "device",
   [SETTINGS.GLOBAL_MEDIA_KEYS_ENABLED]: "device",
+  [SETTINGS.KEYBOARD_BINDINGS]: "device",
+  [SETTINGS.SINGLE_KEY_SHORTCUTS_ENABLED]: "device",
+  [SETTINGS.TRACKPAD_GESTURES_ENABLED]: "device",
   [SETTINGS.LINKED_AUTO_SYNC]: "device",
   [SETTINGS.SCROBBLE_NOW_PLAYING]: "profile",
   [SETTINGS.SCROBBLE_LOVE_LIKES]: "profile",
@@ -687,6 +698,7 @@ export const SETTING_DEFINITIONS = [
   str(SETTINGS.THEME_DARK_ID, "appearance", "default", "wired"),
   str(SETTINGS.THEME_DARK_STYLE, "appearance", "dark", "wired", ["dark", "amoled"]),
   str(SETTINGS.APP_FONT, "appearance", "inter", "wired", ["inter", "system", "condensed", "serif", "custom"]),
+  num(SETTINGS.INTERFACE_ZOOM, "appearance", 1, "wired", 0.67, 2),
   str(SETTINGS.APP_FONT_CUSTOM_NAME, "appearance", "", "wired"),
   bool(SETTINGS.EXPRESSIVE_SLIDERS_ENABLED, "appearance", true, "wired"),
   json(SETTINGS.CUSTOM_THEMES, "appearance", "[]", "wired"),
@@ -713,6 +725,7 @@ export const SETTING_DEFINITIONS = [
   bool(SETTINGS.SPEED_SLIDER_ENABLED, "player", false, "wired"),
   num(SETTINGS.DOUBLE_TAP_SEEK_SECONDS, "player", 10, "wired", 5, 30),
   bool(SETTINGS.DOUBLE_CLICK_SEEK_ENABLED, "player", true, "wired"),
+  str(SETTINGS.PLAYER_WHEEL_ACTION, "player", "scroll", "wired", PLAYER_WHEEL_ACTIONS),
   bool(SETTINGS.SUBTITLES_ENABLED, "player", false, "wired"),
   str(SETTINGS.PREFERRED_SUBTITLE_LANGUAGE, "player", "en", "wired"),
   str(SETTINGS.SUBTITLE_FONT_SCALE, "player", "100", "wired", ["50", "75", "100", "150", "200", "300", "400"]),
@@ -948,6 +961,9 @@ export const SETTING_DEFINITIONS = [
   // Linux trays need an AppIndicator library and a desktop that shows them, so it is opt-in there.
   bool(SETTINGS.MUSIC_TRAY_ENABLED, "extensions", !IS_LINUX_RUNTIME, "wired"),
   bool(SETTINGS.GLOBAL_MEDIA_KEYS_ENABLED, "extensions", false, "wired"),
+  json(SETTINGS.KEYBOARD_BINDINGS, "extensions", "{}", "wired"),
+  bool(SETTINGS.SINGLE_KEY_SHORTCUTS_ENABLED, "extensions", true, "wired"),
+  bool(SETTINGS.TRACKPAD_GESTURES_ENABLED, "extensions", true, "wired"),
   bool(SETTINGS.LINKED_AUTO_SYNC, "data", true, "wired"),
   bool(SETTINGS.SCROBBLE_NOW_PLAYING, "extensions", true, "wired"),
   bool(SETTINGS.SCROBBLE_LOVE_LIKES, "extensions", false, "wired"),

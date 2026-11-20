@@ -19,6 +19,8 @@ export function useTabShortcuts(): void {
         openTab("/", { activate: true });
       } else if (shortcut.kind === "new-window") {
         void openInNewWindow("/");
+      } else if (shortcut.kind === "reopen") {
+        useTabsStore.getState().reopenClosedTab();
       } else if (shortcut.kind === "close") {
         // The last tab stays; the key still must not reach the window's own close.
         closeTabWithPlayback(activeId);

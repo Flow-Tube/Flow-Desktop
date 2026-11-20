@@ -5,7 +5,7 @@
 
 /// Device settings defined in `src/lib/settings/schema.ts` (`SETTING_SCOPES`); a test keeps the
 /// two lists equal.
-pub const SCHEMA_DEVICE_KEYS: [&str; 66] = [
+pub const SCHEMA_DEVICE_KEYS: [&str; 71] = [
     "allow_volume_boost",
     "player_volume",
     "player_volume_boost",
@@ -14,6 +14,7 @@ pub const SCHEMA_DEVICE_KEYS: [&str; 66] = [
     "double_tap_seek_seconds",
     "spherical_drag_speed",
     "double_click_seek_enabled",
+    "player_wheel_action",
     "idle_progress_strip_enabled",
     "frame_step_buttons_enabled",
     "show_region_picker_in_explore",
@@ -67,6 +68,10 @@ pub const SCHEMA_DEVICE_KEYS: [&str; 66] = [
     "music_tray_enabled",
     "pause_music_when_muted",
     "global_media_keys_enabled",
+    "keyboard_bindings",
+    "interface_zoom",
+    "single_key_shortcuts_enabled",
+    "trackpad_gestures_enabled",
     "linked_auto_sync",
     "ai_list_source_url",
     "ai_list_source_key",

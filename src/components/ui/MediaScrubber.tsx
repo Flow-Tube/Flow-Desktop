@@ -6,6 +6,7 @@ import { getString } from "../../lib/i18n/index";
 import { formatTime } from "../../lib/musicFormat";
 import { snapToBarPixel, watchBarSteps } from "../../lib/playerProgress";
 import { useExpressiveSliders } from "../../lib/useExpressiveSliders";
+import { newWheelGesture, wheelStep } from "../../lib/wheelVolume";
 
 interface MediaScrubberProps {
   progress: number;
@@ -31,6 +32,8 @@ interface MediaScrubberProps {
   buffered?: number;
   /** Where the pointer is along the bar, 0 to 1, while it hovers or drags; null once it leaves. */
   onHover?: (ratio: number | null) => void;
+  /** With a value, a plain wheel over the bar moves by this many seconds instead of scrolling the page. */
+  wheelSeekSeconds?: number;
 }
 
 export function MediaScrubber({
@@ -49,6 +52,7 @@ export function MediaScrubber({
   playing = false,
   buffered = 0,
   onHover,
+  wheelSeekSeconds,
 }: MediaScrubberProps) {
   const expressiveEnabled = useExpressiveSliders();
   const isExpressive = expressive && expressiveEnabled;
@@ -58,6 +62,29 @@ export function MediaScrubber({
   const [dragging, setDragging] = useState(false);
   const [dragRatio, setDragRatio] = useState(0);
   const dragRatioRef = useRef(0);
+  const wheelSeek = useRef({ step: wheelSeekSeconds, progress, duration, onSeek, clock });
+  wheelSeek.current = { step: wheelSeekSeconds, progress, duration, onSeek, clock };
+  const wheelSeeks = wheelSeekSeconds !== undefined;
+
+  // Native and not passive, so the wheel can stop the page or the music sheet from scrolling too.
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track || !wheelSeeks) return;
+    const gesture = newWheelGesture();
+    const onWheel = (event: WheelEvent) => {
+      if (event.shiftKey || event.ctrlKey || event.metaKey) return;
+      const { step, progress: now, duration: length, onSeek: seekTo, clock: readClock } = wheelSeek.current;
+      if (!step || length <= 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const direction = wheelStep(gesture, event.deltaY !== 0 ? event.deltaY : event.deltaX, event.deltaMode, event.timeStamp);
+      if (direction === 0) return;
+      const position = readClock ? readClock() : now;
+      seekTo(Math.min(length, Math.max(0, position - direction * step)));
+    };
+    track.addEventListener("wheel", onWheel, { passive: false });
+    return () => track.removeEventListener("wheel", onWheel);
+  }, [wheelSeeks]);
 
   const following = Boolean(clock) && playing && !dragging && duration > 0;
   const toRatio = (seconds: number) => (duration > 0 ? Math.min(1, Math.max(0, seconds / duration)) : 0);
@@ -161,7 +188,7 @@ export function MediaScrubber({
     }
   };
 
-  // Shift+wheel scrubs in 5 s steps; a plain wheel keeps scrolling the page.
+  // Shift+wheel scrubs in 5 s steps; a plain wheel keeps scrolling the page unless `wheelSeekSeconds` is set.
   const onWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     if (!e.shiftKey || duration <= 0) return;
     const delta = e.deltaY !== 0 ? e.deltaY : e.deltaX;

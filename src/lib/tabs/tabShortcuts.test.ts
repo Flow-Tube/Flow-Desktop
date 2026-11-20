@@ -43,10 +43,20 @@ describe("tabShortcutForKey", () => {
     expect(tabShortcutForKey(press("n", { ctrlKey: true, shiftKey: true }), false, false)).toEqual({ kind: "new-window" });
   });
 
+  it("reopens a closed tab and moves between tabs as browsers do", () => {
+    expect(tabShortcutForKey(press("T", { ctrlKey: true, shiftKey: true }), false, true)).toEqual({ kind: "reopen" });
+    expect(tabShortcutForKey(press("T", { metaKey: true, shiftKey: true }), true, true)).toEqual({ kind: "reopen" });
+    expect(tabShortcutForKey(press("PageDown", { ctrlKey: true }), false, true)).toEqual({ kind: "cycle", step: 1 });
+    expect(tabShortcutForKey(press("ArrowLeft", { metaKey: true, altKey: true }), true, true)).toEqual({ kind: "cycle", step: -1 });
+  });
+
   it("leaves other keys alone", () => {
     expect(tabShortcutForKey(press("t"), false, true)).toBeNull();
-    expect(tabShortcutForKey(press("t", { ctrlKey: true, shiftKey: true }), false, true)).toBeNull();
     expect(tabShortcutForKey(press("t", { ctrlKey: true, altKey: true }), false, true)).toBeNull();
     expect(tabShortcutForKey(press("0", { ctrlKey: true }), false, true)).toBeNull();
+  });
+  it("finds T and W on a Russian layout", () => {
+    expect(tabShortcutForKey({ ...press("е", { ctrlKey: true }), code: "KeyT" }, false, true)).toEqual({ kind: "new" });
+    expect(tabShortcutForKey({ ...press("ц", { metaKey: true }), code: "KeyW" }, true, true)).toEqual({ kind: "close" });
   });
 });

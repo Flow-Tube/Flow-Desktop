@@ -79,8 +79,9 @@ does not try that setting again until WebKitGTK is updated.
 
 On Linux, Flow also holds a few things still that would otherwise ask for a
 new frame all the time: the bars beside the playing song, the dot on live
-videos, the fade between pages and the side menu's slide. The video has
-square corners, and Ambient mode stays off on the two slower settings.
+videos, the fade between pages and the side menu's slide. A card changes at
+once when the pointer moves onto it, with no fade. The video has square
+corners, and Ambient mode stays off on the two slower settings.
 
 Auto quality stops at 1080p on Linux and stays on H.264, because video is
 mostly decoded by the processor there. A quality you pick yourself is not
@@ -114,6 +115,15 @@ rpm and AppImage builds keep it in
 `~/.local/share/io.github.aedev.flow.desktop/` (Flow Beta adds `.beta` to
 the folder name).
 
+On NVIDIA's 580 driver, the part of Flow that draws the page leaks open
+files as it redraws, most of all while the window is resized. It is a driver
+bug, and WebKitGTK works around it in versions after 2.52. Linux lets a
+program hold 1024 open files unless it asks for more, so the limit used to be
+reached within minutes and Flow froze and reloaded with "Too many open
+files". Flow now raises its limit at start to what your system allows
+(524288 on most), and the leak takes far longer to matter. Updating the
+driver or WebKitGTK is what removes it.
+
 Advanced users can set the WebKitGTK variables themselves before starting
 Flow. Your own values always win. When you set one of the three
 `WEBKIT_*DMABUF*` variables below, Flow also sets none of the others, ignores
@@ -133,6 +143,14 @@ Settings > About then says "started with your own variables":
   `WEBKIT_DMABUF_RENDERER_FORCE_SHM=0 __NV_DISABLE_EXPLICIT_SYNC=1`, and on
   Debian, Ubuntu and Gentoo also `WEBKIT_FORCE_DMABUF_RENDERER=1`. Play a
   video before you rely on it.
+
+## Equalizer and Volume boost on videos
+
+On Linux the equalizer and Volume boost do not apply to videos and Shorts,
+and their settings show "Not available". WebKitGTK passes a video's sound to
+them about a second early, which pushed the sound out of step with the
+picture after a pause, and it never frees a video that used them, so Flow
+ran out of open files and reloaded. The equalizer still works for music.
 
 ## Video codecs
 

@@ -4,9 +4,10 @@ import type { Rgb } from '../../lib/useDominantColor';
 
 /**
  * Hosts must own a stacking context, otherwise the wash paints over the card's
- * own content instead of behind it.
+ * own content instead of behind it. `color-wash-host` is what App.css hangs the
+ * Linux rule on that stops a card and everything in it from fading.
  */
-export const COLOR_WASH_HOST = 'relative isolate';
+export const COLOR_WASH_HOST = 'color-wash-host relative isolate';
 
 const NEUTRAL_WASH = 'color-mix(in srgb, var(--color-chrome-zinc-800) 50%, transparent)';
 
@@ -28,9 +29,9 @@ const EXPANDED_TRANSFORM = 'scale(1, 1)';
 */
 const EXPAND = 'transform 420ms cubic-bezier(0.34, 1.34, 0.5, 1), opacity 220ms cubic-bezier(0.33, 1, 0.68, 1)';
 const COLLAPSE = 'transform 220ms cubic-bezier(0.4, 0, 0.2, 1), opacity 180ms ease-out';
-// WebKitGTK composites on the CPU, where scaling a card-sized layer under a
-// sweeping cursor costs what the thumbnail zoom already costs us on Linux.
-const LINUX_FADE = 'opacity 200ms ease-out';
+// On WebKitGTK the wash just appears. It sits under the card, so a fade lifts the
+// whole card into layers of its own while it runs (see App.css).
+const LINUX_INSTANT = 'none';
 
 export type ColorWashSpread = 'card' | 'row';
 
@@ -69,7 +70,7 @@ export function ColorWash({
     background: color ? `rgba(${color.r}, ${color.g}, ${color.b}, ${alpha})` : NEUTRAL_WASH,
     opacity: active ? 1 : 0,
     transform: IS_LINUX_RUNTIME || active ? EXPANDED_TRANSFORM : COLLAPSED_TRANSFORM[spread],
-    transition: IS_LINUX_RUNTIME ? LINUX_FADE : active ? EXPAND : COLLAPSE,
+    transition: IS_LINUX_RUNTIME ? LINUX_INSTANT : active ? EXPAND : COLLAPSE,
   };
 
   return <span aria-hidden className={`color-wash pointer-events-none absolute ${radius}`} style={style} />;

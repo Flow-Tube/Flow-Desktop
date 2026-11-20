@@ -75,12 +75,18 @@ import { useVideoEq } from "../../lib/audio/useVideoEq";
 import { useVolumeLevel } from "../../lib/audio/volumeBoost";
 import { adaptivePlayerAspect, useReportVideoAspect } from "../../lib/adaptivePlayer";
 import { IS_LINUX_RUNTIME } from "../../lib/platform";
+import { keyBelongsToTarget } from "../../lib/shortcuts/target";
 import { videoPlayerKeyAction } from "../../lib/videoPlayerKeys";
 import { IS_MAIN_WINDOW } from "../../lib/appWindow";
 import { useAmbientSettings } from "../../lib/ambient/useAmbientSettings";
 import { AmbientGlow } from "./AmbientGlow";
 import { useUiStore } from "../../store/useUiStore";
 import { SphericalView, type LookAround } from "./SphericalView";
+import { useVideoZoom } from "../../lib/player/useVideoZoom";
+import { playerWheelAction } from "../../lib/player/wheelAction";
+import { useTrackpadGesturesEnabled } from "../../lib/gestures/trackpadGestures";
+import { wheelVolumeChange } from "../../lib/wheelVolume";
+import { PAN_KEY_STEPS, ZOOM_STEP } from "../../lib/player/videoZoom";
 import type { Projection } from "../../lib/spherical/view";
 import { useLookSpeed } from "../../lib/spherical/useLookSpeed";
 import {
@@ -92,7 +98,12 @@ import { useSubtitleSettingsSync } from "../../lib/useSubtitleSettingsSync";
 import { openPopoutPlayer } from "../../lib/pipHandoff";
 import { sleepTimerTakesEnd } from "../../lib/useSleepTimerDriver";
 import { usePlaybackStartSpeed } from "../../lib/playbackStartSpeed";
-import { VIDEO_FIT_CLASS } from "../../lib/videoFit";
+import { VIDEO_FIT_CLASS, VIDEO_FITS } from "../../lib/videoFit";
+import { copyVideoFrame, saveVideoFrame } from "../../lib/videoFrame";
+import { copyText } from "../../lib/clipboard";
+import { youtubeWatchUrl } from "../../lib/youtubeUrl";
+import { isLocalMediaId } from "../../lib/localMediaId";
+import { sendWatchCommand } from "../../lib/watchCommands";
 import { ambientShown } from "../../lib/ambient/ambientShown";
 import {
   formatPlaybackRate,
@@ -262,6 +273,9 @@ const PLAYER_LOG_MAX_CHARS = 500;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
+/** Results of the player keys that copy or save something, such as "Frame saved". */
+const notifyPlayer = (message: string) => useUiStore.getState().showToast({ message });
+
 function extractCodecMimeType(mimeType?: string | null) {
   if (!mimeType) return null;
   const [baseType, ...rest] = mimeType.split(";");
@@ -357,6 +371,7 @@ export const Player: React.FC<PlayerProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pointerInsideRef = useRef(false);
   const keyboardFocusInsideRef = useRef(false);
@@ -466,6 +481,8 @@ export const Player: React.FC<PlayerProps> = ({
   const speedSliderEnabled = useAppSettingsStore((state) => state.values[SETTINGS.SPEED_SLIDER_ENABLED] === "true");
   const seekIntervalSetting = useAppSettingsStore((state) => state.values[SETTINGS.DOUBLE_TAP_SEEK_SECONDS] ?? "10");
   const doubleClickSeek = useAppSettingsStore((state) => state.values[SETTINGS.DOUBLE_CLICK_SEEK_ENABLED] !== "false");
+  const wheelAction = useAppSettingsStore((state) => playerWheelAction(state.values[SETTINGS.PLAYER_WHEEL_ACTION]));
+  const trackpadGestures = useTrackpadGesturesEnabled();
   const subtitlesEnabled = useAppSettingsStore((state) => state.values[SETTINGS.SUBTITLES_ENABLED] === "true");
   const preferredAudioLanguage = useAppSettingsStore((state) => state.values[SETTINGS.PREFERRED_AUDIO_LANGUAGE]);
   const preferredSubtitleLanguage = useAppSettingsStore((state) => state.values[SETTINGS.PREFERRED_SUBTITLE_LANGUAGE] ?? "en");
@@ -685,6 +702,16 @@ export const Player: React.FC<PlayerProps> = ({
     (hasSelectedAlternateAudio || (!!selectedQuality && !selectedQuality.hasAudio));
 
   const { level: volumeLevelNow, maxLevel, setLevel: setVolumeLevel, gain: boostGain } = useVolumeLevel();
+  // The same steps as the wheel over the volume slider: up is louder, and up from muted unmutes.
+  const wheelVolume = useCallback(
+    (step: -1 | 1) => {
+      const change = wheelVolumeChange(volumeLevelNow, muted, step, maxLevel);
+      if (change.unmute) setMuted(false);
+      if (change.volume !== undefined) setVolumeLevel(change.volume);
+      showVolumeFeedback(change.volume ?? volumeLevelNow, change.unmute ? false : muted);
+    },
+    [maxLevel, muted, setMuted, setVolumeLevel, showVolumeFeedback, volumeLevelNow],
+  );
   useVideoEq(videoRef, audioRef, usesExternalAudio ? selectedAudioTrack?.localUrl ?? null : null, boostGain);
   useReportVideoAspect(videoRef, currentVideoId);
   const adaptiveEnabled = useAppSettingsStore((state) => state.values[SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED] !== "false");
@@ -697,6 +724,15 @@ export const Player: React.FC<PlayerProps> = ({
   const sphericalPicked = sphericalChoice && sphericalChoice.videoId === currentVideoId ? sphericalChoice.shown : null;
   // The small player shows the flat picture, as on Android.
   const showsSpherical = !isPipMode && !sphericalUnavailable && (sphericalPicked ?? projection !== null);
+  const [statsVisible, setStatsVisible] = useState(false);
+  const toggleStats = useCallback(() => setStatsVisible((value) => !value), []);
+  const zoom = useVideoZoom({
+    videoRef,
+    frameRef: contentRef,
+    enabled: !isPipMode && !showsSpherical,
+    videoFit,
+    resetKey: currentVideoId,
+  });
   const lookAround = useRef<LookAround | null>(null);
   const [lookSpeed] = useLookSpeed();
   const onSphericalUnavailable = useCallback(() => {
@@ -2402,11 +2438,9 @@ export const Player: React.FC<PlayerProps> = ({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable) return;
-      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (keyBelongsToTarget(event.target, event.key)) return;
 
-      const action = videoPlayerKeyAction(event.key, event.shiftKey);
+      const action = videoPlayerKeyAction(event);
       if (action && action.kind !== "exit-fullscreen") event.preventDefault();
       switch (action?.kind) {
         case "toggle-play":
@@ -2500,8 +2534,58 @@ export const Player: React.FC<PlayerProps> = ({
         case "seek-to-fraction":
           if (!isLive && duration > 0) seekTo(duration * action.fraction);
           break;
+        case "toggle-loop":
+          toggleLoopSetting();
+          break;
+        case "next-resize": {
+          const { videoFit: fit, setVideoFit } = usePlayerStore.getState();
+          setVideoFit(VIDEO_FITS[(VIDEO_FITS.indexOf(fit) + 1) % VIDEO_FITS.length]!);
+          break;
+        }
+        case "save-frame":
+          void saveVideoFrame(videoRef.current, zoom.visibleRect(), title, notifyPlayer);
+          break;
+        case "copy-frame":
+          void copyVideoFrame(videoRef.current, zoom.visibleRect(), notifyPlayer);
+          break;
+        case "copy-link-at-time": {
+          const id = usePlayerStore.getState().currentVideo?.id;
+          if (!id || isLocalMediaId(id)) break;
+          void copyText(youtubeWatchUrl(id, usePlayerStore.getState().currentTime)).then((copied) =>
+            notifyPlayer(getString(copied ? "player_timed_url_copied" : "player_url_copy_failed")),
+          );
+          break;
+        }
+        case "toggle-stats":
+          toggleStats();
+          break;
+        case "normal-speed":
+          setPlaybackRate(1);
+          break;
+        case "toggle-chapters": {
+          const { isChaptersPanelOpen, setIsChaptersPanelOpen } = usePlayerStore.getState();
+          setIsChaptersPanelOpen(!isChaptersPanelOpen);
+          break;
+        }
+        case "watch":
+          sendWatchCommand(action.command);
+          break;
+        case "zoom-in":
+          zoom.zoomBy(ZOOM_STEP);
+          break;
+        case "zoom-out":
+          zoom.zoomBy(1 / ZOOM_STEP);
+          break;
+        case "zoom-reset":
+          zoom.reset();
+          break;
         case "look":
-          lookAround.current?.key(action.key);
+          if (lookAround.current) {
+            lookAround.current.key(action.key);
+          } else {
+            const steps = PAN_KEY_STEPS[action.key];
+            if (steps) zoom.panStep(steps[0], steps[1]);
+          }
           break;
       }
       revealControls();
@@ -2536,6 +2620,11 @@ export const Player: React.FC<PlayerProps> = ({
     togglePictureInPicture,
     togglePlay,
     volume,
+    zoom,
+    toggleLoopSetting,
+    title,
+    toggleStats,
+    setPlaybackRate,
   ]);
 
   const handleLoadedMetadata = () => {
@@ -2723,6 +2812,7 @@ export const Player: React.FC<PlayerProps> = ({
       {showAmbient && <AmbientGlow videoRef={videoRef} intensity={ambient.intensity} spread={ambient.glow} />}
 
       <div
+        ref={contentRef}
         data-player-content
         // Inset, not h-full: WebKit resolves a percentage height against the root's uncapped aspect
         // ratio, so in theater mode h-full ran past max-h and over the page below.
@@ -2863,6 +2953,12 @@ export const Player: React.FC<PlayerProps> = ({
         settingsOpen={settingsOpen}
         onCloseSettings={closeSettings}
         lookAround={showsSpherical ? lookAround : null}
+        zoom={zoom}
+        statsVisible={statsVisible}
+        onToggleStats={toggleStats}
+        wheelAction={wheelAction}
+        onWheelVolume={wheelVolume}
+        swipeToScrub={trackpadGestures}
       />
 
       {pendingQualitySwitch && (

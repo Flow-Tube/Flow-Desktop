@@ -1,7 +1,8 @@
 import { useEffect } from "react";
 
-import { musicAudioEngine } from "./audio/musicAudioEngine";
-import { keyBelongsToTarget, musicPlayerKeyAction } from "./musicPlayerKeys";
+import { applyMusicKeyAction } from "./musicKeyActions";
+import { musicPlayerKeyAction } from "./musicPlayerKeys";
+import { keyBelongsToTarget } from "./shortcuts/target";
 import { SETTINGS } from "./settings/schema";
 import { useNumberPref } from "./usePreference";
 import { useMusicPlayerStore } from "../store/useMusicPlayerStore";
@@ -29,40 +30,7 @@ export function useMusicPlayerKeyboard(enabled: boolean, onEscape: () => boolean
       if (!action) return;
       event.preventDefault();
       event.stopPropagation();
-      const store = useMusicPlayerStore.getState();
-      const position = musicAudioEngine.getCurrentTime();
-      switch (action.kind) {
-        case "toggle-play":
-          store.togglePlay();
-          break;
-        case "seek-by":
-          store.seek(Math.min(Math.max(0, position + action.seconds), Math.max(0, store.duration - 1)));
-          break;
-        case "seek-to-fraction":
-          if (store.duration > 0) store.seek(store.duration * action.fraction);
-          break;
-        case "volume-by":
-          store.setVolume(Math.min(1, Math.max(0, store.volume + action.delta)));
-          break;
-        case "toggle-mute":
-          store.toggleMute();
-          break;
-        case "next":
-          store.next();
-          break;
-        case "previous":
-          store.previous();
-          break;
-        case "toggle-shuffle":
-          store.toggleShuffle();
-          break;
-        case "cycle-repeat":
-          store.cycleRepeat();
-          break;
-        case "toggle-queue":
-          store.setViewState(store.viewState === "queue" ? "full" : "queue");
-          break;
-      }
+      applyMusicKeyAction(action);
     };
     window.addEventListener("keydown", onKey, true);
     window.addEventListener("keydown", onEscapeKey);

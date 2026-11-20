@@ -16,6 +16,8 @@ import { useUiStore } from "../../store/useUiStore";
 import { getString } from "../../lib/i18n/index";
 import { youtubeWatchUrl } from "../../lib/youtubeUrl";
 import type { WatchMetadataProps } from "./types";
+import { useWatchCommands } from "../../lib/watchCommands";
+import { toggleWatchLaterWithToast } from "../../lib/watchLaterToggle";
 
 export function WatchMetadata({
   currentVideo,
@@ -33,6 +35,14 @@ export function WatchMetadata({
   const isSaved = useVideoSaved(currentVideo.id);
   const reactions = useVideoReactions(currentVideo, videoData);
   const [showingOriginal, setShowingOriginal] = useState(false);
+  useWatchCommands((command) => {
+    if (command === "like") reactions.like();
+    else if (command === "dislike") reactions.dislike();
+    else if (command === "add-to-playlist") openAddToPlaylist(saveTarget);
+    else if (command === "watch-later") {
+      void toggleWatchLaterWithToast(currentVideo, { title: currentVideo.title, image: currentVideo.thumbnailUrl, shape: "landscape" });
+    }
+  });
 
   const channelId = videoData?.channelId || currentVideo.channelId || "";
   const channelName = videoData?.channelName || currentVideo.channelName || getString("watch_unknown_channel");

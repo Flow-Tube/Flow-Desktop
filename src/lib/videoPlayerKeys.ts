@@ -1,4 +1,7 @@
-import { DIGIT_KEYS, type KeyBinding } from "./keyMap";
+import { IS_MACOS_RUNTIME } from "./platform";
+import type { WatchCommand } from "./watchCommands";
+import type { KeyLike } from "./shortcuts/chord";
+import { DIGIT_CHORDS, findShortcut, type ShortcutCommand } from "./shortcuts/command";
 
 export type VideoPlayerKeyAction =
   | { kind: "toggle-play" }
@@ -25,46 +28,84 @@ export type VideoPlayerKeyAction =
   | { kind: "seek-start" }
   | { kind: "seek-end" }
   | { kind: "seek-to-fraction"; fraction: number }
-  | { kind: "look"; key: string };
+  | { kind: "zoom-in" }
+  | { kind: "zoom-out" }
+  | { kind: "zoom-reset" }
+  | { kind: "look"; key: string }
+  | { kind: "toggle-loop" }
+  | { kind: "next-resize" }
+  | { kind: "save-frame" }
+  | { kind: "copy-frame" }
+  | { kind: "copy-link-at-time" }
+  | { kind: "toggle-stats" }
+  | { kind: "normal-speed" }
+  | { kind: "toggle-chapters" }
+  | { kind: "watch"; command: WatchCommand };
 
-export const VIDEO_KEY_BINDINGS: readonly KeyBinding<VideoPlayerKeyAction>[] = [
-  { keys: [" ", "k"], label: "keyboard_shortcut_play_pause", action: () => ({ kind: "toggle-play" }) },
-  { keys: ["n"], shift: true, label: "keyboard_shortcut_next", action: () => ({ kind: "next" }) },
-  { keys: ["p"], shift: true, label: "keyboard_shortcut_previous", action: () => ({ kind: "previous" }) },
-  { keys: ["arrowleft", "j"], label: "keyboard_shortcut_seek_back", action: () => ({ kind: "seek-back" }) },
-  { keys: ["arrowright", "l"], label: "keyboard_shortcut_seek_forward", action: () => ({ kind: "seek-forward" }) },
-  { keys: ["arrowup"], label: "keyboard_shortcut_volume_up", action: () => ({ kind: "volume-up" }) },
-  { keys: ["arrowdown"], label: "keyboard_shortcut_volume_down", action: () => ({ kind: "volume-down" }) },
-  { keys: ["m"], label: "keyboard_shortcut_mute", action: () => ({ kind: "toggle-mute" }) },
-  { keys: ["f"], label: "keyboard_shortcut_fullscreen", action: () => ({ kind: "toggle-fullscreen" }) },
-  { keys: ["escape"], label: "keyboard_shortcut_exit_fullscreen", action: () => ({ kind: "exit-fullscreen" }) },
-  { keys: ["t"], label: "keyboard_shortcut_theater", action: () => ({ kind: "toggle-theater" }) },
-  { keys: ["i"], label: "keyboard_shortcut_pip", action: () => ({ kind: "toggle-pip" }) },
-  { keys: ["c"], label: "keyboard_shortcut_captions", action: () => ({ kind: "toggle-captions" }) },
-  { keys: ["+", "="], label: "keyboard_shortcut_captions_larger", action: () => ({ kind: "captions-larger" }) },
-  { keys: ["-"], label: "keyboard_shortcut_captions_smaller", action: () => ({ kind: "captions-smaller" }) },
-  { keys: [","], label: "keyboard_shortcut_frame_back", action: () => ({ kind: "frame-back" }) },
-  { keys: ["."], label: "keyboard_shortcut_frame_forward", action: () => ({ kind: "frame-forward" }) },
-  { keys: ["<"], label: "keyboard_shortcut_slower", action: () => ({ kind: "slower" }) },
-  { keys: [">"], label: "keyboard_shortcut_faster", action: () => ({ kind: "faster" }) },
-  { keys: ["["], label: "keyboard_shortcut_previous_chapter", action: () => ({ kind: "previous-chapter" }) },
-  { keys: ["]"], label: "keyboard_shortcut_next_chapter", action: () => ({ kind: "next-chapter" }) },
-  { keys: ["home"], label: "keyboard_shortcut_seek_start", action: () => ({ kind: "seek-start" }) },
-  { keys: ["end"], label: "keyboard_shortcut_seek_end", action: () => ({ kind: "seek-end" }) },
-  { keys: ["w", "a", "s", "d"], label: "keyboard_shortcut_look_around", action: (key) => ({ kind: "look", key }) },
-  {
-    keys: DIGIT_KEYS,
-    label: "keyboard_shortcut_seek_percent",
-    action: (key) => ({ kind: "seek-to-fraction", fraction: Number(key) / 10 }),
-  },
+type VideoCommand = ShortcutCommand<VideoPlayerKeyAction>;
+
+const video = (
+  id: string,
+  label: VideoCommand["label"],
+  keys: readonly string[],
+  action: VideoCommand["action"],
+  fixed?: boolean,
+): VideoCommand => ({ id: `video.${id}`, scope: "video", label, keys, action, ...(fixed ? { fixed } : {}) });
+
+export const VIDEO_COMMANDS: readonly VideoCommand[] = [
+  video("play-pause", "keyboard_shortcut_play_pause", ["Space", "K"], () => ({ kind: "toggle-play" })),
+  video("next", "keyboard_shortcut_next", ["Shift+N"], () => ({ kind: "next" })),
+  video("previous", "keyboard_shortcut_previous", ["Shift+P"], () => ({ kind: "previous" })),
+  video("seek-back", "keyboard_shortcut_seek_back", ["ArrowLeft", "J"], () => ({ kind: "seek-back" })),
+  video("seek-forward", "keyboard_shortcut_seek_forward", ["ArrowRight", "L"], () => ({ kind: "seek-forward" })),
+  video("volume-up", "keyboard_shortcut_volume_up", ["ArrowUp"], () => ({ kind: "volume-up" })),
+  video("volume-down", "keyboard_shortcut_volume_down", ["ArrowDown"], () => ({ kind: "volume-down" })),
+  video("mute", "keyboard_shortcut_mute", ["M"], () => ({ kind: "toggle-mute" })),
+  video("fullscreen", "keyboard_shortcut_fullscreen", ["F"], () => ({ kind: "toggle-fullscreen" })),
+  // Menus take Escape first, so it can't move to another key.
+  video("exit-fullscreen", "keyboard_shortcut_exit_fullscreen", ["Escape"], () => ({ kind: "exit-fullscreen" }), true),
+  video("theater", "keyboard_shortcut_theater", ["T"], () => ({ kind: "toggle-theater" })),
+  video("mini-player", "keyboard_shortcut_pip", ["I"], () => ({ kind: "toggle-pip" })),
+  video("captions", "keyboard_shortcut_captions", ["C"], () => ({ kind: "toggle-captions" })),
+  video("captions-larger", "keyboard_shortcut_captions_larger", ["Plus", "="], () => ({ kind: "captions-larger" })),
+  video("captions-smaller", "keyboard_shortcut_captions_smaller", ["-"], () => ({ kind: "captions-smaller" })),
+  video("frame-back", "keyboard_shortcut_frame_back", [","], () => ({ kind: "frame-back" })),
+  video("frame-forward", "keyboard_shortcut_frame_forward", ["."], () => ({ kind: "frame-forward" })),
+  video("slower", "keyboard_shortcut_slower", ["<"], () => ({ kind: "slower" })),
+  video("faster", "keyboard_shortcut_faster", [">"], () => ({ kind: "faster" })),
+  video("previous-chapter", "keyboard_shortcut_previous_chapter", ["["], () => ({ kind: "previous-chapter" })),
+  video("next-chapter", "keyboard_shortcut_next_chapter", ["]"], () => ({ kind: "next-chapter" })),
+  video("seek-start", "keyboard_shortcut_seek_start", ["Home"], () => ({ kind: "seek-start" })),
+  video("seek-end", "keyboard_shortcut_seek_end", ["End"], () => ({ kind: "seek-end" })),
+  video("zoom-in", "keyboard_shortcut_zoom_in", ["Z"], () => ({ kind: "zoom-in" })),
+  video("zoom-out", "keyboard_shortcut_zoom_out", ["Shift+Z"], () => ({ kind: "zoom-out" })),
+  video("zoom-reset", "keyboard_shortcut_zoom_reset", ["X"], () => ({ kind: "zoom-reset" })),
+  video("look-up", "keyboard_shortcut_look_up", ["W"], () => ({ kind: "look", key: "w" })),
+  video("look-left", "keyboard_shortcut_look_left", ["A"], () => ({ kind: "look", key: "a" })),
+  video("look-down", "keyboard_shortcut_look_down", ["S"], () => ({ kind: "look", key: "s" })),
+  video("look-right", "keyboard_shortcut_look_right", ["D"], () => ({ kind: "look", key: "d" })),
+  video("loop", "keyboard_shortcut_loop", ["R"], () => ({ kind: "toggle-loop" })),
+  video("next-resize", "keyboard_shortcut_next_resize", ["O"], () => ({ kind: "next-resize" })),
+  video("save-frame", "keyboard_shortcut_save_frame", ["Shift+S"], () => ({ kind: "save-frame" })),
+  video("stats", "keyboard_shortcut_stats", ["Shift+I"], () => ({ kind: "toggle-stats" })),
+  video("like", "keyboard_shortcut_like", ["Shift+L"], () => ({ kind: "watch", command: "like" })),
+  video("watch-later", "keyboard_shortcut_watch_later", ["Shift+W"], () => ({ kind: "watch", command: "watch-later" })),
+  // Unbound until someone picks keys in Settings.
+  video("copy-frame", "keyboard_shortcut_copy_frame", [], () => ({ kind: "copy-frame" })),
+  video("copy-link-at-time", "keyboard_shortcut_copy_link_at_time", [], () => ({ kind: "copy-link-at-time" })),
+  video("normal-speed", "keyboard_shortcut_normal_speed", [], () => ({ kind: "normal-speed" })),
+  video("chapters", "keyboard_shortcut_chapters", [], () => ({ kind: "toggle-chapters" })),
+  video("dislike", "keyboard_shortcut_dislike", [], () => ({ kind: "watch", command: "dislike" })),
+  video("add-to-playlist", "keyboard_shortcut_add_to_playlist", [], () => ({ kind: "watch", command: "add-to-playlist" })),
+  video(
+    "seek-percent",
+    "keyboard_shortcut_seek_percent",
+    DIGIT_CHORDS,
+    (key) => ({ kind: "seek-to-fraction", fraction: Number(key) / 10 }),
+    true,
+  ),
 ];
 
-const BY_KEY = new Map(VIDEO_KEY_BINDINGS.flatMap((binding) => binding.keys.map((key) => [key, binding] as const)));
-
-/** Shift is part of the character for `<`, `>` and `+`, so only a binding that asks for it looks at it. */
-export function videoPlayerKeyAction(key: string, shiftKey = false): VideoPlayerKeyAction | null {
-  const lower = key.toLowerCase();
-  const binding = BY_KEY.get(lower);
-  if (binding?.shift && !shiftKey) return null;
-  return binding?.action(lower) ?? null;
+export function videoPlayerKeyAction(event: KeyLike, isMac = IS_MACOS_RUNTIME): VideoPlayerKeyAction | null {
+  return findShortcut(VIDEO_COMMANDS, event, isMac)?.action ?? null;
 }

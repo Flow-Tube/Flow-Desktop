@@ -1,19 +1,21 @@
 import { useMemo } from "react";
 
 import { getString } from "../../lib/i18n/index";
-import { keyMapRows } from "../../lib/keyMap";
-import { MUSIC_KEY_BINDINGS } from "../../lib/musicPlayerKeys";
-import { VIDEO_KEY_BINDINGS } from "../../lib/videoPlayerKeys";
+import { IS_MACOS_RUNTIME } from "../../lib/platform";
+import { useShortcutSettings } from "../../lib/shortcuts/bindings";
+import { SHORTCUT_GROUPS } from "../../lib/shortcuts/catalog";
+import { shortcutRows, type ShortcutRow } from "../../lib/shortcuts/format";
 
-function KeyMap({ title, rows }: { title: string; rows: ReturnType<typeof keyMapRows> }) {
+function KeyMap({ title, rows }: { title: string; rows: ShortcutRow[] }) {
   return (
     <section className="min-w-0 space-y-2">
       <h3 className="text-sm font-semibold text-primary">{title}</h3>
       <dl className="space-y-1.5">
         {rows.map((row) => (
-          <div key={row.label} className="flex items-center justify-between gap-3">
+          <div key={row.id} className="flex items-center justify-between gap-3">
             <dt className="min-w-0 text-sm text-chrome-neutral-300">{row.label}</dt>
-            <dd className="flex shrink-0 items-center gap-1">
+            {/* Key caps read left to right in every language, as they are printed on the keys. */}
+            <dd dir="ltr" className="flex shrink-0 flex-wrap items-center justify-end gap-1">
               {row.caps.map((cap) => (
                 <kbd
                   key={cap}
@@ -30,14 +32,24 @@ function KeyMap({ title, rows }: { title: string; rows: ReturnType<typeof keyMap
   );
 }
 
-/** Both players' keys, read from the same tables the players act on. */
+/** Every key in the app, read from the same tables the app acts on. */
 export function KeyMapList() {
-  const video = useMemo(() => keyMapRows(VIDEO_KEY_BINDINGS), []);
-  const music = useMemo(() => keyMapRows(MUSIC_KEY_BINDINGS), []);
+  const { overrides } = useShortcutSettings();
+  const groups = useMemo(
+    () =>
+      SHORTCUT_GROUPS.map((group) => ({
+        scope: group.scope,
+        title: getString(group.title),
+        // A command someone left without keys has nothing to show here.
+        rows: shortcutRows(group.commands, IS_MACOS_RUNTIME, overrides).filter((row) => row.caps.length > 0),
+      })),
+    [overrides],
+  );
   return (
     <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-      <KeyMap title={getString("keyboard_shortcuts_video")} rows={video} />
-      <KeyMap title={getString("keyboard_shortcuts_music")} rows={music} />
+      {groups.map((group) => (
+        <KeyMap key={group.scope} title={group.title} rows={group.rows} />
+      ))}
     </div>
   );
 }

@@ -11,8 +11,11 @@ LINUX
 - Try faster graphics, in Settings > Appearance and in a one-time notice, restarts Flow on a faster graphics mode. If the window stays blank, Flow goes back on its own after 15 seconds.
 - On NVIDIA with Wayland, Flow stays on shared memory. The direct GPU path showed a green picture and crashed in testing, so Try faster graphics is not offered there.
 - On NVIDIA with WebKitGTK 2.52 or later, Flow no longer moves by itself to drawing without the GPU, which crashes or leaves the window blank on some systems. Installs that climbed there come back on the next launch. Safe and Start with safe graphics still use it when you choose them.
+- Fixed sound running on for about a second after the first pause and then staying out of step with the picture (#660). It came from the equalizer and Volume boost on videos: WebKitGTK reads their audio about a second early, and never frees a video that used them. On Linux they are now off for videos and Shorts and show as not available. The equalizer still works for music.
+- Flow now raises its open-file limit at start, from the usual 1024 to what the system allows (524288 on most). On NVIDIA's 580 driver the part of Flow that draws the page leaks open files as it redraws, a driver bug that WebKitGTK works around after 2.52, and at 1024 Flow froze and reloaded with "Too many open files" within minutes (#660). The leak itself stays until the driver or WebKitGTK is updated.
 - Starting Flow with your own WebKitGTK renderer variables now really uses them. After a start that failed, Flow used to add its own setting next to yours, which kept shared memory on, and it remembered a crashed test as a failed start. Such a start is now left alone and not remembered, and Settings > About says so.
 - Flow on Linux asks for fewer redraws: the playing bars and live dots hold still, pages and the side menu switch without a fade or slide, and the video has square corners. Ambient mode stays off on the slower graphics modes.
+- On Linux, a card now changes at once when the pointer moves onto it, with no fade. The fade made WebKitGTK rebuild the whole card as separate layers and draw about a dozen extra frames each time the pointer moved onto or off a card, also while a feed scrolled under it. In a test of 24 hovers that was 669 frames with the fades and 85 without (#660).
 - Seeking inside the loaded part of a video, and fast quality switches, no longer make WebKitGTK restart its decoder, which could stutter.
 - The Device rows in Settings > About, such as Graphics and Video decoders, can be selected and copied.
 - Settings > About now names the graphics path in use (GPU, GPU through shared memory, or no GPU) and why. The Linux help page explains what each one costs.
@@ -41,9 +44,30 @@ PLAYER
 - The dark shade behind the player controls now covers only the bottom band they sit in, not the whole picture, so the video stays bright while the controls show and costs less to draw.
 - Right-click the video and choose Copy frame to put the picture on screen on the clipboard, or Save frame to keep it as a PNG named after the video and the moment (#658). The frame keeps the video's own resolution.
 - The pop-out window's title and buttons sit on dark backings, like the mini player's, so they stay readable over a bright video (#664). They also show when you reach them with the keyboard.
+- Swipe sideways with two fingers over a video to move back or forward through it, as in QuickTime Player, and turn the wheel over the seek bar to move by the seek step. Both follow the Trackpad gestures switch in Settings > Keyboard.
+- Zoom into a video with a trackpad pinch or Ctrl (Cmd on macOS) and the wheel, then drag or scroll with two fingers to move around it (#700). Z zooms in, Shift+Z zooms out, X goes back to the whole picture, and W, A, S and D move a zoomed video. Zoom goes from 1x to 6x, as on Android, and stops for a moment where the picture fills the screen.
+- A short read-out shows the zoom level, and the right-click menu has Zoom in, Zoom out and Reset zoom. Copy frame and Save frame keep only the zoomed part, at the video's own resolution. Captions keep their size, and each new video starts at 1x.
+- Settings > Player > Wheel over the video picks what the mouse wheel or a two-finger scroll does with the pointer on the video: scroll the page as before, change the volume, or zoom.
+- Space and Enter on a button you reached with Tab now press that button instead of pausing the video, and the arrow keys on a focused slider or seek bar no longer also seek or change the volume. A button clicked with the mouse still leaves Space to the player, and the same now holds in Shorts and the music player.
 
 MUSIC
 - Fixed the full music player sliding under the title bar on Windows and Linux and leaving a coloured strip along the bottom of the window (#693). It now opens just below the title bar and fills the rest of the window.
+
+KEYBOARD AND GESTURES
+- The keyboard shortcuts list (press ? or open Settings > Keyboard) now shows every key in Flow, including Shorts, tabs and windows, Back and Forward, and search. On macOS it shows keys the way the Mac menus do, such as ⇧⌘N.
+- Change any shortcut in Settings > Keyboard: click a key and press the new one, add a second key with +, or reset one or all. If the key is already taken, Flow names the command that has it and offers to move it. Your keys are kept in Flow backups.
+- Single-key shortcuts in Settings > Keyboard turns off keys such as K, M and ? that act without Ctrl, Alt or Cmd, for speech input or to avoid pressing them by accident.
+- New keys: / or Ctrl+K (Cmd+K) to search, Ctrl+, (Cmd+,) for Settings, Ctrl+B (Cmd+B) to show or hide the side rail, and G then a letter to go to a page, such as G then H for Home or G then S for Subscriptions.
+- Ctrl+R (Cmd+R) and F5 refresh Home, Subscriptions, Explore and Music instead of reloading the whole app, so playback no longer stops.
+- Ctrl+Shift+T (Cmd+Shift+T) reopens the last closed tab, and Ctrl+Page Up or Page Down (Alt+Cmd+Left or Right on macOS) move between tabs.
+- More player keys: R loops the video, O switches between Fit, Fill and Zoom, Shift+S saves the frame, Shift+I shows Stats for nerds, Shift+L likes and Shift+W saves to Watch later. In the music player Shift+L likes the song and Y shows the lyrics, and in Shorts Shift+L likes and C opens the comments.
+- Copy frame, Copy link at this moment, Normal speed, Chapters, Dislike, Save to a playlist and Equalizer can also get keys of your own in Settings > Keyboard.
+- K, M, Shift+N and Shift+P now play or pause, mute and skip music while only the music bar shows. Before, music answered keys only with the full player open.
+- Turn the wheel over the music player's progress bar to move by the seek step. Shift and the wheel still move by 5 seconds.
+- Video and playlist cards can now be reached with Tab. On any card the arrow keys move to the next card that way, across grids and shelves, Enter opens it and Ctrl+Enter (Cmd+Enter) opens it in a new tab.
+- Settings > Appearance > Interface size makes everything in Flow larger or smaller, from 67% to 200%. Ctrl and = or - (Cmd on macOS) change it from anywhere, and Ctrl+0 (Cmd+0) goes back to 100%.
+- Swipe sideways with two fingers on a trackpad to go back or forward, as in Safari and Edge. An arrow fills in at the edge as you swipe. Rows that scroll sideways and the player keep their own swipes, and Settings > Keyboard > Trackpad gestures turns it off.
+- Pinch a feed on a trackpad to change how many thumbnails share a row, from 2 to 8, as in Photos. Elsewhere outside the player a pinch does nothing.
 
 BACKUPS AND IMPORT
 - Fixed Flow closing while it read a Google Takeout export with a folder named in Russian, Ukrainian, Greek, Turkish, Vietnamese, Chinese, Japanese or Korean, such as My Activity (#661).
@@ -63,6 +87,7 @@ DOWNLOADS
 - The download cards in the corner no longer re-measure the page on every progress update.
 
 FIXES
+- Keyboard shortcuts now work with an Arabic, Persian, Urdu, Russian, Greek or other non-Latin keyboard layout. K, J, L, M, F, the tab keys and Ctrl or Cmd+K are read by where they sit on the keyboard, as on YouTube.
 - Fixed hidden helper windows staying open until Flow quit when a video took too long to resolve, which made Flow use more memory the longer it ran.
 - Preparing playback for one video no longer waits behind a slow token request for another.
 - Fixed covers and artwork turning into placeholders after Flow had been open for about six hours.

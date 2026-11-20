@@ -1,4 +1,5 @@
 import { logToBackend } from "../diagnostics";
+import { IS_LINUX_RUNTIME } from "../platform";
 import { createAudioContext, keepRunning, resumeWithin } from "./audioContext";
 import { EQ_GRAPH_OFF, type EqGraphSpec } from "./eq/graphPlan";
 import { EqChain } from "./eqChain";
@@ -8,7 +9,13 @@ import { probeMediaElementRouting } from "./webAudioProbe";
 let sharedContext: AudioContext | null = null;
 let routingWorks: Promise<boolean | null> | null = null;
 // WebAudio failed or delivered silence in this window: video plays from its elements alone.
-let unavailable = false;
+// WebKitGTK starts there. It taps a routed element with a sink that does not follow the clock
+// (AudioSourceProviderGStreamer: `"sync", FALSE`), about a second ahead of the sound. Measured on
+// 2.52.6: the element's clock reads that second ahead, so the separate audio is kept out of step
+// with the picture; the second plays on after a pause; and a routed element is never released, so
+// each one a player drops leaves its decoder, threads and open files behind until the web process
+// runs out of them.
+let unavailable = IS_LINUX_RUNTIME;
 const routedElements = new Set<HTMLMediaElement>();
 
 function videoContext(): AudioContext | null {

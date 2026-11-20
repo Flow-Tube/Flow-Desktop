@@ -38,6 +38,8 @@ interface TabsState {
   playerTabId: string | null;
   parked: Record<string, ParkedVideo>;
   titles: Record<string, TabTitle>;
+  /** Tabs closed in this session, newest last, for Mod+Shift+T. */
+  closedTabs: TabHistory[];
   push: (to: To, state?: unknown) => void;
   replace: (to: To, state?: unknown) => void;
   go: (delta: number) => void;
@@ -48,6 +50,8 @@ interface TabsState {
   duplicateTab: (id: string) => void;
   activateTab: (id: string) => void;
   closeTab: (id: string) => void;
+  /** Opens the last closed tab again, with its back/forward list, next to the active one. */
+  reopenClosedTab: () => void;
   /** Drops every other tab; a video still in the player then belongs to this one. */
   keepOnlyTab: (id: string) => void;
   setPlayerTab: (id: string | null) => void;
@@ -81,6 +85,8 @@ function withoutKey<T>(record: Record<string, T>, key: string): Record<string, T
 }
 
 const firstTab = initialTab();
+/** Enough to undo a few closes in a row, as browsers do; older ones are dropped. */
+const MAX_CLOSED_TABS = 10;
 
 export const useTabsStore = create<TabsState>((set, get) => ({
   tabs: [firstTab],
@@ -90,6 +96,7 @@ export const useTabsStore = create<TabsState>((set, get) => ({
   playerTabId: null,
   parked: {},
   titles: {},
+  closedTabs: [],
 
   push: (to, state) => {
     const current = get();
@@ -162,13 +169,29 @@ export const useTabsStore = create<TabsState>((set, get) => ({
   closeTab: (id) => {
     const current = get();
     const neighbor = neighborTab(current.tabs, id);
-    if (!neighbor) return;
+    const closing = current.tabs.find((tab) => tab.id === id);
+    if (!neighbor || !closing) return;
     set({
       tabs: current.tabs.filter((tab) => tab.id !== id),
+      closedTabs: [...current.closedTabs, closing].slice(-MAX_CLOSED_TABS),
       parked: withoutKey(current.parked, id),
       titles: withoutKey(current.titles, id),
       playerTabId: current.playerTabId === id ? null : current.playerTabId,
       ...(current.activeId === id ? { activeId: neighbor.id, action: NavigationType.Pop, cause: "tab" as const } : {}),
+    });
+  },
+
+  reopenClosedTab: () => {
+    const current = get();
+    const tab = current.closedTabs[current.closedTabs.length - 1];
+    if (!tab) return;
+    const reopened = current.tabs.some((open) => open.id === tab.id) ? { ...tab, id: createTabId() } : tab;
+    set({
+      tabs: insertTabAfter(current.tabs, current.activeId, reopened),
+      closedTabs: current.closedTabs.slice(0, -1),
+      activeId: reopened.id,
+      action: NavigationType.Pop,
+      cause: "tab",
     });
   },
 

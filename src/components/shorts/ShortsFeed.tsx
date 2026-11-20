@@ -4,6 +4,7 @@ import { useLocation, useParams } from "react-router-dom";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useShortsFeed, type ShortsQueueEnd } from "../../lib/useShortsFeed";
 import { listenForShortsKeys } from "../../lib/shortsKeys";
+import { sendWatchCommand } from "../../lib/watchCommands";
 import { prefetchShortStreams } from "../../lib/useShortStream";
 import { IMPRESSION_DWELL_MS, noteImpression } from "../../lib/feedImpressions";
 import { finishShortView, startShortView } from "../../lib/shortViews";
@@ -182,6 +183,11 @@ export function ShortsFeed() {
       listenForShortsKeys((action, event) => {
         if (action.type === "mute") {
           if (muteLiftedByRef.current !== event) setMuted((value) => !value);
+          return true;
+        }
+        if (action.type === "watch") {
+          if (action.command === "comments") setPanelState((panel) => (panel === "comments" ? "none" : "comments"));
+          else sendWatchCommand(action.command);
           return true;
         }
         if (action.type !== "page") return false;

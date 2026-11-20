@@ -10,6 +10,9 @@ import {
   PictureInPicture2,
   Play,
   Repeat1,
+  RotateCcw,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import { usePlayerStore, type PlaybackRate } from "../../../store/usePlayerStore";
 import { copyText } from "../../../lib/clipboard";
@@ -25,6 +28,13 @@ import { StatsForNerds } from "../StatsForNerds";
 import type { LookAround } from "../SphericalView";
 import { seekSideAt, type SeekDirection, type SeekFeedback as SeekFeedbackState } from "../../../lib/seekFeedback";
 import { SeekFeedback } from "./SeekFeedback";
+import { ZoomReadout } from "./ZoomReadout";
+import { listenForZoomInput, wheelZoomFactor } from "../../../lib/gestures/pinch";
+import type { PlayerWheelAction } from "../../../lib/player/wheelAction";
+import { newWheelGesture, wheelStep } from "../../../lib/wheelVolume";
+import { newWheelGestureState, trackWheelGesture } from "../../../lib/gestures/wheelAxis";
+import { ZOOM_STEP } from "../../../lib/player/videoZoom";
+import type { VideoZoom } from "../../../lib/player/useVideoZoom";
 import { PlayerContextMenu, type PlayerContextMenuItem } from "./PlayerContextMenu";
 import { isPopOutWindow } from "../../../lib/api/pip";
 import { moveVideoToNewWindow } from "../../../lib/openTarget";
@@ -82,7 +92,21 @@ type PlayerGestureOverlayProps = {
   onCloseSettings: () => void;
   /** A 360 video's view: a drag looks around instead of moving anything, and the wheel zooms. */
   lookAround?: { current: LookAround | null } | null;
+  /** Free zoom: a pinch or Ctrl/Cmd and the wheel zoom, and a drag or two-finger scroll pans once zoomed. */
+  zoom?: VideoZoom | null;
+  /** Stats for nerds, which the right-click menu and Shift+I both toggle. */
+  statsVisible: boolean;
+  onToggleStats: () => void;
+  /** What a plain wheel over the video does while it isn't zoomed. */
+  wheelAction?: PlayerWheelAction;
+  /** One volume step from the wheel: -1 is louder, 1 is quieter. */
+  onWheelVolume?: (step: -1 | 1) => void;
+  /** A sideways two-finger swipe over the unzoomed video moves through it, as in QuickTime Player. */
+  swipeToScrub?: boolean;
 };
+
+const LINE_PX = 33;
+const SCRUB_FLUSH_MS = 80;
 
 function formatTime(seconds: number) {
   if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
@@ -131,6 +155,12 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
   canDragWindow = false,
   canDragFrame = false,
   lookAround = null,
+  zoom = null,
+  statsVisible,
+  onToggleStats,
+  wheelAction = "scroll",
+  onWheelVolume,
+  swipeToScrub = false,
   settingsOpen,
   onCloseSettings,
 }) => {
@@ -138,7 +168,6 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [copiedLabel, setCopiedLabel] = useState<string | null>(null);
   const [isBoosting, setIsBoosting] = useState(false);
-  const [statsVisible, setStatsVisible] = useState(false);
   const centerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -166,6 +195,82 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
     layer.addEventListener("wheel", onWheel, { passive: false });
     return () => layer.removeEventListener("wheel", onWheel);
   }, [lookAround]);
+
+  const onWheelVolumeRef = useRef(onWheelVolume);
+  onWheelVolumeRef.current = onWheelVolume;
+  const seekByRef = useRef(seekBy);
+  seekByRef.current = seekBy;
+
+  // A pinch or Ctrl/Cmd and the wheel zooms about the pointer. Once zoomed, a plain two-finger
+  // scroll pans the picture, as in Photos and Maps, unless the wheel itself is set to zoom. Unzoomed,
+  // the plain wheel does what the "Wheel over the video" setting says; "scroll" leaves it to the page.
+  useEffect(() => {
+    const layer = layerRef.current;
+    if (!layer || lookAround) return;
+    const stopZoom = zoom?.enabled
+      ? listenForZoomInput(layer, ({ factor, clientX, clientY }) => {
+          zoom.zoomBy(factor, clientX, clientY);
+          onRevealControls();
+          return true;
+        })
+      : null;
+    const volumeGesture = newWheelGesture();
+    const scrubGesture = newWheelGestureState();
+    let pendingSeconds = 0;
+    let flushTimer: number | undefined;
+    // Seeks are gathered for a moment, so a swipe doesn't ask the stream for dozens of positions.
+    const scrubBy = (px: number) => {
+      const { duration } = usePlayerStore.getState();
+      if (!(duration > 0) || layer.clientWidth <= 0) return;
+      // A swipe across the whole video moves through a third of it, and never less than 0.05 s per pixel.
+      pendingSeconds += px * Math.max(0.05, duration / (layer.clientWidth * 3));
+      if (flushTimer !== undefined) return;
+      flushTimer = window.setTimeout(() => {
+        flushTimer = undefined;
+        seekByRef.current(pendingSeconds);
+        pendingSeconds = 0;
+        onRevealControls();
+      }, SCRUB_FLUSH_MS);
+    };
+    const onWheel = (event: WheelEvent) => {
+      if (event.ctrlKey || event.metaKey) return;
+      const unit = event.deltaMode === 1 ? LINE_PX : 1;
+      if (swipeToScrub && !event.shiftKey && !zoom?.isZoomed()) {
+        trackWheelGesture(scrubGesture, event.deltaX, event.deltaY, event.deltaMode, event.timeStamp);
+        const sideways = scrubGesture.axis === "x" || (scrubGesture.axis === null && Math.abs(event.deltaX) > Math.abs(event.deltaY));
+        if (sideways) {
+          event.preventDefault();
+          // Fingers moving right pull the video back, as dragging a timeline would.
+          if (scrubGesture.axis === "x") scrubBy(event.deltaX * unit);
+          return;
+        }
+      }
+      if (zoom?.enabled && wheelAction === "zoom") {
+        if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) return;
+        event.preventDefault();
+        zoom.zoomBy(wheelZoomFactor(event.deltaY, event.deltaMode), event.clientX, event.clientY);
+        onRevealControls();
+        return;
+      }
+      if (zoom?.isZoomed()) {
+        const dx = (event.deltaX || (event.shiftKey ? event.deltaY : 0)) * unit;
+        const dy = (event.shiftKey ? 0 : event.deltaY) * unit;
+        event.preventDefault();
+        zoom.panBy(-dx, -dy);
+        return;
+      }
+      if (wheelAction !== "volume" || Math.abs(event.deltaY) < Math.abs(event.deltaX)) return;
+      event.preventDefault();
+      const step = wheelStep(volumeGesture, event.deltaY, event.deltaMode, event.timeStamp);
+      if (step !== 0) onWheelVolumeRef.current?.(step);
+    };
+    layer.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      stopZoom?.();
+      layer.removeEventListener("wheel", onWheel);
+      window.clearTimeout(flushTimer);
+    };
+  }, [lookAround, zoom, wheelAction, swipeToScrub, onRevealControls]);
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // A second click can arrive after the first one's toggle fired, and then has to undo it.
   const toggledByFirstClickRef = useRef(false);
@@ -264,7 +369,9 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
     const start = pressStartRef.current;
     if (!start) return;
     const view = lookAround?.current;
-    if (view && !canDragFrame && !canDragWindow) {
+    // A zoomed video pans under the drag, even in the pop-out window, which otherwise moves.
+    const pansZoom = !view && !canDragFrame && zoom?.isZoomed() === true;
+    if ((view && !canDragFrame && !canDragWindow) || pansZoom) {
       const from = lookFromRef.current;
       if (!from) {
         if (!shouldStartDrag({ canDrag: true, boosting: longPressActiveRef.current, dx: event.clientX - start.x, dy: event.clientY - start.y })) return;
@@ -274,7 +381,8 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
         draggedRef.current = true;
       }
       const last = from ?? start;
-      view.drag(event.clientX - last.x, event.clientY - last.y);
+      if (view) view.drag(event.clientX - last.x, event.clientY - last.y);
+      else zoom?.panBy(event.clientX - last.x, event.clientY - last.y);
       lookFromRef.current = { x: event.clientX, y: event.clientY };
       return;
     }
@@ -461,16 +569,32 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
           { label: getString("player_menu_copy_url"), icon: <Link size={18} />, action: () => copyVideoUrl(false) },
           { label: getString("player_menu_copy_url_at_time"), icon: <Link size={18} />, action: () => copyVideoUrl(true) },
         ]]),
+    ...(zoom?.enabled
+      ? [[
+          { label: getString("player_menu_zoom_in"), icon: <ZoomIn size={18} />, action: () => zoom.zoomBy(ZOOM_STEP) },
+          ...(zoom.zoomed
+            ? [
+                { label: getString("player_menu_zoom_out"), icon: <ZoomOut size={18} />, action: () => zoom.zoomBy(1 / ZOOM_STEP) },
+                { label: getString("player_menu_zoom_reset"), icon: <RotateCcw size={18} />, action: zoom.reset },
+              ]
+            : []),
+        ]]
+      : []),
+    // A zoomed video copies and saves the part on screen.
     [
-      { label: getString("player_menu_copy_frame"), icon: <Camera size={18} />, action: () => copyVideoFrame(videoRef.current, showCopied) },
+      {
+        label: getString("player_menu_copy_frame"),
+        icon: <Camera size={18} />,
+        action: () => copyVideoFrame(videoRef.current, zoom?.visibleRect() ?? null, showCopied),
+      },
       {
         label: getString("player_menu_save_frame"),
         icon: <ImageDown size={18} />,
-        action: () => saveVideoFrame(videoRef.current, title, showCopied),
+        action: () => saveVideoFrame(videoRef.current, zoom?.visibleRect() ?? null, title, showCopied),
       },
     ],
     [
-      { label: getString("player_menu_stats"), icon: <Info size={18} />, action: () => setStatsVisible((value) => !value) },
+      { label: getString("player_menu_stats"), icon: <Info size={18} />, action: onToggleStats },
       { label: getString("player_menu_copy_debug"), icon: <Bug size={18} />, action: copyDebugInfo },
     ],
   ];
@@ -480,7 +604,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
       <div
         ref={layerRef}
         {...{ [PLAYER_VIDEO_LAYER_ATTR]: "" }}
-        className={`absolute inset-0 z-[15] ${canDragFrame ? "cursor-grab active:cursor-grabbing" : "cursor-default"}`}
+        className={`absolute inset-0 z-[15] ${canDragFrame || zoom?.zoomed ? "cursor-grab active:cursor-grabbing" : "cursor-default"}`}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={restorePlaybackRate}
@@ -521,6 +645,8 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
       )}
 
       {seekFeedback && <SeekFeedback feedback={seekFeedback} compact={isCompact} />}
+
+      {zoom?.enabled && <ZoomReadout zoom={zoom} />}
 
       {contextMenu && (
         <PlayerContextMenu at={contextMenu} groups={menuGroups} onSelect={(item) => void runMenuAction(item)} />

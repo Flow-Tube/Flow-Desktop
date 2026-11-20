@@ -18,6 +18,7 @@ describe("historyDeltaForKey", () => {
 
   it("maps Cmd+[ and Cmd+] only on macOS", () => {
     expect(historyDeltaForKey(press("[", { metaKey: true }), true)).toBe(-1);
+    expect(historyDeltaForKey({ ...press("х", { metaKey: true }), code: "BracketLeft" }, true)).toBe(-1);
     expect(historyDeltaForKey(press("]", { metaKey: true }), true)).toBe(1);
     expect(historyDeltaForKey(press("[", { metaKey: true }), false)).toBeNull();
   });

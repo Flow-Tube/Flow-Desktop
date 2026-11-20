@@ -1,6 +1,7 @@
 import { musicAudioEngine } from "../../lib/audio/musicAudioEngine";
 import { SETTINGS } from "../../lib/settings/schema";
-import { usePreference } from "../../lib/usePreference";
+import { useNumberPref, usePreference } from "../../lib/usePreference";
+import { useTrackpadGesturesEnabled } from "../../lib/gestures/trackpadGestures";
 import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
 import { MediaScrubber } from "../ui/MediaScrubber";
 
@@ -26,6 +27,8 @@ export function MusicScrubber({
   const seek = useMusicPlayerStore((s) => s.seek);
   const isPlaying = useMusicPlayerStore((s) => s.isPlaying);
   const [barStyle] = usePreference(SETTINGS.MUSIC_SEEK_BAR_STYLE);
+  const [seekSeconds] = useNumberPref(SETTINGS.DOUBLE_TAP_SEEK_SECONDS, 10);
+  const trackpadGestures = useTrackpadGesturesEnabled();
 
   return (
     <MediaScrubber
@@ -43,6 +46,7 @@ export function MusicScrubber({
       // dock's edge line moves too little per second to need it.
       clock={size === "lg" ? readAudioClock : undefined}
       playing={isPlaying}
+      wheelSeekSeconds={trackpadGestures ? seekSeconds : undefined}
     />
   );
 }

@@ -59,6 +59,8 @@ KEYBOARD AND GESTURES
 - New keys: / or Ctrl+K (Cmd+K) to search, Ctrl+, (Cmd+,) for Settings, Ctrl+B (Cmd+B) to show or hide the side rail, and G then a letter to go to a page, such as G then H for Home or G then S for Subscriptions.
 - Ctrl+R (Cmd+R) and F5 refresh Home, Subscriptions, Explore and Music instead of reloading the whole app, so playback no longer stops.
 - Ctrl+Shift+T (Cmd+Shift+T) reopens the last closed tab, and Ctrl+Page Up or Page Down (Alt+Cmd+Left or Right on macOS) move between tabs.
+- More player keys: R loops the video, O switches between Fit, Fill and Zoom, Shift+S saves the frame, Shift+I shows Stats for nerds, Shift+L likes and Shift+W saves to Watch later. In the music player Shift+L likes the song and Y shows the lyrics, and in Shorts Shift+L likes and C opens the comments.
+- Copy frame, Copy link at this moment, Normal speed, Chapters, Dislike, Save to a playlist and Equalizer can also get keys of your own in Settings > Keyboard.
 
 BACKUPS AND IMPORT
 - Fixed Flow closing while it read a Google Takeout export with a folder named in Russian, Ukrainian, Greek, Turkish, Vietnamese, Chinese, Japanese or Korean, such as My Activity (#661).

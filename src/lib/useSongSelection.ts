@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { SongItem } from '../types/music';
+import { shortcutKey } from './keyMap';
 
 const songId = (song: SongItem) => song.videoId ?? song.id;
 
@@ -65,7 +66,7 @@ export function useSongSelection(ordered: SongItem[], shown: SongItem[]) {
       if (event.key === 'Escape') {
         event.preventDefault();
         stop();
-      } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
+      } else if ((event.ctrlKey || event.metaKey) && shortcutKey(event) === 'a') {
         event.preventDefault();
         toggleAll();
       }

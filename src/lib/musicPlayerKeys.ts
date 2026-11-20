@@ -1,4 +1,4 @@
-import { DIGIT_KEYS, type KeyBinding } from "./keyMap";
+import { DIGIT_KEYS, shortcutKey, type KeyBinding } from "./keyMap";
 
 /**
  * The full player's keyboard map. Flow Android's `MediaKeyboardShortcuts` was
@@ -24,6 +24,7 @@ type MusicKeyBinding = KeyBinding<(seekSeconds: number) => MusicPlayerKeyAction 
 
 interface KeyLike {
   key: string;
+  code?: string;
   shiftKey: boolean;
   altKey: boolean;
   ctrlKey: boolean;
@@ -61,7 +62,7 @@ export const MUSIC_KEY_BINDINGS: readonly MusicKeyBinding[] = [
 
 export function musicPlayerKeyAction(event: KeyLike, seekSeconds: number): MusicPlayerKeyAction | null {
   if (event.ctrlKey || event.metaKey || event.altKey) return null;
-  const key = event.key.toLowerCase();
+  const key = shortcutKey(event);
   const binding = MUSIC_KEY_BINDINGS.find((entry) => entry.keys.includes(key) && !!entry.shift === event.shiftKey);
   return binding ? binding.action(key)(seekSeconds) : null;
 }

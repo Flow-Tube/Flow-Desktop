@@ -18,6 +18,7 @@ import { useMusicHiddenFilter } from '../../store/useMusicActionsStore';
 import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
 import { useMusicEnabled } from '../../lib/useMusicContent';
 import { useSearchHistoryStore, useVisibleSearchHistory } from '../../store/useSearchHistoryStore';
+import { shortcutKey } from '../../lib/keyMap';
 import { useSettingsSearchStore } from '../../store/useSettingsSearchStore';
 import type { SearchFilterState } from '../../lib/searchFilterState';
 import { useRunSearch } from '../../lib/useRunSearch';
@@ -94,7 +95,7 @@ export function TopbarSearch() {
       setOpen(true);
     };
     const onShortcut = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+      if ((event.ctrlKey || event.metaKey) && shortcutKey(event) === 'k') {
         event.preventDefault();
         focusSearch();
       }

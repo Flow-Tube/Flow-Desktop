@@ -76,6 +76,7 @@ import { useVolumeLevel } from "../../lib/audio/volumeBoost";
 import { adaptivePlayerAspect, useReportVideoAspect } from "../../lib/adaptivePlayer";
 import { IS_LINUX_RUNTIME } from "../../lib/platform";
 import { keyBelongsToTarget } from "../../lib/musicPlayerKeys";
+import { shortcutKey } from "../../lib/keyMap";
 import { videoPlayerKeyAction } from "../../lib/videoPlayerKeys";
 import { IS_MAIN_WINDOW } from "../../lib/appWindow";
 import { useAmbientSettings } from "../../lib/ambient/useAmbientSettings";
@@ -2314,7 +2315,7 @@ export const Player: React.FC<PlayerProps> = ({
       if (keyBelongsToTarget(event.target, event.key)) return;
       if (event.ctrlKey || event.metaKey || event.altKey) return;
 
-      const action = videoPlayerKeyAction(event.key, event.shiftKey);
+      const action = videoPlayerKeyAction(shortcutKey(event), event.shiftKey);
       if (action && action.kind !== "exit-fullscreen") event.preventDefault();
       switch (action?.kind) {
         case "toggle-play":

@@ -1,3 +1,4 @@
+import { shortcutKey } from "../keyMap";
 import type { HistoryKey } from "./historyShortcuts";
 
 export type TabShortcut =
@@ -24,7 +25,7 @@ function shortcutForKey(event: HistoryKey, isMac: boolean): TabShortcut | null {
 
   const primary = isMac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
   if (!primary) return null;
-  const key = event.key.toLowerCase();
+  const key = shortcutKey(event);
   if (event.shiftKey) return key === "n" ? { kind: "new-window" } : null;
   if (key === "t") return { kind: "new" };
   if (key === "w") return { kind: "close" };

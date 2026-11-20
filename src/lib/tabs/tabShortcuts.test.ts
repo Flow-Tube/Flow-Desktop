@@ -49,4 +49,8 @@ describe("tabShortcutForKey", () => {
     expect(tabShortcutForKey(press("t", { ctrlKey: true, altKey: true }), false, true)).toBeNull();
     expect(tabShortcutForKey(press("0", { ctrlKey: true }), false, true)).toBeNull();
   });
+  it("finds T and W on a Russian layout", () => {
+    expect(tabShortcutForKey({ ...press("е", { ctrlKey: true }), code: "KeyT" }, false, true)).toEqual({ kind: "new" });
+    expect(tabShortcutForKey({ ...press("ц", { metaKey: true }), code: "KeyW" }, true, true)).toEqual({ kind: "close" });
+  });
 });

@@ -1,3 +1,4 @@
+import { shortcutKey, type ShortcutKeyEvent } from "./keyMap";
 import { keyBelongsToTarget } from "./musicPlayerKeys";
 
 export type ShortsKeyAction =
@@ -8,8 +9,8 @@ export type ShortsKeyAction =
   | { type: "jump"; tenths: number };
 
 /** Up and Down page between Shorts, as on the web, so the volume stays with the wheel and the slider. */
-export function shortsKeyAction(event: Pick<KeyboardEvent, "key" | "shiftKey">): ShortsKeyAction | null {
-  const key = event.key.toLowerCase();
+export function shortsKeyAction(event: ShortcutKeyEvent & { shiftKey: boolean }): ShortsKeyAction | null {
+  const key = shortcutKey(event);
   if (event.shiftKey) {
     if (key === "n") return { type: "page", offset: 1 };
     if (key === "p") return { type: "page", offset: -1 };

@@ -1,5 +1,8 @@
+import { shortcutKey } from "../keyMap";
+
 export interface HistoryKey {
   key: string;
+  code?: string;
   altKey: boolean;
   metaKey: boolean;
   ctrlKey: boolean;
@@ -13,13 +16,14 @@ export interface HistoryKey {
  */
 export function historyDeltaForKey(event: HistoryKey, isMac: boolean): -1 | 1 | null {
   if (event.shiftKey) return null;
+  const key = shortcutKey(event);
   if (event.altKey && !event.metaKey && !event.ctrlKey) {
-    if (event.key === "ArrowLeft") return -1;
-    if (event.key === "ArrowRight") return 1;
+    if (key === "arrowleft") return -1;
+    if (key === "arrowright") return 1;
   }
   if (isMac && event.metaKey && !event.altKey && !event.ctrlKey) {
-    if (event.key === "[") return -1;
-    if (event.key === "]") return 1;
+    if (key === "[") return -1;
+    if (key === "]") return 1;
   }
   return null;
 }

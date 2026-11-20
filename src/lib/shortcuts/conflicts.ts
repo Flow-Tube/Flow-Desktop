@@ -4,7 +4,7 @@ import { chordId, parseChord, pressedChord } from "./chord";
 import { chordIds, commandKeys, type ShortcutCommand, type ShortcutScope } from "./command";
 
 /** The players sit on top of each other, and the one in front takes its keys first, so they may share keys. */
-const LAYERED_SCOPES: ReadonlySet<ShortcutScope> = new Set(["video", "music", "dock", "shorts"]);
+const LAYERED_SCOPES: ReadonlySet<ShortcutScope> = new Set(["cards", "video", "music", "dock", "shorts"]);
 
 const pressedId = (text: string, isMac: boolean) => {
   const chord = parseChord(text);

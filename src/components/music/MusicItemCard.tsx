@@ -31,6 +31,7 @@ import { PlayingWave } from './PlayingWave';
 import { MusicCardMenu, type MusicMenuAction, useMusicContextMenu } from './MusicCardMenu';
 import { isLocalMediaId } from '../../lib/localMediaId';
 import { joinIsolated } from '../../lib/direction';
+import { CARD_FOCUS_ATTR } from '../../lib/cardNavigation';
 
 type BaseProps = {
   className?: string;
@@ -341,6 +342,7 @@ function SquareCard({
       ref={menu.cardRef}
       role="button"
       tabIndex={0}
+      {...{ [CARD_FOCUS_ATTR]: "" }}
       onClick={onOpen}
       onKeyDown={onKey(onOpen)}
       onContextMenu={menu.openMenuFromContext}
@@ -444,6 +446,7 @@ function VideoCard16x9({
     <div
       role="button"
       tabIndex={0}
+      {...{ [CARD_FOCUS_ATTR]: "" }}
       onClick={onOpen ?? onPlay}
       onKeyDown={onKey(onOpen ?? onPlay)}
       onMouseEnter={wash.onMouseEnter}
@@ -505,6 +508,7 @@ function CircleCard({
     <div
       role="button"
       tabIndex={0}
+      {...{ [CARD_FOCUS_ATTR]: "" }}
       onClick={onOpen}
       onKeyDown={onKey(onOpen)}
       onMouseEnter={wash.onMouseEnter}
@@ -595,6 +599,7 @@ function ListRow({
       ref={menu.cardRef}
       role="button"
       tabIndex={0}
+      {...{ [CARD_FOCUS_ATTR]: "" }}
       onClick={onPlay}
       onKeyDown={onKey(onPlay)}
       onContextMenu={menu.openMenuFromContext}

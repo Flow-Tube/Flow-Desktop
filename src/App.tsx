@@ -86,6 +86,7 @@ import { GlobalMediaKeysController } from "./components/shortcuts/GlobalMediaKey
 import { KeyboardHelpHost } from "./components/shortcuts/KeyboardHelpHost";
 import { SequenceHint } from "./components/shortcuts/SequenceHint";
 import { useAppShortcuts } from "./lib/shortcuts/useAppShortcuts";
+import { useCardArrowKeys } from "./lib/useCardArrowKeys";
 import { CrashReportHost } from "./components/diagnostics/CrashReportHost";
 import { ScrobbleController } from "./components/scrobbling/ScrobbleController";
 import { HistorySettleController } from "./components/sync/HistorySettleController";
@@ -152,6 +153,7 @@ function App() {
   useImageProxyBootstrap();
   useTabHistoryMouseButtons();
   useAppShortcuts();
+  useCardArrowKeys();
   useEffect(installTabPlaybackSync, []);
   useTabShortcuts();
   useActiveTabTitle();

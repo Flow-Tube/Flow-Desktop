@@ -4,6 +4,7 @@ import { SHORTS_COMMANDS } from "../shortsKeys";
 import { TAB_COMMANDS } from "../tabs/tabShortcuts";
 import { VIDEO_COMMANDS } from "../videoPlayerKeys";
 import { APP_COMMANDS } from "./appCommands";
+import { CARD_COMMANDS } from "./cardCommands";
 import type { ShortcutCommand, ShortcutScope } from "./command";
 
 export interface ShortcutGroup {
@@ -16,6 +17,7 @@ export interface ShortcutGroup {
 export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
   { scope: "app", title: "keyboard_shortcuts_app", commands: APP_COMMANDS },
   { scope: "tabs", title: "keyboard_shortcuts_tabs", commands: TAB_COMMANDS },
+  { scope: "cards", title: "keyboard_shortcuts_cards", commands: CARD_COMMANDS },
   { scope: "video", title: "keyboard_shortcuts_video", commands: VIDEO_COMMANDS },
   { scope: "music", title: "keyboard_shortcuts_music", commands: MUSIC_COMMANDS },
   { scope: "dock", title: "keyboard_shortcuts_music_bar", commands: MUSIC_DOCK_COMMANDS },

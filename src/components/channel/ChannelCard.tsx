@@ -10,6 +10,7 @@ import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
 import { ColorWash, COLOR_WASH_HOST } from '../ui/ColorWash';
 import { useHoverWashColor } from '../../lib/useHoverWashColor';
 import { backgroundTabClickProps, openedInBackgroundTab } from '../../lib/openTarget';
+import { CARD_FOCUS_ATTR } from '../../lib/cardNavigation';
 
 export interface ChannelCardProps {
   channelId: string;
@@ -89,6 +90,7 @@ export function ChannelCard({
     <div
       role="button"
       tabIndex={0}
+      {...{ [CARD_FOCUS_ATTR]: "" }}
       onClick={open}
       {...(cleanId && !onOpen ? backgroundTabClickProps(route) : {})}
       onKeyDown={(e) => {

@@ -2,7 +2,7 @@ import type { StringKey } from "../i18n/index";
 import { currentShortcutSettings, NO_OVERRIDES, type ShortcutOverrides, type ShortcutSettings } from "./bindings";
 import { chordId, eventChord, isModifierKey, parseChord, pressedChord, shiftIsPartOfKey, type Chord, type KeyLike } from "./chord";
 
-export type ShortcutScope = "app" | "tabs" | "video" | "music" | "dock" | "shorts";
+export type ShortcutScope = "app" | "tabs" | "cards" | "video" | "music" | "dock" | "shorts";
 
 /**
  * One thing a key can do. The players, the key list in help and Settings all read these tables, so

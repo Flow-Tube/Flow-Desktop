@@ -54,6 +54,8 @@ MUSIC
 
 KEYBOARD AND GESTURES
 - The keyboard shortcuts list (press ? or open Settings > Keyboard) now shows every key in Flow, including Shorts, tabs and windows, Back and Forward, and search. On macOS it shows keys the way the Mac menus do, such as ⇧⌘N.
+- Change any shortcut in Settings > Keyboard: click a key and press the new one, add a second key with +, or reset one or all. If the key is already taken, Flow names the command that has it and offers to move it. Your keys are kept in Flow backups.
+- Single-key shortcuts in Settings > Keyboard turns off keys such as K, M and ? that act without Ctrl, Alt or Cmd, for speech input or to avoid pressing them by accident.
 
 BACKUPS AND IMPORT
 - Fixed Flow closing while it read a Google Takeout export with a folder named in Russian, Ukrainian, Greek, Turkish, Vietnamese, Chinese, Japanese or Korean, such as My Activity (#661).

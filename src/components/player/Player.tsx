@@ -75,6 +75,7 @@ import { useVideoEq } from "../../lib/audio/useVideoEq";
 import { useVolumeLevel } from "../../lib/audio/volumeBoost";
 import { adaptivePlayerAspect, useReportVideoAspect } from "../../lib/adaptivePlayer";
 import { IS_LINUX_RUNTIME } from "../../lib/platform";
+import { keyBelongsToTarget } from "../../lib/musicPlayerKeys";
 import { videoPlayerKeyAction } from "../../lib/videoPlayerKeys";
 import { IS_MAIN_WINDOW } from "../../lib/appWindow";
 import { useAmbientSettings } from "../../lib/ambient/useAmbientSettings";
@@ -2310,8 +2311,7 @@ export const Player: React.FC<PlayerProps> = ({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable) return;
+      if (keyBelongsToTarget(event.target, event.key)) return;
       if (event.ctrlKey || event.metaKey || event.altKey) return;
 
       const action = videoPlayerKeyAction(event.key, event.shiftKey);

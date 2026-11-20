@@ -74,8 +74,22 @@ export function keyBelongsToTarget(target: EventTarget | null, key: string): boo
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
   // A slider uses the arrows itself; a button uses Space.
   if (target.getAttribute("role") === "slider" && key.startsWith("Arrow")) return true;
-  if ((tag === "BUTTON" || target.getAttribute("role") === "button") && (key === " " || key === "Enter")) return true;
+  if ((tag === "BUTTON" || target.getAttribute("role") === "button") && (key === " " || key === "Enter")) {
+    return focusedFromKeyboard(target);
+  }
   return false;
+}
+
+/**
+ * A button clicked with the mouse keeps focus in Chromium, and Space would press it again, so
+ * Space there still plays or pauses as before. A button reached with Tab keeps its own keys.
+ */
+function focusedFromKeyboard(element: HTMLElement): boolean {
+  try {
+    return element.matches(":focus-visible");
+  } catch {
+    return true;
+  }
 }
 
 /** The volume after one wheel notch over a volume control: up is louder. */

@@ -30,7 +30,17 @@ describe("musicPlayerKeyAction", () => {
     slider.setAttribute("role", "slider");
     expect(keyBelongsToTarget(slider, "ArrowLeft")).toBe(true);
     expect(keyBelongsToTarget(slider, "k")).toBe(false);
-    expect(keyBelongsToTarget(document.createElement("button"), " ")).toBe(true);
+  });
+
+  it("gives Space and Enter to a button only while it shows keyboard focus", () => {
+    const button = document.createElement("button");
+    document.body.append(button);
+    expect(keyBelongsToTarget(button, " ")).toBe(false);
+    button.focus();
+    expect(keyBelongsToTarget(button, " ")).toBe(true);
+    expect(keyBelongsToTarget(button, "Enter")).toBe(true);
+    expect(keyBelongsToTarget(button, "k")).toBe(false);
+    button.remove();
   });
 
   it("turns the wheel into volume steps, clamped", () => {

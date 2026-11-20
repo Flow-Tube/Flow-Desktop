@@ -1,3 +1,5 @@
+import { keyBelongsToTarget } from "./musicPlayerKeys";
+
 export type ShortsKeyAction =
   | { type: "page"; offset: 1 | -1 }
   | { type: "mute" }
@@ -36,14 +38,13 @@ export function shortsKeyAction(event: Pick<KeyboardEvent, "key" | "shiftKey">):
 
 /**
  * Listens ahead of the video player's own keys, which would otherwise also reach a mini player
- * still running behind the Shorts page. Typing in a field and keys held with Ctrl, Alt or Meta stay
- * with whatever has them, and a dialog on top of the page keeps them all. Focus may still be outside
- * a dialog, so the check isn't on the key's target.
+ * still running behind the Shorts page. Typing in a field, a focused control's own keys and keys
+ * held with Ctrl, Alt or Meta stay with whatever has them, and a dialog on top of the page keeps
+ * them all. Focus may still be outside a dialog, so the dialog check isn't on the key's target.
  */
 export function listenForShortsKeys(handle: (action: ShortsKeyAction, event: KeyboardEvent) => boolean): () => void {
   const onKey = (event: KeyboardEvent) => {
-    const target = event.target as HTMLElement | null;
-    if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable) return;
+    if (keyBelongsToTarget(event.target, event.key)) return;
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     if (document.querySelector('[aria-modal="true"]:not([aria-hidden="true"])')) return;
     const action = shortsKeyAction(event);

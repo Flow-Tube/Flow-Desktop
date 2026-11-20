@@ -36,8 +36,14 @@ describe("videoPlayerKeyAction", () => {
     expect(videoPlayerKeyAction("Tab")).toBeNull();
   });
 
+  it("zooms with Z, Shift+Z and X", () => {
+    expect(videoPlayerKeyAction("z")).toEqual({ kind: "zoom-in" });
+    expect(videoPlayerKeyAction("Z", true)).toEqual({ kind: "zoom-out" });
+    expect(videoPlayerKeyAction("x")).toEqual({ kind: "zoom-reset" });
+  });
+
   it("gives every key one meaning", () => {
-    const keys = VIDEO_KEY_BINDINGS.flatMap((binding) => binding.keys);
+    const keys = VIDEO_KEY_BINDINGS.flatMap((binding) => binding.keys.map((key) => `${binding.shift ? "shift+" : ""}${key}`));
     expect(new Set(keys).size).toBe(keys.length);
   });
 });

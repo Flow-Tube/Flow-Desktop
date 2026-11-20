@@ -40,7 +40,7 @@ describe("video key map", () => {
     expect(videoPlayerKeyAction("K")).toEqual({ kind: "toggle-play" });
     expect(videoPlayerKeyAction("ArrowLeft")).toEqual({ kind: "seek-back" });
     expect(videoPlayerKeyAction("7")).toEqual({ kind: "seek-to-fraction", fraction: 0.7 });
-    expect(videoPlayerKeyAction("x")).toBeNull();
+    expect(videoPlayerKeyAction("q")).toBeNull();
     expect(videoPlayerKeyAction("?")).toBeNull();
   });
 });

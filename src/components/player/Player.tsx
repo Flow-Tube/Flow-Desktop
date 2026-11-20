@@ -84,6 +84,7 @@ import { AmbientGlow } from "./AmbientGlow";
 import { useUiStore } from "../../store/useUiStore";
 import { SphericalView, type LookAround } from "./SphericalView";
 import { useVideoZoom } from "../../lib/player/useVideoZoom";
+import { PAN_KEY_STEPS, ZOOM_STEP } from "../../lib/player/videoZoom";
 import type { Projection } from "../../lib/spherical/view";
 import { useLookSpeed } from "../../lib/spherical/useLookSpeed";
 import {
@@ -2418,8 +2419,22 @@ export const Player: React.FC<PlayerProps> = ({
         case "seek-to-fraction":
           if (!isLive && duration > 0) seekTo(duration * action.fraction);
           break;
+        case "zoom-in":
+          zoom.zoomBy(ZOOM_STEP);
+          break;
+        case "zoom-out":
+          zoom.zoomBy(1 / ZOOM_STEP);
+          break;
+        case "zoom-reset":
+          zoom.reset();
+          break;
         case "look":
-          lookAround.current?.key(action.key);
+          if (lookAround.current) {
+            lookAround.current.key(action.key);
+          } else {
+            const steps = PAN_KEY_STEPS[action.key];
+            if (steps) zoom.panStep(steps[0], steps[1]);
+          }
           break;
       }
       revealControls();
@@ -2454,6 +2469,7 @@ export const Player: React.FC<PlayerProps> = ({
     togglePictureInPicture,
     togglePlay,
     volume,
+    zoom,
   ]);
 
   const handleLoadedMetadata = () => {

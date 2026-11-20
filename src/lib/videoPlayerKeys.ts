@@ -25,6 +25,9 @@ export type VideoPlayerKeyAction =
   | { kind: "seek-start" }
   | { kind: "seek-end" }
   | { kind: "seek-to-fraction"; fraction: number }
+  | { kind: "zoom-in" }
+  | { kind: "zoom-out" }
+  | { kind: "zoom-reset" }
   | { kind: "look"; key: string };
 
 export const VIDEO_KEY_BINDINGS: readonly KeyBinding<VideoPlayerKeyAction>[] = [
@@ -51,6 +54,9 @@ export const VIDEO_KEY_BINDINGS: readonly KeyBinding<VideoPlayerKeyAction>[] = [
   { keys: ["]"], label: "keyboard_shortcut_next_chapter", action: () => ({ kind: "next-chapter" }) },
   { keys: ["home"], label: "keyboard_shortcut_seek_start", action: () => ({ kind: "seek-start" }) },
   { keys: ["end"], label: "keyboard_shortcut_seek_end", action: () => ({ kind: "seek-end" }) },
+  { keys: ["z"], label: "keyboard_shortcut_zoom_in", action: () => ({ kind: "zoom-in" }) },
+  { keys: ["z"], shift: true, label: "keyboard_shortcut_zoom_out", action: () => ({ kind: "zoom-out" }) },
+  { keys: ["x"], label: "keyboard_shortcut_zoom_reset", action: () => ({ kind: "zoom-reset" }) },
   { keys: ["w", "a", "s", "d"], label: "keyboard_shortcut_look_around", action: (key) => ({ kind: "look", key }) },
   {
     keys: DIGIT_KEYS,
@@ -59,12 +65,17 @@ export const VIDEO_KEY_BINDINGS: readonly KeyBinding<VideoPlayerKeyAction>[] = [
   },
 ];
 
-const BY_KEY = new Map(VIDEO_KEY_BINDINGS.flatMap((binding) => binding.keys.map((key) => [key, binding] as const)));
+const bindingId = (key: string, shift: boolean) => (shift ? `shift+${key}` : key);
+const BY_KEY = new Map(
+  VIDEO_KEY_BINDINGS.flatMap((binding) => binding.keys.map((key) => [bindingId(key, !!binding.shift), binding] as const)),
+);
 
-/** Shift is part of the character for `<`, `>` and `+`, so only a binding that asks for it looks at it. */
+/**
+ * A binding that asks for Shift wins with Shift held (Shift+Z zooms out, Z zooms in). Otherwise Shift
+ * is ignored, since it is part of the character for `<`, `>` and `+`.
+ */
 export function videoPlayerKeyAction(key: string, shiftKey = false): VideoPlayerKeyAction | null {
   const lower = key.toLowerCase();
-  const binding = BY_KEY.get(lower);
-  if (binding?.shift && !shiftKey) return null;
+  const binding = (shiftKey && BY_KEY.get(bindingId(lower, true))) || BY_KEY.get(lower);
   return binding?.action(lower) ?? null;
 }

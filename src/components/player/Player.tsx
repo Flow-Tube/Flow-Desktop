@@ -83,6 +83,7 @@ import { useAmbientSettings } from "../../lib/ambient/useAmbientSettings";
 import { AmbientGlow } from "./AmbientGlow";
 import { useUiStore } from "../../store/useUiStore";
 import { SphericalView, type LookAround } from "./SphericalView";
+import { useVideoZoom } from "../../lib/player/useVideoZoom";
 import type { Projection } from "../../lib/spherical/view";
 import { useLookSpeed } from "../../lib/spherical/useLookSpeed";
 import {
@@ -358,6 +359,7 @@ export const Player: React.FC<PlayerProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pointerInsideRef = useRef(false);
   const keyboardFocusInsideRef = useRef(false);
@@ -658,6 +660,13 @@ export const Player: React.FC<PlayerProps> = ({
   const sphericalPicked = sphericalChoice && sphericalChoice.videoId === currentVideoId ? sphericalChoice.shown : null;
   // The small player shows the flat picture, as on Android.
   const showsSpherical = !isPipMode && !sphericalUnavailable && (sphericalPicked ?? projection !== null);
+  const zoom = useVideoZoom({
+    videoRef,
+    frameRef: contentRef,
+    enabled: !isPipMode && !showsSpherical,
+    videoFit,
+    resetKey: currentVideoId,
+  });
   const lookAround = useRef<LookAround | null>(null);
   const [lookSpeed] = useLookSpeed();
   const onSphericalUnavailable = useCallback(() => {
@@ -2632,6 +2641,7 @@ export const Player: React.FC<PlayerProps> = ({
       {showAmbient && <AmbientGlow videoRef={videoRef} intensity={ambient.intensity} spread={ambient.glow} />}
 
       <div
+        ref={contentRef}
         data-player-content
         // Inset, not h-full: WebKit resolves a percentage height against the root's uncapped aspect
         // ratio, so in theater mode h-full ran past max-h and over the page below.
@@ -2763,6 +2773,7 @@ export const Player: React.FC<PlayerProps> = ({
         settingsOpen={settingsOpen}
         onCloseSettings={closeSettings}
         lookAround={showsSpherical ? lookAround : null}
+        zoom={zoom}
       />
 
       {pendingQualitySwitch && (

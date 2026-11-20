@@ -10,6 +10,9 @@ import {
   PictureInPicture2,
   Play,
   Repeat1,
+  RotateCcw,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import { usePlayerStore, type PlaybackRate } from "../../../store/usePlayerStore";
 import { copyText } from "../../../lib/clipboard";
@@ -25,6 +28,10 @@ import { StatsForNerds } from "../StatsForNerds";
 import type { LookAround } from "../SphericalView";
 import { seekSideAt, type SeekDirection, type SeekFeedback as SeekFeedbackState } from "../../../lib/seekFeedback";
 import { SeekFeedback } from "./SeekFeedback";
+import { ZoomReadout } from "./ZoomReadout";
+import { listenForZoomInput } from "../../../lib/gestures/pinch";
+import { ZOOM_STEP } from "../../../lib/player/videoZoom";
+import type { VideoZoom } from "../../../lib/player/useVideoZoom";
 import { PlayerContextMenu, type PlayerContextMenuItem } from "./PlayerContextMenu";
 import { isPopOutWindow } from "../../../lib/api/pip";
 import { moveVideoToNewWindow } from "../../../lib/openTarget";
@@ -82,7 +89,11 @@ type PlayerGestureOverlayProps = {
   onCloseSettings: () => void;
   /** A 360 video's view: a drag looks around instead of moving anything, and the wheel zooms. */
   lookAround?: { current: LookAround | null } | null;
+  /** Free zoom: a pinch or Ctrl/Cmd and the wheel zoom, and a drag or two-finger scroll pans once zoomed. */
+  zoom?: VideoZoom | null;
 };
+
+const LINE_PX = 33;
 
 function formatTime(seconds: number) {
   if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
@@ -131,6 +142,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
   canDragWindow = false,
   canDragFrame = false,
   lookAround = null,
+  zoom = null,
   settingsOpen,
   onCloseSettings,
 }) => {
@@ -166,6 +178,31 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
     layer.addEventListener("wheel", onWheel, { passive: false });
     return () => layer.removeEventListener("wheel", onWheel);
   }, [lookAround]);
+
+  // A pinch or Ctrl/Cmd and the wheel zooms about the pointer. Once zoomed, a plain two-finger
+  // scroll pans the picture, as in Photos and Maps, instead of scrolling the page under it.
+  useEffect(() => {
+    const layer = layerRef.current;
+    if (!layer || !zoom?.enabled) return;
+    const stopZoom = listenForZoomInput(layer, ({ factor, clientX, clientY }) => {
+      zoom.zoomBy(factor, clientX, clientY);
+      onRevealControls();
+      return true;
+    });
+    const onWheel = (event: WheelEvent) => {
+      if (event.ctrlKey || event.metaKey || !zoom.isZoomed()) return;
+      const unit = event.deltaMode === 1 ? LINE_PX : 1;
+      const dx = (event.deltaX || (event.shiftKey ? event.deltaY : 0)) * unit;
+      const dy = (event.shiftKey ? 0 : event.deltaY) * unit;
+      event.preventDefault();
+      zoom.panBy(-dx, -dy);
+    };
+    layer.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      stopZoom();
+      layer.removeEventListener("wheel", onWheel);
+    };
+  }, [zoom, onRevealControls]);
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // A second click can arrive after the first one's toggle fired, and then has to undo it.
   const toggledByFirstClickRef = useRef(false);
@@ -264,7 +301,9 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
     const start = pressStartRef.current;
     if (!start) return;
     const view = lookAround?.current;
-    if (view && !canDragFrame && !canDragWindow) {
+    // A zoomed video pans under the drag, even in the pop-out window, which otherwise moves.
+    const pansZoom = !view && !canDragFrame && zoom?.isZoomed() === true;
+    if ((view && !canDragFrame && !canDragWindow) || pansZoom) {
       const from = lookFromRef.current;
       if (!from) {
         if (!shouldStartDrag({ canDrag: true, boosting: longPressActiveRef.current, dx: event.clientX - start.x, dy: event.clientY - start.y })) return;
@@ -274,7 +313,8 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
         draggedRef.current = true;
       }
       const last = from ?? start;
-      view.drag(event.clientX - last.x, event.clientY - last.y);
+      if (view) view.drag(event.clientX - last.x, event.clientY - last.y);
+      else zoom?.panBy(event.clientX - last.x, event.clientY - last.y);
       lookFromRef.current = { x: event.clientX, y: event.clientY };
       return;
     }
@@ -461,6 +501,17 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
           { label: getString("player_menu_copy_url"), icon: <Link size={18} />, action: () => copyVideoUrl(false) },
           { label: getString("player_menu_copy_url_at_time"), icon: <Link size={18} />, action: () => copyVideoUrl(true) },
         ]]),
+    ...(zoom?.enabled
+      ? [[
+          { label: getString("player_menu_zoom_in"), icon: <ZoomIn size={18} />, action: () => zoom.zoomBy(ZOOM_STEP) },
+          ...(zoom.zoomed
+            ? [
+                { label: getString("player_menu_zoom_out"), icon: <ZoomOut size={18} />, action: () => zoom.zoomBy(1 / ZOOM_STEP) },
+                { label: getString("player_menu_zoom_reset"), icon: <RotateCcw size={18} />, action: zoom.reset },
+              ]
+            : []),
+        ]]
+      : []),
     [
       { label: getString("player_menu_copy_frame"), icon: <Camera size={18} />, action: () => copyVideoFrame(videoRef.current, showCopied) },
       {
@@ -480,7 +531,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
       <div
         ref={layerRef}
         {...{ [PLAYER_VIDEO_LAYER_ATTR]: "" }}
-        className={`absolute inset-0 z-[15] ${canDragFrame ? "cursor-grab active:cursor-grabbing" : "cursor-default"}`}
+        className={`absolute inset-0 z-[15] ${canDragFrame || zoom?.zoomed ? "cursor-grab active:cursor-grabbing" : "cursor-default"}`}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={restorePlaybackRate}
@@ -521,6 +572,8 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
       )}
 
       {seekFeedback && <SeekFeedback feedback={seekFeedback} compact={isCompact} />}
+
+      {zoom?.enabled && <ZoomReadout zoom={zoom} />}
 
       {contextMenu && (
         <PlayerContextMenu at={contextMenu} groups={menuGroups} onSelect={(item) => void runMenuAction(item)} />

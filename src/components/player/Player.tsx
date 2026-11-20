@@ -132,9 +132,11 @@ import {
 import {
   SOURCE_SWITCH_TIMEOUT_MS,
   hasMediaPlaybackProgressed,
+  BUFFERING_SPINNER_DELAY_MS,
   hasSourceSwitchTimedOut,
   shouldEnterMediaBuffering,
 } from "../../lib/mediaBuffering";
+import { useFrameHold } from "../../lib/player/useFrameHold";
 import {
   canAutoHidePlayerChrome,
   PLAYER_CHROME_HIDE_DELAY_MS,
@@ -563,14 +565,21 @@ export const Player: React.FC<PlayerProps> = ({
   const [isPip, setIsPip] = useState(false);
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
+  const bufferingTimerRef = useRef<number | null>(null);
+  const frameHold = useFrameHold(videoRef);
 
   // Every exit from buffering has to drop both the flag and the clock reading
   // it started from; leaving one behind is what strands the spinner.
   const clearMediaBuffering = useCallback(() => {
+    if (bufferingTimerRef.current !== null) {
+      window.clearTimeout(bufferingTimerRef.current);
+      bufferingTimerRef.current = null;
+    }
     mediaBufferingRef.current = false;
     bufferingStartedAtRef.current = null;
     setIsBuffering(false);
   }, []);
+
   const [selectedCaptionId, setSelectedCaptionId] = useState<string>("off");
   const [selectedAudioTrackId, setSelectedAudioTrackId] = useState<string | null>(null);
   const [hasStartedPlayback, setHasStartedPlayback] = useState(false);
@@ -1351,7 +1360,9 @@ export const Player: React.FC<PlayerProps> = ({
       nextTime = dur > 0 ? Math.min(Math.max(time, 0), dur) : Math.max(time, 0);
       nextTime = sponsorSkipTarget(nextTime) ?? nextTime;
     }
-    video.currentTime = nextTime;
+    frameHold.around({ kind: "seek", target: nextTime }, () => {
+      video.currentTime = nextTime;
+    });
     if (audio) {
       audioHoldRef.current = false;
       lastAudioResyncAtRef.current = performance.now();
@@ -1361,7 +1372,7 @@ export const Player: React.FC<PlayerProps> = ({
       }
     }
     setCurrentTime(nextTime);
-  }, [duration, isLive, setCurrentTime, sponsorSkipTarget]);
+  }, [duration, frameHold, isLive, setCurrentTime, sponsorSkipTarget]);
 
   // Letting go of the seek bar inside such a segment skips it too.
   const wasScrubbingRef = useRef(false);
@@ -2060,7 +2071,14 @@ export const Player: React.FC<PlayerProps> = ({
 
       mediaBufferingRef.current = true;
       bufferingStartedAtRef.current = video.currentTime;
-      setIsBuffering(true);
+      if (bufferingTimerRef.current === null) {
+        bufferingTimerRef.current = window.setTimeout(() => {
+          bufferingTimerRef.current = null;
+          if (mediaBufferingRef.current) {
+            setIsBuffering(true);
+          }
+        }, BUFFERING_SPINNER_DELAY_MS);
+      }
       if (waitingSinceRef.current === null) waitingSinceRef.current = Date.now();
       stallCountRef.current += 1;
       if (usesExternalAudio) {
@@ -2196,6 +2214,7 @@ export const Player: React.FC<PlayerProps> = ({
     retrySourceFiredRef.current = false;
 
     clearMediaBuffering();
+    frameHold.release();
     videoProgressSampleRef.current = null;
     postSwitchRealignPendingRef.current = true;
 
@@ -2221,7 +2240,7 @@ export const Player: React.FC<PlayerProps> = ({
         }
       }
     }
-  }, [clearMediaBuffering, mediaIdentity, resumeTime]);
+  }, [clearMediaBuffering, frameHold, mediaIdentity, resumeTime]);
 
   useEffect(() => {
     if (!isSourceSwitching) return;
@@ -2264,7 +2283,9 @@ export const Player: React.FC<PlayerProps> = ({
     const audio = audioRef.current;
     if (!audio || !video || !usesExternalAudio || isSourceSwitching) return;
 
-    audio.playbackRate = playbackRate;
+    if (Math.abs(audio.playbackRate - playbackRate) > 0.001) {
+      audio.playbackRate = playbackRate;
+    }
     audio.preservesPitch = true;
     audio.volume = muted ? 0 : outputVolume;
     audio.muted = muted || volume === 0;
@@ -2314,14 +2335,20 @@ export const Player: React.FC<PlayerProps> = ({
     const video = videoRef.current;
     const audio = audioRef.current;
     if (video) {
-      video.playbackRate = playbackRate;
-      video.preservesPitch = true;
+      if (Math.abs(video.playbackRate - playbackRate) > 0.001) {
+        frameHold.around({ kind: "rate" }, () => {
+          video.playbackRate = playbackRate;
+          video.preservesPitch = true;
+        });
+      }
     }
     if (audio) {
-      audio.playbackRate = playbackRate;
-      audio.preservesPitch = true;
+      if (Math.abs(audio.playbackRate - playbackRate) > 0.001) {
+        audio.playbackRate = playbackRate;
+        audio.preservesPitch = true;
+      }
     }
-  }, [playbackRate]);
+  }, [frameHold, playbackRate]);
 
   useEffect(() => () => {
     const controller = windowFullscreenControllerRef.current;
@@ -2329,6 +2356,13 @@ export const Player: React.FC<PlayerProps> = ({
     setIsFullscreen(false);
     if (ownsFullscreen) void syncNativeFullscreen(false);
   }, [setIsFullscreen, syncNativeFullscreen]);
+
+  useEffect(() => () => {
+    if (bufferingTimerRef.current !== null) {
+      window.clearTimeout(bufferingTimerRef.current);
+      bufferingTimerRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -2801,6 +2835,14 @@ export const Player: React.FC<PlayerProps> = ({
         }}
         className={cx("relative z-10 h-full w-full", VIDEO_FIT_CLASS[isPipMode ? "fit" : videoFit], showsSpherical && "opacity-0")}
       />
+      {frameHold.enabled && !showsSpherical && (
+        <canvas
+          ref={frameHold.canvasRef}
+          hidden
+          aria-hidden="true"
+          className={cx("pointer-events-none absolute inset-0 z-10 h-full w-full", VIDEO_FIT_CLASS[isPipMode ? "fit" : videoFit])}
+        />
+      )}
       {showsSpherical && (
         <SphericalView
           videoRef={videoRef}

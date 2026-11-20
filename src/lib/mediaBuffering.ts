@@ -22,6 +22,12 @@
 /** `HTMLMediaElement.HAVE_FUTURE_DATA` — the next frame is decodable. */
 const HAVE_FUTURE_DATA = 3;
 
+/**
+ * How long starvation has to last before the spinner shows. A seek or speed change makes WebKitGTK
+ * refill its pipeline, which reports `waiting` for a moment even when the data is already buffered.
+ */
+export const BUFFERING_SPINNER_DELAY_MS = 200;
+
 /** Ignore sub-frame clock jitter when deciding that playback has recovered. */
 const MIN_PROGRESS_SECONDS = 0.01;
 

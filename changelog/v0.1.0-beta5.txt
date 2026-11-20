@@ -17,6 +17,7 @@ LINUX
 - Flow on Linux asks for fewer redraws: the playing bars and live dots hold still, pages and the side menu switch without a fade or slide, and the video has square corners. Ambient mode stays off on the slower graphics modes.
 - On Linux, a card now changes at once when the pointer moves onto it, with no fade. The fade made WebKitGTK rebuild the whole card as separate layers and draw about a dozen extra frames each time the pointer moved onto or off a card, also while a feed scrolled under it. In a test of 24 hovers that was 669 frames with the fades and 85 without (#660).
 - Seeking inside the loaded part of a video, and fast quality switches, no longer make WebKitGTK restart its decoder, which could stutter.
+- The video no longer goes black for a moment when you seek or change the speed (#696). Flow keeps the last picture on screen, zoomed as it was, until the new one is ready.
 - The Device rows in Settings > About, such as Graphics and Video decoders, can be selected and copied.
 - Settings > About now names the graphics path in use (GPU, GPU through shared memory, or no GPU) and why. The Linux help page explains what each one costs.
 
@@ -49,6 +50,7 @@ PLAYER
 - A short read-out shows the zoom level, and the right-click menu has Zoom in, Zoom out and Reset zoom. Copy frame and Save frame keep only the zoomed part, at the video's own resolution. Captions keep their size, and each new video starts at 1x.
 - Settings > Player > Wheel over the video picks what the mouse wheel or a two-finger scroll does with the pointer on the video: scroll the page as before, change the volume, or zoom.
 - Space and Enter on a button you reached with Tab now press that button instead of pausing the video, and the arrow keys on a focused slider or seek bar no longer also seek or change the volume. A button clicked with the mouse still leaves Space to the player, and the same now holds in Shorts and the music player.
+- The buffering circle waits a fifth of a second before it shows, so a short refill after a seek or speed change no longer flashes it.
 
 MUSIC
 - Fixed the full music player sliding under the title bar on Windows and Linux and leaving a coloured strip along the bottom of the window (#693). It now opens just below the title bar and fills the rest of the window.

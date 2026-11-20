@@ -7,7 +7,7 @@ import { parseChord, pressedChord, type KeyLike } from "./chord";
 import { chordIds, commandKeys, findShortcut } from "./command";
 import { chordCaption, shortcutRows } from "./format";
 
-const sources = import.meta.glob(["../../components/player/Player.tsx", "../useMusicPlayerKeyboard.ts"], {
+const sources = import.meta.glob(["../../components/player/Player.tsx", "../musicKeyActions.ts"], {
   query: "?raw",
   eager: true,
   import: "default",
@@ -57,7 +57,7 @@ describe("shortcut catalog", () => {
   });
 
   it("has a handler in the hook for every music action", () => {
-    const hook = handler("useMusicPlayerKeyboard.ts");
+    const hook = handler("musicKeyActions.ts");
     for (const command of MUSIC_COMMANDS) {
       const action = command.action(command.keys[0]!)(10);
       if (action) expect(hook).toContain(`case "${action.kind}":`);

@@ -24,6 +24,7 @@ import { useHoverWashColor } from '../../lib/useHoverWashColor';
 import { backgroundTabClickProps, cardKeyboardProps, openedInBackgroundTab } from '../../lib/openTarget';
 import { openActions } from '../common/openActions';
 import { alignToEnd, growFromPoint } from '../../lib/direction';
+import { hoverMotion } from '../../lib/platform';
 
 interface PlaylistCardProps {
   playlist: PlaylistSummary & {
@@ -92,7 +93,7 @@ export function StackedPlaylistThumbnail({
           src={src}
           alt={title}
           onError={onError}
-          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+          className={`h-full w-full object-cover ${hoverMotion("transition-transform duration-300 group-hover:scale-105")}`}
           loading="lazy"
         />
         <div className="absolute bottom-1.5 end-1.5 flex items-center gap-1.5 rounded bg-chrome-black/80 px-1.5 py-0.5 text-[11px] font-semibold tracking-wide text-chrome-white">

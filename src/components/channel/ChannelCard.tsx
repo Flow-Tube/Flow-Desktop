@@ -11,6 +11,7 @@ import { ColorWash, COLOR_WASH_HOST } from '../ui/ColorWash';
 import { useHoverWashColor } from '../../lib/useHoverWashColor';
 import { backgroundTabClickProps, openedInBackgroundTab } from '../../lib/openTarget';
 import { CARD_FOCUS_ATTR } from '../../lib/cardNavigation';
+import { hoverMotion } from '../../lib/platform';
 
 export interface ChannelCardProps {
   channelId: string;
@@ -109,7 +110,7 @@ export function ChannelCard({
     >
       <ColorWash active={wash.isHovered} color={wash.color} radius="rounded-2xl" bleed={6} />
       <div className="aspect-square w-full">
-        <div className="h-full w-full overflow-hidden rounded-full ring-1 ring-chrome-neutral-800/50 transition-transform duration-200 ease-out group-hover:scale-[1.02]">
+        <div className={`h-full w-full overflow-hidden rounded-full ring-1 ring-chrome-neutral-800/50 ${hoverMotion("transition-transform duration-200 ease-out group-hover:scale-[1.02]")}`}>
           <CircleAvatar src={avatarUrl} name={name} />
         </div>
       </div>

@@ -32,6 +32,7 @@ import { MusicCardMenu, type MusicMenuAction, useMusicContextMenu } from './Musi
 import { isLocalMediaId } from '../../lib/localMediaId';
 import { joinIsolated } from '../../lib/direction';
 import { CARD_FOCUS_ATTR } from '../../lib/cardNavigation';
+import { hoverMotion } from '../../lib/platform';
 
 type BaseProps = {
   className?: string;
@@ -526,7 +527,7 @@ function CircleCard({
           src={thumbnail}
           alt={title}
           rounded="rounded-full"
-          className="h-full w-full ring-1 ring-chrome-neutral-800/50 transition-transform duration-200 ease-out group-hover:scale-[1.02]"
+          className={`h-full w-full ring-1 ring-chrome-neutral-800/50 ${hoverMotion("transition-transform duration-200 ease-out group-hover:scale-[1.02]")}`}
           iconSize="w-10 h-10"
         />
       </div>

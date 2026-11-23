@@ -10,6 +10,7 @@ import { useImageFallback } from '../../lib/useImageFallback';
 import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
 import { ColorWash, COLOR_WASH_HOST } from '../ui/ColorWash';
 import { useHoverWashColor } from '../../lib/useHoverWashColor';
+import { hoverMotion } from '../../lib/platform';
 
 export interface ArtistCardProps {
   artist: ArtistItem;
@@ -99,7 +100,7 @@ export function ArtistCard({ artist, fill, className, onOpen, following: followi
     >
       <ColorWash active={wash.isHovered} color={wash.color} radius="rounded-2xl" bleed={6} />
       <div className="aspect-square w-full">
-        <div className="h-full w-full overflow-hidden rounded-full ring-1 ring-chrome-neutral-800/50 transition-transform duration-200 ease-out group-hover:scale-[1.02]">
+        <div className={`h-full w-full overflow-hidden rounded-full ring-1 ring-chrome-neutral-800/50 ${hoverMotion("transition-transform duration-200 ease-out group-hover:scale-[1.02]")}`}>
           <CircleAvatar src={artist.thumbnail} name={artist.title} />
         </div>
       </div>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import type { StoryboardFrame } from "../../lib/seekPreview";
 import type { StoryboardLevel } from "../../types/video";
-import { IS_LINUX_RUNTIME } from "../../lib/platform";
+import { hoverMotion } from "../../lib/platform";
 
 export interface VideoThumbnailPreviewProps {
   frame: StoryboardFrame | null;
@@ -174,9 +174,7 @@ export const VideoThumbnailPreview: React.FC<VideoThumbnailPreviewProps> = ({
     return null;
   }
 
-  const scaleClass = IS_LINUX_RUNTIME
-    ? ""
-    : " transition-transform duration-300 group-hover:scale-[1.03]";
+  const scaleClass = hoverMotion("transition-transform duration-300 group-hover:scale-[1.03]");
 
   const currentGeom = current
     ? getTileGeometry(current, containerSize.width, containerSize.height)
@@ -191,7 +189,7 @@ export const VideoThumbnailPreview: React.FC<VideoThumbnailPreviewProps> = ({
       ref={setContainerNode}
       className={`pointer-events-none absolute inset-0 z-0 overflow-hidden transition-opacity duration-150 ease-out ${
         isRendered ? "opacity-100" : "opacity-0"
-      }${scaleClass} ${className}`}
+      } ${scaleClass} ${className}`}
       aria-hidden="true"
     >
       {/* Back buffer: strictly isolated to 1 tile viewport */}

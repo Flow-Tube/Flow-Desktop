@@ -18,7 +18,7 @@ import { useSettingsStore } from '../../store/useSettingsStore';
 import { useAppSettingsStore } from '../../store/useAppSettingsStore';
 import { useChannelAvatar } from '../../lib/useChannelAvatar';
 import { isUnavailableYoutubeThumbnail, resolveYoutubeThumbnailCandidates, upgradeAvatarUrl, avatarSize } from '../../lib/thumbnails';
-import { IS_LINUX_RUNTIME } from '../../lib/platform';
+import { IS_LINUX_RUNTIME, hoverMotion } from '../../lib/platform';
 import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
 import { SETTINGS } from '../../lib/settings/schema';
 import type { MenuAnchor } from '../ui/AnchoredPortalMenu';
@@ -655,7 +655,7 @@ function VideoCardComponent({
         onClick={() => navigate(`/channel/${cleanId}`)}
         className="flex flex-col items-center justify-center p-6 bg-surface rounded-xl border border-chrome-zinc-800 hover:bg-chrome-zinc-900/50 transition-colors group cursor-pointer"
       >
-        <div className="w-24 h-24 rounded-full overflow-hidden mb-4 border border-chrome-zinc-800 group-hover:scale-105 transition-transform duration-300">
+        <div className={`w-24 h-24 rounded-full overflow-hidden mb-4 border border-chrome-zinc-800 ${hoverMotion("group-hover:scale-105 transition-transform duration-300")}`}>
           {channelCardAvatarUrl ? (
             <img
               src={channelCardAvatarUrl}
@@ -957,7 +957,7 @@ function VideoCardComponent({
             ref={thumbnailRef}
             src={displayThumbnail}
             alt={displayTitle}
-            className={`w-full h-full object-cover${IS_LINUX_RUNTIME ? "" : " transition-transform duration-300 group-hover:scale-[1.03]"}`}
+            className={`w-full h-full object-cover ${hoverMotion("transition-transform duration-300 group-hover:scale-[1.03]")}`}
             crossOrigin={THUMBNAIL_CROSS_ORIGIN}
             loading="lazy"
             decoding="async"

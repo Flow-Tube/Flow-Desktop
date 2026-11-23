@@ -2,6 +2,7 @@ import React from "react";
 import { ShelfScroller } from "../ui/ShelfScroller";
 import { VideoCard } from "../video/VideoCard";
 import type { VideoSummary } from "../../types/video";
+import { hoverMotion } from "../../lib/platform";
 
 interface VideoShelfProps {
   title?: string;
@@ -50,7 +51,7 @@ export const VideoShelf: React.FC<VideoShelfProps> = ({
         {videos.map((video, index) => (
           <div
             key={getVideoKey ? getVideoKey(video, index) : `${video.id}-${index}`}
-            className="w-[280px] sm:w-[320px] shrink-0 transform transition-transform duration-300 hover:translate-y-[-2px]"
+            className={`w-[280px] sm:w-[320px] shrink-0 ${hoverMotion("transform transition-transform duration-300 hover:translate-y-[-2px]")}`}
           >
             <VideoCard
               video={video}

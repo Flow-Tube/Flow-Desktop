@@ -15,6 +15,9 @@ import { loadPlaylistDownload } from '../../lib/useCollectionDownloads';
 import { useDownloadStore } from '../../store/useDownloadStore';
 import { useImageFallback } from '../../lib/useImageFallback';
 import { isUnavailableYoutubeThumbnail, resolveYoutubeThumbnailCandidates, thumbnailVideoId } from '../../lib/thumbnails';
+import { useCoverColorSample } from '../../lib/useCoverColorSample';
+import { useArtworkSwatches } from '../../lib/useArtworkSwatches';
+import type { Rgb } from '../../lib/useDominantColor';
 import { showSaveFailedToast, showSaveToast } from '../../lib/saveToast';
 import { getString } from '../../lib/i18n/index';
 import type { MenuAnchor } from '../ui/AnchoredPortalMenu';
@@ -44,11 +47,21 @@ interface PlaylistCardProps {
   thumbnailWidth?: number;
 }
 
-const SHEET_CLASS = 'pointer-events-none absolute aspect-video rounded-xl';
+// The share of the cover's colour in each sheet, as on Android: the near sheet takes more.
+const NEAR_SHEET_TINT = 55;
+const FAR_SHEET_TINT = 35;
+
+/** A theme surface blended toward the cover's colour, or the plain surface until there is one. */
+function sheetTone(surface: string, tint: Rgb | null, amount: number): string {
+  return tint ? `color-mix(in oklab, var(${surface}), rgb(${tint.r} ${tint.g} ${tint.b}) ${amount}%)` : `var(${surface})`;
+}
+
+const SHEET_CLASS = `pointer-events-none absolute aspect-video rounded-xl ${hoverMotion('transition-colors duration-200 ease-out motion-reduce:transition-none')}`;
 
 /**
  * The cover under two sheets that peek out above it, each narrower than the one in front, so it
- * reads as a stack. The sheets are the theme's surface tones, so they stay visible in light and dark themes.
+ * reads as a stack. Once the cover has loaded, the sheets take its colour, blended into the theme's
+ * surface tones so they stay visible in light and dark themes.
  */
 export function StackedPlaylistThumbnail({
   thumbnailUrl,
@@ -73,23 +86,29 @@ export function StackedPlaylistThumbnail({
     [thumbnailUrl, thumbnailWidth],
   );
   const { src, onError, onLoad, isLast } = useImageFallback(candidates);
+  const [coverLoaded, setCoverLoaded] = useState(false);
   const handleLoad = (event: React.SyntheticEvent<HTMLImageElement>) => {
     if (!isLast && isUnavailableYoutubeThumbnail(event.currentTarget)) {
       onError();
       return;
     }
     onLoad();
+    setCoverLoaded(true);
   };
+  const swatches = useArtworkSwatches(useCoverColorSample(coverLoaded ? thumbnailUrl : null));
+  const tint = swatches?.accent ?? swatches?.base ?? null;
 
   return (
     <div className="relative w-full pt-2.5">
       <div
         aria-hidden="true"
-        className={`${SHEET_CLASS} start-4 end-4 top-0 z-0 bg-surface-container-high`}
+        className={`${SHEET_CLASS} start-4 end-4 top-0 z-0`}
+        style={{ backgroundColor: sheetTone('--color-surface-container-high', tint, FAR_SHEET_TINT) }}
       />
       <div
         aria-hidden="true"
-        className={`${SHEET_CLASS} start-2 end-2 top-1 z-[1] bg-surface-container-highest`}
+        className={`${SHEET_CLASS} start-2 end-2 top-1 z-[1]`}
+        style={{ backgroundColor: sheetTone('--color-surface-container-highest', tint, NEAR_SHEET_TINT) }}
       />
 
       <div className="relative z-10 aspect-video w-full overflow-hidden rounded-xl bg-chrome-zinc-900">
@@ -134,7 +153,7 @@ export function PlaylistCard({
   const [isSaved, setIsSaved] = useState(Boolean(isInLibrary));
   const cardRef = useRef<HTMLDivElement>(null);
   const openCollectionDownload = useDownloadStore((state) => state.openCollection);
-  const wash = useHoverWashColor(playlist.thumbnailUrl);
+  const wash = useHoverWashColor(useCoverColorSample(playlist.thumbnailUrl));
   const isProtected = Boolean(playlist.isProtected) || isProtectedPlaylistId(playlist.id);
 
   const resolvedVideoCount = typeof playlist.videoCount === 'number' && playlist.videoCount > 0

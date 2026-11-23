@@ -24,12 +24,18 @@ afterEach(() => {
 
 describe("CardByline", () => {
   it("puts a dot between the views and the date", () => {
-    expect(render("1.2M views", "3 days ago").textContent).toBe("1.2M views•3 days ago");
+    expect(render("1.2M views", "3 days ago").textContent).toBe("1.2M\u00A0views•3\u00A0days\u00A0ago");
+  });
+
+  it("lets the line wrap only after the dot", () => {
+    const line = render("1.2M views", "3 days ago");
+    expect(line.querySelectorAll("wbr")).toHaveLength(1);
+    expect(line.querySelector("wbr")?.previousSibling?.textContent).toBe("•");
   });
 
   it("drops the dot when only one part is known", () => {
-    expect(render("1.2M views", null).textContent).toBe("1.2M views");
-    expect(render(null, "3 days ago").textContent).toBe("3 days ago");
-    expect(render(null, null).className).toBe("line");
+    expect(render("1.2M views", null).textContent).toBe("1.2M\u00A0views");
+    expect(render(null, "3 days ago").querySelector("wbr")).toBeNull();
+    expect(render(null, null).textContent).toBe("");
   });
 });

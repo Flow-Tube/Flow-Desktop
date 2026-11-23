@@ -35,21 +35,34 @@ export function ChannelLabel({
   );
 }
 
-/** A card's views and upload date, with a dot between them when it has both. */
+const NO_BREAK_SPACE = "\u00A0";
+
+/** A byline part that never wraps inside, so "3 days ago" doesn't end a line on "3 days". */
+const wholePart = (text: string) => text.replace(/ /g, NO_BREAK_SPACE);
+
+/**
+ * A card's views and upload date, with a dot between them when it has both. The line wraps only
+ * after the dot; a single part too wide for the card still breaks rather than overflowing it.
+ */
 export function CardByline({
   views,
   published,
-  className,
+  className = "",
 }: {
   views?: string | null;
   published?: string | null;
   className?: string;
 }) {
   return (
-    <div className={className}>
-      {views && <bdi>{views}</bdi>}
-      {views && published && <span className="mx-1">•</span>}
-      {published && <bdi>{published}</bdi>}
+    <div className={`break-words ${className}`}>
+      {views && <bdi>{wholePart(views)}</bdi>}
+      {views && published && (
+        <>
+          <span className="mx-1">•</span>
+          <wbr />
+        </>
+      )}
+      {published && <bdi>{wholePart(published)}</bdi>}
     </div>
   );
 }

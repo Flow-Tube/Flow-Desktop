@@ -15,12 +15,14 @@ import { loadPlaylistDownload } from '../../lib/useCollectionDownloads';
 import { useDownloadStore } from '../../store/useDownloadStore';
 import { useImageFallback } from '../../lib/useImageFallback';
 import { isUnavailableYoutubeThumbnail, resolveYoutubeThumbnailCandidates, thumbnailVideoId } from '../../lib/thumbnails';
+import { useCoverColorSample } from '../../lib/useCoverColorSample';
+import { useArtworkSwatches } from '../../lib/useArtworkSwatches';
+import type { Rgb } from '../../lib/useDominantColor';
 import { showSaveFailedToast, showSaveToast } from '../../lib/saveToast';
-import { getString } from '../../lib/i18n/index';
+import { getPlural, getString } from '../../lib/i18n/index';
 import type { MenuAnchor } from '../ui/AnchoredPortalMenu';
 import { MediaMenu, type MediaMenuAction } from '../ui/MediaMenu';
 import { ColorWash, COLOR_WASH_HOST } from '../ui/ColorWash';
-import { SoftBackdrop } from '../ui/SoftBackdrop';
 import { useHoverWashColor } from '../../lib/useHoverWashColor';
 import { backgroundTabClickProps, cardKeyboardProps, openedInBackgroundTab } from '../../lib/openTarget';
 import { openActions } from '../common/openActions';
@@ -45,6 +47,22 @@ interface PlaylistCardProps {
   thumbnailWidth?: number;
 }
 
+// The share of the cover's colour in each sheet, as on Android: the near sheet takes more.
+const NEAR_SHEET_TINT = 55;
+const FAR_SHEET_TINT = 35;
+
+/** A theme surface blended toward the cover's colour, or the plain surface until there is one. */
+function sheetTone(surface: string, tint: Rgb | null, amount: number): string {
+  return tint ? `color-mix(in oklab, var(${surface}), rgb(${tint.r} ${tint.g} ${tint.b}) ${amount}%)` : `var(${surface})`;
+}
+
+const SHEET_CLASS = `pointer-events-none absolute aspect-video rounded-xl ${hoverMotion('transition-colors duration-200 ease-out motion-reduce:transition-none')}`;
+
+/**
+ * The cover under two sheets that peek out above it, each narrower than the one in front, so it
+ * reads as a stack. Once the cover has loaded, the sheets take its colour, blended into the theme's
+ * surface tones so they stay visible in light and dark themes.
+ */
 export function StackedPlaylistThumbnail({
   thumbnailUrl,
   title,
@@ -68,53 +86,46 @@ export function StackedPlaylistThumbnail({
     [thumbnailUrl, thumbnailWidth],
   );
   const { src, onError, onLoad, isLast } = useImageFallback(candidates);
+  const [coverLoaded, setCoverLoaded] = useState(false);
   const handleLoad = (event: React.SyntheticEvent<HTMLImageElement>) => {
-    if (!isLast && isUnavailableYoutubeThumbnail(event.currentTarget)) onError();
-    else onLoad();
+    if (!isLast && isUnavailableYoutubeThumbnail(event.currentTarget)) {
+      onError();
+      return;
+    }
+    onLoad();
+    setCoverLoaded(true);
   };
-
-  if (!src) {
-    return (
-      <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-chrome-zinc-800">
-        <div className="flex h-full w-full items-center justify-center text-chrome-neutral-500">
-          <ListVideo size={32} />
-        </div>
-        <div className="absolute bottom-1.5 end-1.5 flex items-center gap-1.5 rounded bg-chrome-black/80 px-1.5 py-0.5 text-[11px] font-semibold tracking-wide text-chrome-white">
-          <ListVideo size={14} />
-          {videoCountText}
-        </div>
-        {overlay}
-      </div>
-    );
-  }
+  const swatches = useArtworkSwatches(useCoverColorSample(coverLoaded ? thumbnailUrl : null));
+  const tint = swatches?.accent ?? swatches?.base ?? null;
 
   return (
     <div className="relative w-full pt-2.5">
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute start-4 end-4 top-0 z-0 aspect-video overflow-hidden rounded-xl"
-      >
-        <SoftBackdrop src={src} detail={24} className="h-full w-full object-cover" />
-        <div className="absolute inset-0 bg-chrome-black/55" />
-      </div>
-
+        className={`${SHEET_CLASS} start-4 end-4 top-0 z-0`}
+        style={{ backgroundColor: sheetTone('--color-surface-container-high', tint, FAR_SHEET_TINT) }}
+      />
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute start-2 end-2 top-1 z-[1] aspect-video overflow-hidden rounded-xl"
-      >
-        <SoftBackdrop src={src} detail={40} className="h-full w-full object-cover" />
-        <div className="absolute inset-0 bg-chrome-black/35" />
-      </div>
+        className={`${SHEET_CLASS} start-2 end-2 top-1 z-[1]`}
+        style={{ backgroundColor: sheetTone('--color-surface-container-highest', tint, NEAR_SHEET_TINT) }}
+      />
 
       <div className="relative z-10 aspect-video w-full overflow-hidden rounded-xl bg-chrome-zinc-900">
-        <img
-          src={src}
-          alt={title}
-          onError={onError}
-          onLoad={handleLoad}
-          className={`h-full w-full object-cover ${hoverMotion("transition-transform duration-300 group-hover:scale-105")}`}
-          loading="lazy"
-        />
+        {src ? (
+          <img
+            src={src}
+            alt={title}
+            onError={onError}
+            onLoad={handleLoad}
+            className={`h-full w-full object-cover ${hoverMotion("transition-transform duration-300 group-hover:scale-105")}`}
+            loading="lazy"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-chrome-neutral-500">
+            <ListVideo size={32} />
+          </div>
+        )}
         <div className="absolute bottom-1.5 end-1.5 flex items-center gap-1.5 rounded bg-chrome-black/80 px-1.5 py-0.5 text-[11px] font-semibold tracking-wide text-chrome-white">
           <ListVideo size={14} />
           {videoCountText}
@@ -142,7 +153,7 @@ export function PlaylistCard({
   const [isSaved, setIsSaved] = useState(Boolean(isInLibrary));
   const cardRef = useRef<HTMLDivElement>(null);
   const openCollectionDownload = useDownloadStore((state) => state.openCollection);
-  const wash = useHoverWashColor(playlist.thumbnailUrl);
+  const wash = useHoverWashColor(useCoverColorSample(playlist.thumbnailUrl));
   const isProtected = Boolean(playlist.isProtected) || isProtectedPlaylistId(playlist.id);
 
   const resolvedVideoCount = typeof playlist.videoCount === 'number' && playlist.videoCount > 0
@@ -151,8 +162,8 @@ export function PlaylistCard({
 
   const videoCountText = playlist.videoCountText
     ?? (resolvedVideoCount != null
-      ? `${resolvedVideoCount} ${resolvedVideoCount === 1 ? 'video' : 'videos'}`
-      : 'Playlist');
+      ? getPlural('playlist_card_videos', resolvedVideoCount)
+      : getString('search_kind_playlist'));
 
   const handleContextMenu = useCallback((event: React.MouseEvent) => {
     event.preventDefault();

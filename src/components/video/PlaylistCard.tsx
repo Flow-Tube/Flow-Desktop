@@ -19,7 +19,7 @@ import { useCoverColorSample } from '../../lib/useCoverColorSample';
 import { useArtworkSwatches } from '../../lib/useArtworkSwatches';
 import type { Rgb } from '../../lib/useDominantColor';
 import { showSaveFailedToast, showSaveToast } from '../../lib/saveToast';
-import { getString } from '../../lib/i18n/index';
+import { getPlural, getString } from '../../lib/i18n/index';
 import type { MenuAnchor } from '../ui/AnchoredPortalMenu';
 import { MediaMenu, type MediaMenuAction } from '../ui/MediaMenu';
 import { ColorWash, COLOR_WASH_HOST } from '../ui/ColorWash';
@@ -162,8 +162,8 @@ export function PlaylistCard({
 
   const videoCountText = playlist.videoCountText
     ?? (resolvedVideoCount != null
-      ? `${resolvedVideoCount} ${resolvedVideoCount === 1 ? 'video' : 'videos'}`
-      : 'Playlist');
+      ? getPlural('playlist_card_videos', resolvedVideoCount)
+      : getString('search_kind_playlist'));
 
   const handleContextMenu = useCallback((event: React.MouseEvent) => {
     event.preventDefault();

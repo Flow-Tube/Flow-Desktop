@@ -133,12 +133,28 @@ export function withPublishedAt(video: VideoSummary, now = Date.now()): VideoSum
   return { ...video, publishedAt };
 }
 
+// A feed re-renders its cards often; each finished byline date is kept for a minute, so
+// "5 minutes ago" is formatted once and still never shows a minute out of date.
+const PUBLISHED_CACHE_LIMIT = 512;
+const PUBLISHED_CACHE_MS = MINUTE_MS;
+const publishedCache = new Map<string, { text: string; at: number }>();
+
 export function formatPublishedText(video: VideoSummary, now = Date.now()): string | null {
   const text = video.publishedText?.trim();
   if (!text) return null;
   if (!video.publishedAt || text.toLowerCase() === "live") return text;
-  const timestamp = resolveDisplayUploadTimestamp(text, video.publishedAt, now);
-  if (timestamp === null) return text;
 
-  return withRelativePrefix(text, formatYouTubeRelativeTime(timestamp, now));
+  const key = `${APP_LOCALE}\n${video.publishedAt}\n${text}`;
+  const cached = publishedCache.get(key);
+  if (cached && now >= cached.at && now - cached.at < PUBLISHED_CACHE_MS) return cached.text;
+
+  const timestamp = resolveDisplayUploadTimestamp(text, video.publishedAt, now);
+  const formatted = timestamp === null ? text : withRelativePrefix(text, formatYouTubeRelativeTime(timestamp, now));
+  publishedCache.delete(key);
+  publishedCache.set(key, { text: formatted, at: now });
+  if (publishedCache.size > PUBLISHED_CACHE_LIMIT) {
+    const oldest = publishedCache.keys().next().value;
+    if (oldest !== undefined) publishedCache.delete(oldest);
+  }
+  return formatted;
 }

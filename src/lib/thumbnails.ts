@@ -1,4 +1,5 @@
 import { originalImageUrl } from "./imageProxy";
+import { pickThumbnailTier, thumbnailSources } from "./thumbnailTiers";
 
 export type ThumbnailQuality = "standard" | "large";
 
@@ -47,22 +48,10 @@ export function upgradeThumbnailUrl(
 
 /**
  * Exists for every video, unlike `hq720` and `maxresdefault`. It is 480×360 with
- * the 16:9 frame letterboxed inside, so `object-cover` crops it to 480×270, at
- * about a fifth of the decoded memory of a 1280×720 `hq720`.
+ * the 16:9 frame letterboxed inside, so `object-cover` crops it to 480×270.
  */
 function youtubeHqDefaultUrl(videoId: string): string {
   return `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
-}
-
-const HQDEFAULT_WIDTH = 480;
-
-function devicePixelRatio(): number {
-  return typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
-}
-
-/** Whether a thumbnail drawn this many CSS px wide would upscale `hqdefault`. */
-export function thumbnailNeedsHighRes(cssWidth: number): boolean {
-  return cssWidth * devicePixelRatio() > HQDEFAULT_WIDTH;
 }
 
 /**
@@ -94,25 +83,20 @@ export function buildThumbnailSources(
 }
 
 /**
- * `highRes` says whether the card is drawn wider than `hqdefault`. Callers that
- * do not measure their cards leave it to the screen: a 1× screen starts on
- * `hqdefault`, since cards outside the feed grid stay well under 480 px.
+ * The thumbnail files for a card drawn `cssWidth` CSS px wide, best first; an unknown width
+ * leaves the choice to the screen. A non-YouTube image is the last resort.
  */
 export function resolveYoutubeThumbnailCandidates(
   videoId?: string | null,
   fallbackUrl?: string | null,
-  highRes = devicePixelRatio() > 1,
+  cssWidth?: number,
 ): string[] {
   const raw = fallbackUrl?.trim();
   const resolvedId = isYoutubeVideoId(videoId)
     ? videoId
     : raw?.match(YOUTUBE_THUMBNAIL_RE)?.[1];
 
-  const candidates: string[] = [];
-  if (resolvedId) {
-    if (highRes) candidates.push(youtubeThumbnailUrl(resolvedId, "standard"));
-    candidates.push(youtubeHqDefaultUrl(resolvedId));
-  }
+  const candidates = resolvedId ? thumbnailSources(resolvedId, pickThumbnailTier(cssWidth)) : [];
   if (raw) {
     candidates.push(upgradeThumbnailUrl(raw, "standard"), raw);
   }

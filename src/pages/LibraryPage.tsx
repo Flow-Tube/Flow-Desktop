@@ -28,6 +28,9 @@ import type { ShortVideoSummary } from "../types/video";
 
 const videoIdOf = (item: { videoId?: string | null; id: string }) => item.videoId ?? item.id;
 
+// The `md:w-[320px]` of a library video card, the widest it is drawn.
+const LIBRARY_CARD_WIDTH = 320;
+
 function HistoryShelfRow({
   items,
   onPlay,
@@ -71,6 +74,7 @@ function HistoryShelfRow({
               onAddToQueue={onAddToQueue}
               variant="grid"
               hideChannelAvatar
+              thumbnailWidth={LIBRARY_CARD_WIDTH}
             />
           </div>
         );
@@ -106,6 +110,7 @@ function VideoShelfRow({
             onAddToQueue={onAddToQueue}
             variant="grid"
             hideChannelAvatar
+            thumbnailWidth={LIBRARY_CARD_WIDTH}
           />
         </div>
       ))}
@@ -160,7 +165,7 @@ function DownloadVideoShelfRow({
     <>
       {videos.map((video, index) => (
         <div key={`${video.id}-${index}`} className="w-[280px] md:w-[320px] shrink-0">
-          <VideoCard video={video} onPlay={onPlay} hideChannelAvatar />
+          <VideoCard video={video} onPlay={onPlay} hideChannelAvatar thumbnailWidth={LIBRARY_CARD_WIDTH} />
         </div>
       ))}
     </>

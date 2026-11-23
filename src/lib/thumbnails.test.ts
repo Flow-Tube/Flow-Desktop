@@ -3,7 +3,6 @@ import {
   avatarSize,
   buildThumbnailSources,
   resolveYoutubeThumbnailCandidates,
-  thumbnailNeedsHighRes,
   upgradeAvatarUrl,
 } from "./thumbnails";
 
@@ -11,43 +10,36 @@ const ID = "dQw4w9WgXcQ";
 const MAXRES = `https://i.ytimg.com/vi/${ID}/maxresdefault.jpg`;
 const HQ720 = `https://i.ytimg.com/vi/${ID}/hq720.jpg`;
 const HQDEFAULT = `https://i.ytimg.com/vi/${ID}/hqdefault.jpg`;
+const SDDEFAULT = `https://i.ytimg.com/vi/${ID}/sddefault.jpg`;
+const MQDEFAULT = `https://i.ytimg.com/vi/${ID}/mqdefault.jpg`;
 
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
 describe("resolveYoutubeThumbnailCandidates", () => {
-  it("starts a card on hqdefault on a 1× screen", () => {
+  it("starts a card of unknown width on hqdefault on a 1× screen", () => {
     vi.stubGlobal("devicePixelRatio", 1);
     expect(resolveYoutubeThumbnailCandidates(ID, HQ720)).toEqual([HQDEFAULT, HQ720]);
   });
 
-  it("starts a card on hq720 on a HiDPI screen, falling back to hqdefault", () => {
+  it("starts a card of unknown width on hq720 on a HiDPI screen, falling back to hqdefault", () => {
     vi.stubGlobal("devicePixelRatio", 2);
     expect(resolveYoutubeThumbnailCandidates(ID, HQ720)).toEqual([HQ720, HQDEFAULT]);
   });
 
-  it("follows a measured card width over the screen's pixel ratio", () => {
-    vi.stubGlobal("devicePixelRatio", 1);
-    expect(resolveYoutubeThumbnailCandidates(ID, null, true)).toEqual([HQ720, HQDEFAULT]);
+  it("follows the card's drawn width", () => {
     vi.stubGlobal("devicePixelRatio", 2);
-    expect(resolveYoutubeThumbnailCandidates(ID, null, false)).toEqual([HQDEFAULT]);
+    expect(resolveYoutubeThumbnailCandidates(ID, null, 160)).toEqual([MQDEFAULT, HQDEFAULT]);
+    expect(resolveYoutubeThumbnailCandidates(ID, null, 288)).toEqual([SDDEFAULT, HQDEFAULT]);
+    vi.stubGlobal("devicePixelRatio", 1);
+    expect(resolveYoutubeThumbnailCandidates(ID, null, 780)).toEqual([HQ720, HQDEFAULT]);
   });
 
   it("keeps a non-YouTube URL as the last resort", () => {
     vi.stubGlobal("devicePixelRatio", 1);
     const url = "https://example.com/thumb.jpg";
     expect(resolveYoutubeThumbnailCandidates(ID, url)).toEqual([HQDEFAULT, url]);
-  });
-});
-
-describe("thumbnailNeedsHighRes", () => {
-  it("asks for hq720 once a card would upscale hqdefault", () => {
-    vi.stubGlobal("devicePixelRatio", 1);
-    expect(thumbnailNeedsHighRes(420)).toBe(false);
-    expect(thumbnailNeedsHighRes(600)).toBe(true);
-    vi.stubGlobal("devicePixelRatio", 2);
-    expect(thumbnailNeedsHighRes(260)).toBe(true);
   });
 });
 

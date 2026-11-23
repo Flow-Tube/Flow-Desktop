@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
-import { useImageFallback } from "./useImageFallback";
+import { clearFailedImages, useImageFallback } from "./useImageFallback";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -22,7 +22,14 @@ const render = (candidates: Array<string | null>) =>
 afterEach(() => {
   act(() => root?.unmount());
   root = null;
+  clearFailedImages();
 });
+
+const remount = (candidates: Array<string | null>) => {
+  act(() => root?.unmount());
+  root = null;
+  render(candidates);
+};
 
 describe("useImageFallback", () => {
   it("moves to the next candidate on each failure, then gives up", () => {
@@ -63,5 +70,31 @@ describe("useImageFallback", () => {
     act(() => result.onError());
     render(["a", "b"]);
     expect(result.src).toBe("b");
+  });
+
+  it("skips a candidate that failed before one after it loaded", () => {
+    render(["a", "b", "c"]);
+    act(() => result.onError());
+    act(() => result.onLoad());
+    remount(["a", "b", "c"]);
+    expect(result.src).toBe("b");
+  });
+
+  it("remembers nothing when no candidate loads", () => {
+    render(["a", "b"]);
+    act(() => result.onError());
+    act(() => result.onError());
+    remount(["a", "b"]);
+    expect(result.src).toBe("a");
+  });
+
+  it("still tries the last candidate after it failed elsewhere", () => {
+    render(["x", "b"]);
+    act(() => result.onError());
+    act(() => result.onLoad());
+    remount(["a", "x"]);
+    expect(result.src).toBe("a");
+    act(() => result.onError());
+    expect(result.src).toBe("x");
   });
 });

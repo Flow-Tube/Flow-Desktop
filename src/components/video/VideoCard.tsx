@@ -76,8 +76,11 @@ export interface VideoCardProps {
   reason?: string;
   /** A short line under the card's details saying why it is here. */
   reasonLine?: string;
-  /** Whether the card is drawn wider than `hqdefault`; left out, the screen's pixel ratio decides. */
-  highResThumbnail?: boolean;
+  /**
+   * The widest the thumbnail is drawn, in CSS px, so it loads the smallest file that stays sharp.
+   * Rows know their own width; a grid card left without one lets the screen's pixel ratio decide.
+   */
+  thumbnailWidth?: number;
   /** Drawn over the thumbnail, such as a download's progress. */
   thumbnailOverlay?: React.ReactNode;
   /** Replaces what Remove download does in the menu, for a list that offers Undo. */
@@ -95,6 +98,13 @@ export interface VideoCardProps {
   cannot reuse a plain cached image.
 */
 const THUMBNAIL_CROSS_ORIGIN = IS_LINUX_RUNTIME ? undefined : 'anonymous';
+
+// The widest each row layout draws its thumbnail: `w-40`, `sm:w-48` and `xl:w-[360px]`.
+const ROW_THUMBNAIL_WIDTHS: Partial<Record<NonNullable<VideoCardProps['variant']>, number>> = {
+  compact: 160,
+  list: 192,
+  search: 360,
+};
 
 function formatDuration(seconds?: number | null) {
   if (!seconds) return '';
@@ -145,7 +155,7 @@ function VideoCardComponent({
   showAddedDate = false,
   reason,
   reasonLine,
-  highResThumbnail,
+  thumbnailWidth,
   thumbnailOverlay,
   onRemoveDownload,
   menuActions: ownMenuActions,
@@ -255,11 +265,16 @@ function VideoCardComponent({
     cardRef,
   );
   const displayTitle = overriddenTitle || originalTitle || video.title;
+  const drawnThumbnailWidth = thumbnailWidth ?? ROW_THUMBNAIL_WIDTHS[variant];
   const thumbnailCandidates = useMemo(
-    () => resolveYoutubeThumbnailCandidates(video.id, overriddenThumbnail || video.thumbnailUrl, highResThumbnail),
-    [highResThumbnail, overriddenThumbnail, video.id, video.thumbnailUrl],
+    () => resolveYoutubeThumbnailCandidates(video.id, overriddenThumbnail || video.thumbnailUrl, drawnThumbnailWidth),
+    [drawnThumbnailWidth, overriddenThumbnail, video.id, video.thumbnailUrl],
   );
-  const { src: displayThumbnail, onError: handleThumbnailError } = useImageFallback(thumbnailCandidates);
+  const {
+    src: displayThumbnail,
+    onError: handleThumbnailError,
+    onLoad: rememberThumbnailLoad,
+  } = useImageFallback(thumbnailCandidates);
 
   // Channels, live streams, premieres and local files have no storyboard to preview.
   const hoverPreview = isHovered && !isChannel && !isLiveVideo && !video.isUpcoming && !isLocalMediaId(video.id) ? (
@@ -301,6 +316,7 @@ function VideoCardComponent({
       handleThumbnailError();
       return;
     }
+    rememberThumbnailLoad();
 
     if (!IS_LINUX_RUNTIME && isHovered && !dominantColor) {
       const color = extractDominantColorFromImage(img);
@@ -308,7 +324,7 @@ function VideoCardComponent({
         setDominantColor(color);
       }
     }
-  }, [displayThumbnail, dominantColor, handleThumbnailError, isHovered, thumbnailCandidates]);
+  }, [displayThumbnail, dominantColor, handleThumbnailError, isHovered, rememberThumbnailLoad, thumbnailCandidates]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     if (isChannel) return;

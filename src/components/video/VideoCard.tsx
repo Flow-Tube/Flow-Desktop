@@ -17,7 +17,8 @@ import { getVideoDetails } from '../../lib/api/youtube';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { useAppSettingsStore } from '../../store/useAppSettingsStore';
 import { useChannelAvatar } from '../../lib/useChannelAvatar';
-import { isUnavailableYoutubeThumbnail, resolveYoutubeThumbnailCandidates, upgradeAvatarUrl, avatarSize } from '../../lib/thumbnails';
+import { isUnavailableYoutubeThumbnail, isYoutubeVideoId, resolveYoutubeThumbnailCandidates, upgradeAvatarUrl, avatarSize } from '../../lib/thumbnails';
+import { thumbnailColorSample } from '../../lib/thumbnailTiers';
 import { IS_LINUX_RUNTIME, hoverMotion } from '../../lib/platform';
 import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
 import { SETTINGS } from '../../lib/settings/schema';
@@ -43,7 +44,7 @@ import { usePlayerStore } from '../../store/usePlayerStore';
 import { useDownloadStore } from '../../store/useDownloadStore';
 import { useDownloadsLibraryStore } from '../../store/useDownloadsLibraryStore';
 import { findDownloadedRecord, useIsDownloaded } from '../../lib/useDownloads';
-import { extractDominantColorFromImage, type Rgb } from '../../lib/useDominantColor';
+import { useDominantColor } from '../../lib/useDominantColor';
 import { formatPublishedText, formatYouTubeRelativeTime } from '../../lib/publishedDate';
 import { ColorWash, COLOR_WASH_HOST } from '../ui/ColorWash';
 import { CardPills, ChannelLabel, CollabAvatars, UpcomingBadge } from "./CardMeta";
@@ -91,13 +92,6 @@ export interface VideoCardProps {
   searchQuery?: string;
 }
 
-/*
-  CORS mode exists solely so the hover wash can read the thumbnail's pixels back
-  off a canvas. That readback is disabled on Linux (WebKitGTK composites on the
-  CPU), where the only thing the attribute still buys is a stricter fetch that
-  cannot reuse a plain cached image.
-*/
-const THUMBNAIL_CROSS_ORIGIN = IS_LINUX_RUNTIME ? undefined : 'anonymous';
 
 // The widest each row layout draws its thumbnail: `w-40`, `sm:w-48` and `xl:w-[360px]`.
 const ROW_THUMBNAIL_WIDTHS: Partial<Record<NonNullable<VideoCardProps['variant']>, number>> = {
@@ -188,8 +182,9 @@ function VideoCardComponent({
   const shortsWatched = useWatchedVideoIds(showMenu && !!video.isShort);
   const isWatched = isMarkedWatched || watchedInHistory || shortsWatched.has(video.id);
   const [menuAnchor, setMenuAnchor] = useState<MenuAnchor | null>(null);
-  const [dominantColor, setDominantColor] = useState<Rgb | null>(null);
   const [isHovered, setIsHovered] = useState(false);
+  // The hover wash samples its colour once the pointer first reaches the card, not for every card in a feed.
+  const [washPrimed, setWashPrimed] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const thumbnailRef = useRef<HTMLImageElement>(null);
 
@@ -275,6 +270,7 @@ function VideoCardComponent({
     onError: handleThumbnailError,
     onLoad: rememberThumbnailLoad,
   } = useImageFallback(thumbnailCandidates);
+  const thumbnailWashSample = isYoutubeVideoId(video.id) ? thumbnailColorSample(video.id) : displayThumbnail;
 
   // Channels, live streams, premieres and local files have no storyboard to preview.
   const hoverPreview = isHovered && !isChannel && !isLiveVideo && !video.isUpcoming && !isLocalMediaId(video.id) ? (
@@ -286,22 +282,18 @@ function VideoCardComponent({
     />
   ) : null;
 
+  /*
+    getImageData is a synchronous pixel readback: cheap on GPU-composited
+    webviews, janky on Linux's CPU path (and it fires while the cursor sweeps
+    across cards mid-scroll). The color-mix fallback covers Linux.
+  */
+  const washSample = washPrimed && !IS_LINUX_RUNTIME ? thumbnailWashSample : null;
+  const dominantColor = useDominantColor(washSample);
+
   const handleMouseEnter = useCallback(() => {
     setIsHovered(true);
-    // getImageData is a synchronous pixel readback — cheap on GPU-composited
-    // webviews, janky on Linux's CPU path (and it fires while the cursor
-    // sweeps across cards mid-scroll). The color-mix fallback covers Linux.
-    if (IS_LINUX_RUNTIME) return;
-    const thumbnail = thumbnailRef.current;
-    // `complete` alone is true for a broken image too — the same
-    // `complete && naturalWidth` pair the music cards use.
-    if (!dominantColor && thumbnail?.complete && thumbnail.naturalWidth > 0) {
-      const color = extractDominantColorFromImage(thumbnail);
-      if (color) {
-        setDominantColor(color);
-      }
-    }
-  }, [dominantColor]);
+    setWashPrimed(true);
+  }, []);
 
   const handleMouseLeave = useCallback(() => {
     setIsHovered(false);
@@ -317,14 +309,7 @@ function VideoCardComponent({
       return;
     }
     rememberThumbnailLoad();
-
-    if (!IS_LINUX_RUNTIME && isHovered && !dominantColor) {
-      const color = extractDominantColorFromImage(img);
-      if (color) {
-        setDominantColor(color);
-      }
-    }
-  }, [displayThumbnail, dominantColor, handleThumbnailError, isHovered, rememberThumbnailLoad, thumbnailCandidates]);
+  }, [displayThumbnail, handleThumbnailError, rememberThumbnailLoad, thumbnailCandidates]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     if (isChannel) return;
@@ -364,10 +349,6 @@ function VideoCardComponent({
       ? historyPercent || (isMarkedWatched ? 100 : 0)
       : 0;
   const showsProgressBar = isHistoryCard || isContinueCard || progressPercent > 0;
-
-  useEffect(() => {
-    setDominantColor(null);
-  }, [overriddenThumbnail, video.id, video.thumbnailUrl]);
 
   const handleSubscribeToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -729,7 +710,6 @@ function VideoCardComponent({
               src={displayThumbnail}
               alt={displayTitle}
               className="h-full w-full object-cover"
-              crossOrigin={THUMBNAIL_CROSS_ORIGIN}
               loading="lazy"
               decoding="async"
               onLoad={handleThumbnailLoad}
@@ -837,7 +817,6 @@ function VideoCardComponent({
               src={displayThumbnail}
               alt={displayTitle}
               className="h-full w-full object-cover"
-              crossOrigin={THUMBNAIL_CROSS_ORIGIN}
               loading="lazy"
               decoding="async"
               onLoad={handleThumbnailLoad}
@@ -974,7 +953,6 @@ function VideoCardComponent({
             src={displayThumbnail}
             alt={displayTitle}
             className={`w-full h-full object-cover ${hoverMotion("transition-transform duration-300 group-hover:scale-[1.03]")}`}
-            crossOrigin={THUMBNAIL_CROSS_ORIGIN}
             loading="lazy"
             decoding="async"
             onLoad={handleThumbnailLoad}

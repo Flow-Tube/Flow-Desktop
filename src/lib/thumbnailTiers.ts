@@ -30,7 +30,21 @@ export function pickThumbnailTier(cssWidth: number | undefined, pixelRatio = scr
   return THUMBNAIL_TIERS.find((tier) => tier.width >= needed) ?? HQ720;
 }
 
-/** The files to try for a video's thumbnail at `tier`, ending on hqdefault, which every video has. */
+/**
+ * The files to try for a video's thumbnail at `tier`, ending on hqdefault, which every video has.
+ * Each is asked for as WebP first, smaller for most videos, then as JPEG for uploads with no WebP copy.
+ */
 export function thumbnailSources(videoId: string, tier: ThumbnailTier): string[] {
-  return [...new Set([tier.name, HQ.name])].map((name) => `https://i.ytimg.com/vi/${videoId}/${name}.jpg`);
+  return [...new Set([tier.name, HQ.name])].flatMap((name) => [
+    `https://i.ytimg.com/vi_webp/${videoId}/${name}.webp`,
+    `https://i.ytimg.com/vi/${videoId}/${name}.jpg`,
+  ]);
+}
+
+/**
+ * A small copy of a video's thumbnail to read its colour from. The WebP files carry no CORS
+ * header, so a canvas can't read the one the card shows; the JPEG tiers can be read.
+ */
+export function thumbnailColorSample(videoId: string): string {
+  return `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`;
 }

@@ -47,11 +47,16 @@ describe("pickThumbnailTier", () => {
 });
 
 describe("thumbnailSources", () => {
-  it("ends on hqdefault", () => {
+  it("tries each tier as WebP, then JPEG, ending on hqdefault", () => {
     expect(thumbnailSources(ID, pickThumbnailTier(360, 2))).toEqual([
+      `https://i.ytimg.com/vi_webp/${ID}/hq720.webp`,
       `https://i.ytimg.com/vi/${ID}/hq720.jpg`,
+      `https://i.ytimg.com/vi_webp/${ID}/hqdefault.webp`,
       `https://i.ytimg.com/vi/${ID}/hqdefault.jpg`,
     ]);
-    expect(thumbnailSources(ID, pickThumbnailTier(380, 1))).toEqual([`https://i.ytimg.com/vi/${ID}/hqdefault.jpg`]);
+    expect(thumbnailSources(ID, pickThumbnailTier(380, 1))).toEqual([
+      `https://i.ytimg.com/vi_webp/${ID}/hqdefault.webp`,
+      `https://i.ytimg.com/vi/${ID}/hqdefault.jpg`,
+    ]);
   });
 });

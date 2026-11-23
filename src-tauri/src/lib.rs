@@ -17,6 +17,8 @@ mod errors;
 pub mod flow_neuro;
 #[cfg(any(target_os = "linux", test))]
 mod legacy_link_handler;
+#[cfg(any(target_os = "linux", test))]
+mod linux_nvidia;
 #[cfg(any(target_os = "linux", all(test, unix)))]
 mod linux_open_files;
 #[cfg(any(target_os = "linux", test))]
@@ -305,6 +307,8 @@ pub fn run() {
     #[cfg(target_os = "linux")]
     let open_file_limit = linux_open_files::raise();
     #[cfg(target_os = "linux")]
+    let processor_painting = linux_nvidia::apply();
+    #[cfg(target_os = "linux")]
     let boot_report = linux_startup::begin(
         context.config().identifier.as_str(),
         &context.package_info().version.to_string(),
@@ -452,6 +456,7 @@ pub fn run() {
                 libva_fallback,
                 open_files_before = open_file_limit.map(|limit| limit.before),
                 open_files_after = open_file_limit.map(|limit| limit.after),
+                processor_painting,
                 "linux_startup_workarounds_applied"
             );
 

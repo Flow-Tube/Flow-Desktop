@@ -121,8 +121,16 @@ bug, and WebKitGTK works around it in versions after 2.52. Linux lets a
 program hold 1024 open files unless it asks for more, so the limit used to be
 reached within minutes and Flow froze and reloaded with "Too many open
 files". Flow now raises its limit at start to what your system allows
-(524288 on most), and the leak takes far longer to matter. Updating the
-driver or WebKitGTK is what removes it.
+(524288 on most). On the 580 driver it also has the page painted by the
+processor, while the GPU still puts the picture together, which stopped the
+leak on a reporter's computer without making video less smooth. To turn that
+off, start Flow with `WEBKIT_SKIA_ENABLE_CPU_RENDERING=0`. A later WebKitGTK
+works around the driver bug itself.
+
+With the Flatpak, the NVIDIA driver inside the sandbox is a separate package
+that has to match the driver on your system. After a driver update, run
+`flatpak update`. Until the two match, hardware video decoding is missing
+and video is decoded by the processor.
 
 Advanced users can set the WebKitGTK variables themselves before starting
 Flow. Your own values always win. When you set one of the three
@@ -149,8 +157,8 @@ Settings > About then says "started with your own variables":
 On Linux the equalizer and Volume boost do not apply to videos and Shorts,
 and their settings show "Not available". WebKitGTK passes a video's sound to
 them about a second early, which pushed the sound out of step with the
-picture after a pause, and it never frees a video that used them, so Flow
-ran out of open files and reloaded. The equalizer still works for music.
+picture after a pause, and it never frees a video that used them. The
+equalizer still works for music.
 
 ## Video codecs
 

@@ -80,7 +80,7 @@ does not try that setting again until WebKitGTK is updated.
 On Linux, Flow also holds a few things still that would otherwise ask for a
 new frame all the time: the bars beside the playing song, the dot on live
 videos, the fade between pages and the side menu's slide. A card changes at
-once when the pointer moves onto it, with no fade. The video has square
+once when the pointer moves onto it, with no fade, lift or zoom. The video has square
 corners, and Ambient mode stays off on the two slower settings.
 
 Auto quality stops at 1080p on Linux and stays on H.264, because video is

@@ -10,6 +10,12 @@ export const IS_LINUX_RUNTIME =
   typeof navigator !== "undefined" &&
   /Linux/i.test(navigator.userAgent) &&
   !/Android/i.test(navigator.userAgent);
+/**
+ * Classes that move or scale something under the pointer. WebKitGTK lifts what a transform
+ * animates into a layer of its own while it runs, which costs frames and can blink, so on Linux
+ * the element stays where it is.
+ */
+export const hoverMotion = (classes: string): string => (IS_LINUX_RUNTIME ? "" : classes);
 export const IS_WINDOWS_RUNTIME = typeof navigator !== "undefined" && /Windows/i.test(navigator.userAgent);
 export const IS_MACOS_RUNTIME = (() => {
   try {

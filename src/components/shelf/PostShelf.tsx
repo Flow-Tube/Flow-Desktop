@@ -2,6 +2,7 @@ import React from "react";
 import { ShelfScroller } from "../ui/ShelfScroller";
 import { PostCard } from "../video/PostCard";
 import type { PostSummary } from "../../types/video";
+import { hoverMotion } from "../../lib/platform";
 
 interface PostShelfProps {
   title: string;
@@ -34,7 +35,7 @@ export const PostShelf: React.FC<PostShelfProps> = ({
         {posts.map((post) => (
           <div
             key={post.id}
-            className="w-[320px] sm:w-[480px] shrink-0 transform transition-transform duration-300 hover:translate-y-[-2px] flex"
+            className={`flex w-[320px] sm:w-[480px] shrink-0 ${hoverMotion("transform transition-transform duration-300 hover:translate-y-[-2px]")}`}
           >
             {/* Force clean layout for cards in a row */}
             <div className="w-full h-full flex flex-col mb-0 select-text">

@@ -2,6 +2,7 @@ import React from "react";
 import { ShelfScroller } from "../ui/ShelfScroller";
 import { PlaylistCard } from "../video/PlaylistCard";
 import type { PlaylistSummary } from "../../types/video";
+import { hoverMotion } from "../../lib/platform";
 
 interface PlaylistShelfProps {
   title: string;
@@ -36,7 +37,7 @@ export const PlaylistShelf: React.FC<PlaylistShelfProps> = ({
         {playlists.map((playlist) => (
           <div
             key={playlist.id}
-            className="w-[240px] sm:w-[280px] shrink-0 transform transition-transform duration-300 hover:translate-y-[-2px]"
+            className={`w-[240px] sm:w-[280px] shrink-0 ${hoverMotion("transform transition-transform duration-300 hover:translate-y-[-2px]")}`}
           >
             <PlaylistCard
               playlist={playlist}

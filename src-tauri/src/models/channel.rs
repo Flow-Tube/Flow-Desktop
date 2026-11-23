@@ -64,6 +64,8 @@ pub enum PostAttachment {
     },
     #[serde(rename_all = "camelCase")]
     Video { video: Box<VideoSummary> },
+    #[serde(rename_all = "camelCase")]
+    Playlist { playlist: PlaylistSummary },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

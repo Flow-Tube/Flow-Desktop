@@ -18,6 +18,11 @@ export interface ZoomInput {
   factor: number;
   clientX: number;
   clientY: number;
+  /**
+   * "wheel" for Ctrl or Cmd and the wheel, which is also how Chromium, WebView2 and WebKitGTK report
+   * a trackpad pinch. "pinch" only for WebKit's gesture events on macOS.
+   */
+  source: "wheel" | "pinch";
 }
 
 /** WebKit's pinch event on macOS. It isn't in the DOM typings because only WebKit has it. */
@@ -38,9 +43,15 @@ export function listenForZoomInput(element: HTMLElement | Window, onZoom: (input
   let pinchScale: number | null = null;
 
   const onWheel = (event: Event) => {
-    if (!(event instanceof WheelEvent) || !(event.ctrlKey || event.metaKey) || pinchScale !== null) return;
+    if (!(event instanceof WheelEvent) || !(event.ctrlKey || event.metaKey)) return;
+    if (pinchScale !== null) {
+      // It belongs to the pinch, so no other wheel listener here may read it as a volume change.
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
     const factor = wheelZoomFactor(event.deltaY, event.deltaMode);
-    if (!onZoom({ factor, clientX: event.clientX, clientY: event.clientY })) return;
+    if (!onZoom({ factor, clientX: event.clientX, clientY: event.clientY, source: "wheel" })) return;
     event.preventDefault();
     event.stopPropagation();
   };
@@ -54,7 +65,7 @@ export function listenForZoomInput(element: HTMLElement | Window, onZoom: (input
     if (pinchScale === null || !(scale > 0)) return;
     const factor = scale / pinchScale;
     pinchScale = scale;
-    onZoom({ factor, clientX, clientY });
+    onZoom({ factor, clientX, clientY, source: "pinch" });
   };
   const onGestureEnd = (event: Event) => {
     event.preventDefault();

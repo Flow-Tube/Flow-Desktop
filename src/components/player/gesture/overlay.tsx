@@ -30,7 +30,7 @@ import { seekSideAt, type SeekDirection, type SeekFeedback as SeekFeedbackState 
 import { SeekFeedback } from "./SeekFeedback";
 import { ZoomReadout } from "./ZoomReadout";
 import { listenForZoomInput, wheelZoomFactor } from "../../../lib/gestures/pinch";
-import type { PlayerWheelAction } from "../../../lib/player/wheelAction";
+import { ctrlWheelAction, type PlayerWheelAction } from "../../../lib/player/wheelAction";
 import { newWheelGesture, wheelStep } from "../../../lib/wheelVolume";
 import { newWheelGestureState, trackWheelGesture } from "../../../lib/gestures/wheelAxis";
 import { ZOOM_STEP } from "../../../lib/player/videoZoom";
@@ -204,11 +204,14 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
   // A pinch or Ctrl/Cmd and the wheel zooms about the pointer. Once zoomed, a plain two-finger
   // scroll pans the picture, as in Photos and Maps, unless the wheel itself is set to zoom. Unzoomed,
   // the plain wheel does what the "Wheel over the video" setting says; "scroll" leaves it to the page.
+  // When the plain wheel zooms, Ctrl/Cmd and the wheel change the volume instead. Outside macOS a
+  // trackpad pinch arrives as Ctrl and the wheel, so there it changes the volume too.
   useEffect(() => {
     const layer = layerRef.current;
     if (!layer || lookAround) return;
     const stopZoom = zoom?.enabled
-      ? listenForZoomInput(layer, ({ factor, clientX, clientY }) => {
+      ? listenForZoomInput(layer, ({ factor, clientX, clientY, source }) => {
+          if (source === "wheel" && ctrlWheelAction(wheelAction) === "volume") return false;
           zoom.zoomBy(factor, clientX, clientY);
           onRevealControls();
           return true;
@@ -232,8 +235,17 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
         onRevealControls();
       }, SCRUB_FLUSH_MS);
     };
+    const changeVolume = (event: WheelEvent) => {
+      if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) return;
+      event.preventDefault();
+      const step = wheelStep(volumeGesture, event.deltaY, event.deltaMode, event.timeStamp);
+      if (step !== 0) onWheelVolumeRef.current?.(step);
+    };
     const onWheel = (event: WheelEvent) => {
-      if (event.ctrlKey || event.metaKey) return;
+      if (event.ctrlKey || event.metaKey) {
+        if (ctrlWheelAction(wheelAction) === "volume") changeVolume(event);
+        return;
+      }
       const unit = event.deltaMode === 1 ? LINE_PX : 1;
       if (swipeToScrub && !event.shiftKey && !zoom?.isZoomed()) {
         trackWheelGesture(scrubGesture, event.deltaX, event.deltaY, event.deltaMode, event.timeStamp);
@@ -259,10 +271,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
         zoom.panBy(-dx, -dy);
         return;
       }
-      if (wheelAction !== "volume" || Math.abs(event.deltaY) < Math.abs(event.deltaX)) return;
-      event.preventDefault();
-      const step = wheelStep(volumeGesture, event.deltaY, event.deltaMode, event.timeStamp);
-      if (step !== 0) onWheelVolumeRef.current?.(step);
+      if (wheelAction === "volume") changeVolume(event);
     };
     layer.addEventListener("wheel", onWheel, { passive: false });
     return () => {

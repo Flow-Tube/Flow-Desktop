@@ -1228,7 +1228,7 @@
   "settings_double_click_seek": "Double-click sides to seek",
   "settings_double_click_seek_desc": "Double-click the left or right side of the video to skip back or forward. Turn off to make a double-click anywhere switch fullscreen.",
   "settings_player_wheel": "Wheel over the video",
-  "settings_player_wheel_desc": "What scrolling with the mouse wheel or two fingers does with the pointer on the video. Ctrl (Cmd on macOS) and the wheel, or a pinch, always zoom.",
+  "settings_player_wheel_desc": "What scrolling with the mouse wheel or two fingers does with the pointer on the video. Ctrl (Cmd on macOS) and the wheel zoom, or change the volume when this is set to Zoom.",
   "settings_player_wheel_scroll": "Scroll the page",
   "settings_player_wheel_volume": "Volume",
   "settings_player_wheel_zoom": "Zoom",

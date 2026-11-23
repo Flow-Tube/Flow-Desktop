@@ -427,4 +427,29 @@ describe("PlayerGestureOverlay double-click vs single-click", () => {
       expect(seekBy).not.toHaveBeenCalled();
     });
   });
+
+  describe("Ctrl and the wheel", () => {
+    const ctrlWheel = (layer: Element) => {
+      const event = new WheelEvent("wheel", { deltaY: -100, ctrlKey: true, bubbles: true, cancelable: true });
+      act(() => {
+        layer.dispatchEvent(event);
+      });
+      return event;
+    };
+
+    it("changes the volume when the plain wheel zooms", () => {
+      const onWheelVolume = vi.fn();
+      renderOverlay({ onWheelVolume, wheelAction: "zoom" });
+      const event = ctrlWheel(host.querySelector("[class*='z-[15]']")!);
+      expect(onWheelVolume).toHaveBeenCalledWith(-1);
+      expect(event.defaultPrevented).toBe(true);
+    });
+
+    it("leaves the volume alone when the plain wheel changes it", () => {
+      const onWheelVolume = vi.fn();
+      renderOverlay({ onWheelVolume, wheelAction: "volume" });
+      ctrlWheel(host.querySelector("[class*='z-[15]']")!);
+      expect(onWheelVolume).not.toHaveBeenCalled();
+    });
+  });
 });

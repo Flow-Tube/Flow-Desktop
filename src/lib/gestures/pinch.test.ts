@@ -23,7 +23,7 @@ describe("listenForZoomInput", () => {
     const stop = listenForZoomInput(element, onZoom);
     const wheel = new WheelEvent("wheel", { deltaY: -100, ctrlKey: true, clientX: 5, clientY: 6, cancelable: true });
     element.dispatchEvent(wheel);
-    expect(onZoom).toHaveBeenCalledWith({ factor: NOTCH_ZOOM, clientX: 5, clientY: 6 });
+    expect(onZoom).toHaveBeenCalledWith({ factor: NOTCH_ZOOM, clientX: 5, clientY: 6, source: "wheel" });
     expect(wheel.defaultPrevented).toBe(true);
     stop();
   });
@@ -49,8 +49,13 @@ describe("listenForZoomInput", () => {
     });
     element.dispatchEvent(gesture("gesturestart", 1));
     element.dispatchEvent(gesture("gesturechange", 1.5));
-    // A wheel WebKit might send during the pinch is not counted again.
-    element.dispatchEvent(new WheelEvent("wheel", { deltaY: -3, ctrlKey: true, cancelable: true }));
+    // A wheel WebKit might send during the pinch is not counted again, nor heard by the player's volume.
+    const otherListener = vi.fn();
+    element.addEventListener("wheel", otherListener);
+    const during = new WheelEvent("wheel", { deltaY: -3, ctrlKey: true, cancelable: true });
+    element.dispatchEvent(during);
+    expect(during.defaultPrevented).toBe(true);
+    expect(otherListener).not.toHaveBeenCalled();
     element.dispatchEvent(gesture("gesturechange", 3));
     const end = gesture("gestureend", 3);
     element.dispatchEvent(end);

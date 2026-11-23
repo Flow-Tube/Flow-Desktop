@@ -14,6 +14,11 @@ export function isYoutubeVideoId(id?: string | null): id is string {
   return Boolean(id && YOUTUBE_VIDEO_ID.test(id));
 }
 
+/** The video an i.ytimg thumbnail URL belongs to, if it is one. */
+export function thumbnailVideoId(url?: string | null): string | undefined {
+  return url?.trim().match(YOUTUBE_THUMBNAIL_RE)?.[1];
+}
+
 export function youtubeThumbnailUrl(
   videoId: string,
   quality: ThumbnailQuality = "standard",
@@ -92,9 +97,7 @@ export function resolveYoutubeThumbnailCandidates(
   cssWidth?: number,
 ): string[] {
   const raw = fallbackUrl?.trim();
-  const resolvedId = isYoutubeVideoId(videoId)
-    ? videoId
-    : raw?.match(YOUTUBE_THUMBNAIL_RE)?.[1];
+  const resolvedId = isYoutubeVideoId(videoId) ? videoId : thumbnailVideoId(raw);
 
   const candidates = resolvedId ? thumbnailSources(resolvedId, pickThumbnailTier(cssWidth)) : [];
   if (raw) {

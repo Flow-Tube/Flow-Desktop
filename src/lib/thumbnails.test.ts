@@ -38,6 +38,12 @@ describe("resolveYoutubeThumbnailCandidates", () => {
     expect(resolveYoutubeThumbnailCandidates(ID, null, 780)).toEqual([...tier(HQ720), ...tier(HQDEFAULT)]);
   });
 
+  it("reads the video id from a cover URL, keeping the URL itself last", () => {
+    vi.stubGlobal("devicePixelRatio", 2);
+    const cover = `https://i.ytimg.com/vi/${ID}/hq720.jpg?sqp=abc`;
+    expect(resolveYoutubeThumbnailCandidates(null, cover, 200)).toEqual([...tier(HQDEFAULT), cover]);
+  });
+
   it("keeps a non-YouTube URL as the last resort", () => {
     vi.stubGlobal("devicePixelRatio", 1);
     const url = "https://example.com/thumb.jpg";

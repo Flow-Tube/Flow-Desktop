@@ -64,5 +64,8 @@ export function useImageFallback(candidates: ReadonlyArray<string | null | undef
     for (const url of list.slice(0, Math.max(0, shown))) rememberFailed(url);
   }, [key, src]);
 
-  return { src, onError, onLoad };
+  /** Whether `src` is the last candidate, which is shown even when it is a placeholder. */
+  const isLast = src !== null && count === urls.length - 1;
+
+  return { src, onError, onLoad, isLast };
 }

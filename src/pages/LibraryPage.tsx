@@ -123,7 +123,7 @@ function PlaylistShelfRow({ playlists }: { playlists: LibraryPlaylist[] }) {
     <>
       {playlists.map((playlist) => (
         <div key={playlist.id} className="w-[200px] shrink-0">
-          <PlaylistCard playlist={playlist} />
+          <PlaylistCard playlist={playlist} thumbnailWidth={200} />
         </div>
       ))}
     </>

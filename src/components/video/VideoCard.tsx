@@ -269,6 +269,7 @@ function VideoCardComponent({
     src: displayThumbnail,
     onError: handleThumbnailError,
     onLoad: rememberThumbnailLoad,
+    isLast: isLastThumbnail,
   } = useImageFallback(thumbnailCandidates);
   const thumbnailWashSample = isYoutubeVideoId(video.id) ? thumbnailColorSample(video.id) : displayThumbnail;
 
@@ -303,13 +304,13 @@ function VideoCardComponent({
     const img = event.currentTarget;
     if (
       isUnavailableYoutubeThumbnail(img) &&
-      displayThumbnail !== thumbnailCandidates[thumbnailCandidates.length - 1]
+      !isLastThumbnail
     ) {
       handleThumbnailError();
       return;
     }
     rememberThumbnailLoad();
-  }, [displayThumbnail, handleThumbnailError, rememberThumbnailLoad, thumbnailCandidates]);
+  }, [handleThumbnailError, isLastThumbnail, rememberThumbnailLoad]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     if (isChannel) return;

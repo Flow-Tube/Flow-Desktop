@@ -42,6 +42,7 @@ export const PlaylistShelf: React.FC<PlaylistShelfProps> = ({
             <PlaylistCard
               playlist={playlist}
               onClick={onPlaylistClick}
+              thumbnailWidth={280}
             />
           </div>
         ))}

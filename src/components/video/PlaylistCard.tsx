@@ -20,7 +20,6 @@ import { getString } from '../../lib/i18n/index';
 import type { MenuAnchor } from '../ui/AnchoredPortalMenu';
 import { MediaMenu, type MediaMenuAction } from '../ui/MediaMenu';
 import { ColorWash, COLOR_WASH_HOST } from '../ui/ColorWash';
-import { SoftBackdrop } from '../ui/SoftBackdrop';
 import { useHoverWashColor } from '../../lib/useHoverWashColor';
 import { backgroundTabClickProps, cardKeyboardProps, openedInBackgroundTab } from '../../lib/openTarget';
 import { openActions } from '../common/openActions';
@@ -45,6 +44,12 @@ interface PlaylistCardProps {
   thumbnailWidth?: number;
 }
 
+const SHEET_CLASS = 'pointer-events-none absolute aspect-video rounded-xl';
+
+/**
+ * The cover under two sheets that peek out above it, each narrower than the one in front, so it
+ * reads as a stack. The sheets are the theme's surface tones, so they stay visible in light and dark themes.
+ */
 export function StackedPlaylistThumbnail({
   thumbnailUrl,
   title,
@@ -69,52 +74,39 @@ export function StackedPlaylistThumbnail({
   );
   const { src, onError, onLoad, isLast } = useImageFallback(candidates);
   const handleLoad = (event: React.SyntheticEvent<HTMLImageElement>) => {
-    if (!isLast && isUnavailableYoutubeThumbnail(event.currentTarget)) onError();
-    else onLoad();
+    if (!isLast && isUnavailableYoutubeThumbnail(event.currentTarget)) {
+      onError();
+      return;
+    }
+    onLoad();
   };
-
-  if (!src) {
-    return (
-      <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-chrome-zinc-800">
-        <div className="flex h-full w-full items-center justify-center text-chrome-neutral-500">
-          <ListVideo size={32} />
-        </div>
-        <div className="absolute bottom-1.5 end-1.5 flex items-center gap-1.5 rounded bg-chrome-black/80 px-1.5 py-0.5 text-[11px] font-semibold tracking-wide text-chrome-white">
-          <ListVideo size={14} />
-          {videoCountText}
-        </div>
-        {overlay}
-      </div>
-    );
-  }
 
   return (
     <div className="relative w-full pt-2.5">
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute start-4 end-4 top-0 z-0 aspect-video overflow-hidden rounded-xl"
-      >
-        <SoftBackdrop src={src} detail={24} className="h-full w-full object-cover" />
-        <div className="absolute inset-0 bg-chrome-black/55" />
-      </div>
-
+        className={`${SHEET_CLASS} start-4 end-4 top-0 z-0 bg-surface-container-high`}
+      />
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute start-2 end-2 top-1 z-[1] aspect-video overflow-hidden rounded-xl"
-      >
-        <SoftBackdrop src={src} detail={40} className="h-full w-full object-cover" />
-        <div className="absolute inset-0 bg-chrome-black/35" />
-      </div>
+        className={`${SHEET_CLASS} start-2 end-2 top-1 z-[1] bg-surface-container-highest`}
+      />
 
       <div className="relative z-10 aspect-video w-full overflow-hidden rounded-xl bg-chrome-zinc-900">
-        <img
-          src={src}
-          alt={title}
-          onError={onError}
-          onLoad={handleLoad}
-          className={`h-full w-full object-cover ${hoverMotion("transition-transform duration-300 group-hover:scale-105")}`}
-          loading="lazy"
-        />
+        {src ? (
+          <img
+            src={src}
+            alt={title}
+            onError={onError}
+            onLoad={handleLoad}
+            className={`h-full w-full object-cover ${hoverMotion("transition-transform duration-300 group-hover:scale-105")}`}
+            loading="lazy"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-chrome-neutral-500">
+            <ListVideo size={32} />
+          </div>
+        )}
         <div className="absolute bottom-1.5 end-1.5 flex items-center gap-1.5 rounded bg-chrome-black/80 px-1.5 py-0.5 text-[11px] font-semibold tracking-wide text-chrome-white">
           <ListVideo size={14} />
           {videoCountText}

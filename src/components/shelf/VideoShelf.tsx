@@ -1,8 +1,9 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { ShelfScroller } from "../ui/ShelfScroller";
 import { VideoCard } from "../video/VideoCard";
 import type { VideoSummary } from "../../types/video";
 import { hoverMotion } from "../../lib/platform";
+import { uniqueVideoKeys } from "../../lib/videoKeys";
 
 // The `sm:w-[320px]` below, the widest a shelf card is drawn.
 const SHELF_CARD_WIDTH = 320;
@@ -33,6 +34,7 @@ export const VideoShelf: React.FC<VideoShelfProps> = ({
   variant = "default",
   hideChannelAvatar = true,
 }) => {
+  const defaultKeys = useMemo(() => uniqueVideoKeys(videos ?? []), [videos]);
   if (!videos || videos.length === 0) return null;
 
   return (
@@ -53,7 +55,7 @@ export const VideoShelf: React.FC<VideoShelfProps> = ({
       <ShelfScroller className="flex gap-4 px-3 scroll-px-3 -mx-3 pt-3 -mt-2 pb-3 snap-x">
         {videos.map((video, index) => (
           <div
-            key={getVideoKey ? getVideoKey(video, index) : `${video.id}-${index}`}
+            key={getVideoKey ? getVideoKey(video, index) : defaultKeys[index]}
             className={`w-[280px] sm:w-[320px] shrink-0 ${hoverMotion("transform transition-transform duration-300 hover:translate-y-[-2px]")}`}
           >
             <VideoCard

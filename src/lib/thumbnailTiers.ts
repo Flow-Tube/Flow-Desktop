@@ -11,7 +11,8 @@ export const THUMBNAIL_TIERS = [
 
 export type ThumbnailTier = (typeof THUMBNAIL_TIERS)[number];
 
-const [, HQ, , HQ720] = THUMBNAIL_TIERS;
+const [MQ, HQ, , HQ720] = THUMBNAIL_TIERS;
+const MQ_HEIGHT = 180;
 
 // A tier slightly narrower than the card is upscaled by too little to see, and saves a whole step.
 const MIN_COVERAGE = 0.9;
@@ -47,4 +48,23 @@ export function thumbnailSources(videoId: string, tier: ThumbnailTier): string[]
  */
 export function thumbnailColorSample(videoId: string): string {
   return `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`;
+}
+
+/**
+ * The file for a square crop `sizePx` on a side. hqdefault and sddefault pad the frame with bars a
+ * square crop would show, so only mqdefault or hq720 fit.
+ */
+export function squareCropTier(sizePx: number): ThumbnailTier {
+  return MQ_HEIGHT >= sizePx * MIN_COVERAGE ? MQ : HQ720;
+}
+
+const IMAGE_SIZE_STEPS = [128, 192, 256, 384, 512, 768, 1024, 1536, 2048];
+
+/**
+ * The pixel size to ask Google's image CDN for, for an image drawn `cssPx` wide on this screen.
+ * It rounds up to a step, so cards of nearly the same size share one URL and one cache entry.
+ */
+export function imageSizeStep(cssPx: number, pixelRatio = screenPixelRatio()): number {
+  const needed = cssPx * Math.max(1, pixelRatio);
+  return IMAGE_SIZE_STEPS.find((step) => step >= needed) ?? IMAGE_SIZE_STEPS[IMAGE_SIZE_STEPS.length - 1]!;
 }

@@ -2,7 +2,26 @@ import { useEffect, useState } from "react";
 
 import { artworkSwatches, SAMPLE_SIDE, type ArtworkSwatches } from "./color/artworkSwatches";
 
+// Every playlist card on screen adds an entry, so the oldest go once a long session fills it.
+const CACHE_LIMIT = 256;
 const cache = new Map<string, ArtworkSwatches | null>();
+
+function cached(src: string): ArtworkSwatches | null | undefined {
+  if (!cache.has(src)) return undefined;
+  const swatches = cache.get(src) ?? null;
+  cache.delete(src);
+  cache.set(src, swatches);
+  return swatches;
+}
+
+function remember(src: string, swatches: ArtworkSwatches | null) {
+  cache.delete(src);
+  cache.set(src, swatches);
+  if (cache.size > CACHE_LIMIT) {
+    const oldest = cache.keys().next().value;
+    if (oldest !== undefined) cache.delete(oldest);
+  }
+}
 
 /** The cover's swatches, or null when the canvas may not read it back. */
 export function sampleArtworkSwatches(image: HTMLImageElement): ArtworkSwatches | null {
@@ -27,15 +46,16 @@ export function sampleArtworkSwatches(image: HTMLImageElement): ArtworkSwatches 
 
 /** The cover's dark base and vivid accent (Android's MediaPalette swatches), cached per URL. */
 export function useArtworkSwatches(src: string | null | undefined): ArtworkSwatches | null {
-  const [swatches, setSwatches] = useState<ArtworkSwatches | null>(() => (src ? cache.get(src) ?? null : null));
+  const [swatches, setSwatches] = useState<ArtworkSwatches | null>(() => (src ? cached(src) ?? null : null));
 
   useEffect(() => {
     if (!src) {
       setSwatches(null);
       return;
     }
-    if (cache.has(src)) {
-      setSwatches(cache.get(src) ?? null);
+    const known = cached(src);
+    if (known !== undefined) {
+      setSwatches(known);
       return;
     }
     let cancelled = false;
@@ -44,11 +64,11 @@ export function useArtworkSwatches(src: string | null | undefined): ArtworkSwatc
     image.decoding = "async";
     image.onload = () => {
       const result = sampleArtworkSwatches(image);
-      cache.set(src, result);
+      remember(src, result);
       if (!cancelled) setSwatches(result);
     };
     image.onerror = () => {
-      cache.set(src, null);
+      remember(src, null);
       if (!cancelled) setSwatches(null);
     };
     image.src = src;

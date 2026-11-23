@@ -88,6 +88,8 @@
   "home_mix_title": "Mix - %s",
   "home_mix_length_one": "%d video",
   "home_mix_length_other": "%d videos",
+  "playlist_card_videos_one": "%d video",
+  "playlist_card_videos_other": "%d videos",
   "home_theme_music": "Music",
   "home_theme_gaming": "Gaming",
   "home_theme_sports": "Sports",

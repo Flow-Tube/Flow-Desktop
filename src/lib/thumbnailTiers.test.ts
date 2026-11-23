@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { pickThumbnailTier, thumbnailSources } from "./thumbnailTiers";
+import { imageSizeStep, pickThumbnailTier, squareCropTier, thumbnailSources } from "./thumbnailTiers";
 
 const ID = "dQw4w9WgXcQ";
 const tier = (cssWidth: number | undefined, pixelRatio: number) => pickThumbnailTier(cssWidth, pixelRatio).name;
@@ -58,5 +58,28 @@ describe("thumbnailSources", () => {
       `https://i.ytimg.com/vi_webp/${ID}/hqdefault.webp`,
       `https://i.ytimg.com/vi/${ID}/hqdefault.jpg`,
     ]);
+  });
+});
+
+describe("squareCropTier", () => {
+  it("uses mqdefault while its 180 px height covers the square, then hq720", () => {
+    expect(squareCropTier(96).name).toBe("mqdefault");
+    expect(squareCropTier(200).name).toBe("mqdefault");
+    expect(squareCropTier(201).name).toBe("hq720");
+    expect(squareCropTier(448).name).toBe("hq720");
+  });
+});
+
+describe("imageSizeStep", () => {
+  it("rounds the drawn size on this screen up to a shared step", () => {
+    expect(imageSizeStep(48, 1)).toBe(128);
+    expect(imageSizeStep(48, 2)).toBe(128);
+    expect(imageSizeStep(224, 1)).toBe(256);
+    expect(imageSizeStep(224, 2)).toBe(512);
+    expect(imageSizeStep(680, 2)).toBe(1536);
+  });
+
+  it("stops at 2048", () => {
+    expect(imageSizeStep(1600, 2)).toBe(2048);
   });
 });

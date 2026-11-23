@@ -35,6 +35,25 @@ export function ChannelLabel({
   );
 }
 
+/** A card's views and upload date, with a dot between them when it has both. */
+export function CardByline({
+  views,
+  published,
+  className,
+}: {
+  views?: string | null;
+  published?: string | null;
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      {views && <bdi>{views}</bdi>}
+      {views && published && <span className="mx-1">•</span>}
+      {published && <bdi>{published}</bdi>}
+    </div>
+  );
+}
+
 /** The thumbnail corner badge of a premiere or scheduled stream. */
 export function UpcomingBadge({ className }: { className?: string }) {
   return (

@@ -1,20 +1,30 @@
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { CheckCircle2, ChevronLeft, ChevronRight, XCircle } from "lucide-react";
 import { getString } from "../../lib/i18n/index";
 import { upgradeCommunityPostImageUrl } from "../../lib/thumbnails";
+import { imageSizeStep } from "../../lib/thumbnailTiers";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 import { useRichTargetHandler } from "../../lib/useRichTargetHandler";
 import type { PollChoice, PostAttachment as Attachment, QuizChoice, VideoSummary } from "../../types/video";
 import { useOriginalTitle } from "../../lib/useOriginalTitle";
 import { joinIsolated } from "../../lib/direction";
 
+// The gallery's `max-h-[720px]`.
+const GALLERY_MAX_HEIGHT = 720;
+
 function Gallery({ urls }: { urls: string[] }) {
   const [index, setIndex] = useState(0);
-  const src = useProxiedImageUrl(upgradeCommunityPostImageUrl(urls[index]));
+  const frame = useRef<HTMLDivElement>(null);
+  // The image's longest side is drawn at most this wide or this tall, so it asks for no more.
+  const [drawnPx, setDrawnPx] = useState(0);
+  useLayoutEffect(() => {
+    setDrawnPx(Math.max(frame.current?.clientWidth ?? 0, GALLERY_MAX_HEIGHT));
+  }, []);
+  const src = useProxiedImageUrl(drawnPx ? upgradeCommunityPostImageUrl(urls[index], imageSizeStep(drawnPx)) : null);
   const many = urls.length > 1;
   const step = (by: number) => setIndex((current) => (current + by + urls.length) % urls.length);
   return (
-    <div className="relative mb-4 flex max-h-[720px] w-full items-center justify-center overflow-hidden rounded-xl border border-chrome-neutral-800 bg-surface-container-low">
+    <div ref={frame} className="relative mb-4 flex max-h-[720px] w-full items-center justify-center overflow-hidden rounded-xl border border-chrome-neutral-800 bg-surface-container-low">
       {src && (
         <img
           src={src}

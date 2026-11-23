@@ -1,4 +1,5 @@
 import type { VideoSummary } from "../types/video";
+import { APP_LOCALE, getString } from "./i18n/index";
 
 // Mirrors Flow-Android's DateDisplay.
 
@@ -33,18 +34,31 @@ export function parseRelativeToTimestamp(text: string, now = Date.now()): number
   return now - value * unitMs;
 }
 
+const relativeFormats = new Map<string, Intl.RelativeTimeFormat>();
+
+// In the app's language, not the system's; one formatter per language and style, built once.
+function relativeFormat(numeric: "always" | "auto"): Intl.RelativeTimeFormat {
+  const key = `${APP_LOCALE}:${numeric}`;
+  let format = relativeFormats.get(key);
+  if (!format) {
+    format = new Intl.RelativeTimeFormat(APP_LOCALE, { numeric });
+    relativeFormats.set(key, format);
+  }
+  return format;
+}
+
 export function formatYouTubeRelativeTime(timestamp: number, now = Date.now()): string {
   const minutes = Math.floor(Math.max(0, now - timestamp) / MINUTE_MS);
   const hours = Math.floor(minutes / 60);
   const days = Math.floor(hours / 24);
-  const format = new Intl.RelativeTimeFormat(undefined, { numeric: "always" });
+  const format = relativeFormat("always");
   if (days >= 365) return format.format(-Math.floor(days / 365), "year");
   if (days >= 30) return format.format(-Math.floor(days / 30), "month");
   if (days >= 7) return format.format(-Math.floor(days / 7), "week");
   if (days > 0) return format.format(-days, "day");
   if (hours > 0) return format.format(-hours, "hour");
   if (minutes > 0) return format.format(-minutes, "minute");
-  return new Intl.RelativeTimeFormat(undefined, { numeric: "auto" }).format(0, "second");
+  return relativeFormat("auto").format(0, "second");
 }
 
 const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
@@ -98,11 +112,12 @@ function preferStoredWithinDay(parsed: number | null, stored: number | null): nu
   return new Date(parsed).toDateString() === new Date(stored).toDateString() ? stored : parsed;
 }
 
-function relativePrefix(text: string): string | null {
+/** The relative time with the stream or premiere word YouTube's English text started with. */
+function withRelativePrefix(text: string, relative: string): string {
   const lower = text.toLowerCase();
-  if (lower.startsWith("streamed ")) return "Streamed";
-  if (lower.startsWith("premiered ")) return "Premiered";
-  return null;
+  if (lower.startsWith("streamed ")) return getString("card_streamed_ago", relative);
+  if (lower.startsWith("premiered ")) return getString("card_premiered_ago", relative);
+  return relative;
 }
 
 /** The upload time the backend read from the card's text; it reads every language, this file only English. */
@@ -125,7 +140,5 @@ export function formatPublishedText(video: VideoSummary, now = Date.now()): stri
   const timestamp = resolveDisplayUploadTimestamp(text, video.publishedAt, now);
   if (timestamp === null) return text;
 
-  const relative = formatYouTubeRelativeTime(timestamp, now);
-  const prefix = relativePrefix(text);
-  return prefix ? `${prefix} ${relative}` : relative;
+  return withRelativePrefix(text, formatYouTubeRelativeTime(timestamp, now));
 }

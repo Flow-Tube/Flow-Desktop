@@ -64,6 +64,8 @@ PLAYER
 
 MUSIC
 - Fixed the full music player sliding under the title bar on Windows and Linux and leaving a coloured strip along the bottom of the window (#693). It now opens just below the title bar and fills the rest of the window.
+- Album, song and artist cards on music shelves, and song rows, now load their artwork at the size they are drawn instead of at 1080 pixels. A song whose artwork is its video's thumbnail uses the 320 pixel picture in a row.
+- Pictures in channel posts load at the size of the post, where they always asked for 2048 pixels.
 
 KEYBOARD AND GESTURES
 - The keyboard shortcuts list (press ? or open Settings > Keyboard) now shows every key in Flow, including Shorts, tabs and windows, Back and Forward, and search. On macOS it shows keys the way the Mac menus do, such as ⇧⌘N.

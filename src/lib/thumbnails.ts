@@ -1,5 +1,5 @@
 import { originalImageUrl } from "./imageProxy";
-import { pickThumbnailTier, thumbnailSources } from "./thumbnailTiers";
+import { pickThumbnailTier, squareCropTier, thumbnailSources } from "./thumbnailTiers";
 
 export type ThumbnailQuality = "standard" | "large";
 
@@ -144,13 +144,21 @@ function withGoogleEqualsParam(url: string, param: string): string | null {
   return null;
 }
 
+/**
+ * Square artwork `size` px on a side. A song whose art is its video's thumbnail is drawn from
+ * mqdefault while that covers the square, and from hq720 above it.
+ */
 export function upgradeMusicImageUrl(url: string | null | undefined, size = 1080): string | undefined {
   if (!url?.trim()) return undefined;
   let upgraded = url.trim();
   if (upgraded.startsWith("//")) upgraded = `https:${upgraded}`;
 
-  if (YOUTUBE_THUMBNAIL_RE.test(upgraded)) {
-    return upgradeThumbnailUrl(upgraded, "standard");
+  const videoId = thumbnailVideoId(upgraded);
+  if (videoId) {
+    const tier = squareCropTier(size);
+    return tier.name === "hq720"
+      ? upgradeThumbnailUrl(upgraded, "standard")
+      : `https://i.ytimg.com/vi/${videoId}/${tier.name}.jpg`;
   }
 
   if (isGoogleImageUrl(upgraded)) {
@@ -228,8 +236,9 @@ export function upgradeChannelBannerUrl(url: string | null | undefined): string 
   return upgraded;
 }
 
-export function upgradeCommunityPostImageUrl(url: string | null | undefined): string | undefined {
-  return upgradeLargeGoogleImageUrl(url, 2048);
+/** A post image whose longest side is `size` px, from the drawn size; 2048 when it is unknown. */
+export function upgradeCommunityPostImageUrl(url: string | null | undefined, size = 2048): string | undefined {
+  return upgradeLargeGoogleImageUrl(url, size);
 }
 
 const AVATAR_SIZES = [48, 88, 176, 256, 512];

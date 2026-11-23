@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   avatarSize,
+  upgradeCommunityPostImageUrl,
+  upgradeMusicImageUrl,
   buildThumbnailSources,
   resolveYoutubeThumbnailCandidates,
   upgradeAvatarUrl,
@@ -86,5 +88,28 @@ describe("avatarSize", () => {
 
   it("puts the size into the avatar's address", () => {
     expect(upgradeAvatarUrl("https://yt3.ggpht.com/abc=s176-c-k-c0x00ffffff-no-rj", avatarSize(36, 2))).toContain("=s88");
+  });
+});
+
+describe("upgradeMusicImageUrl", () => {
+  it("crops a small square from mqdefault and a large one from hq720", () => {
+    const art = `https://i.ytimg.com/vi/${ID}/hqdefault.jpg?sqp=abc`;
+    expect(upgradeMusicImageUrl(art, 128)).toBe(MQDEFAULT);
+    expect(upgradeMusicImageUrl(art, 512)).toBe(`https://i.ytimg.com/vi/${ID}/hq720.jpg?sqp=abc`);
+    expect(upgradeMusicImageUrl(art)).toBe(`https://i.ytimg.com/vi/${ID}/hq720.jpg?sqp=abc`);
+  });
+
+  it("asks Google's CDN for the drawn size", () => {
+    expect(upgradeMusicImageUrl("https://lh3.googleusercontent.com/abc=w60-h60-l90-rj", 256)).toBe(
+      "https://lh3.googleusercontent.com/abc=w256-h256-p-l90-rj",
+    );
+  });
+});
+
+describe("upgradeCommunityPostImageUrl", () => {
+  it("asks for the drawn size, or 2048 when it is unknown", () => {
+    const image = "https://yt3.ggpht.com/abc=s640-c-fcrop64=1";
+    expect(upgradeCommunityPostImageUrl(image, 1536)).toBe("https://yt3.ggpht.com/abc=s1536");
+    expect(upgradeCommunityPostImageUrl(image)).toBe("https://yt3.ggpht.com/abc=s2048");
   });
 });

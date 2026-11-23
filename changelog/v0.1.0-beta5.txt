@@ -33,6 +33,11 @@ SUBSCRIPTIONS AND CHANNELS
 - Channel pictures on cards, in the side menu and in lists are loaded at the size they are shown, not at 512 pixels each.
 - Cards look up their DeArrow title and channel picture only once they come near the screen, and no longer ask the backend for an image they never show.
 
+CARDS
+- Video thumbnails are now loaded at the size the card draws them. A related video or a list row on a Retina or HiDPI screen loads a 320 or 480 pixel picture instead of the 1280 pixel one, and grids, shelves and search rows pick the smallest size that stays sharp.
+- Thumbnails load as WebP where YouTube has a copy, which was 29 to 56% smaller on the videos we measured, and as JPEG otherwise. A size a video doesn't have is skipped for the rest of the session instead of being asked for again each time its card appears.
+- Fixed a playlist or mix whose first video is an old upload showing a broken cover or YouTube's grey placeholder. The cover now steps down to a size the video has.
+
 PLAYER
 - The player, its controls and its menus no longer redraw several times a second while a video plays. Only the parts that show the time follow it.
 - The transcript panel redraws when the spoken line changes instead of on every tick, and a Short no longer redraws its whole surface as it plays.

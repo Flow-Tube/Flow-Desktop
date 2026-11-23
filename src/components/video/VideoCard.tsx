@@ -47,7 +47,7 @@ import { findDownloadedRecord, useIsDownloaded } from '../../lib/useDownloads';
 import { useDominantColor } from '../../lib/useDominantColor';
 import { formatPublishedText, formatYouTubeRelativeTime } from '../../lib/publishedDate';
 import { ColorWash, COLOR_WASH_HOST } from '../ui/ColorWash';
-import { CardPills, ChannelLabel, CollabAvatars, UpcomingBadge } from "./CardMeta";
+import { CardByline, CardPills, ChannelLabel, CollabAvatars, UpcomingBadge } from "./CardMeta";
 import { collaboratorsByline } from "../../lib/collaborators";
 import { backgroundTabClickProps, cardKeyboardProps, openedInBackgroundTab, routeForVideo } from '../../lib/openTarget';
 import { openActions } from '../common/openActions';
@@ -749,11 +749,7 @@ function VideoCardComponent({
           >
             <ChannelLabel name={byline} verified={video.isVerified} />
           </button>
-          <div className="text-[13px] text-chrome-neutral-500">
-            {video.viewCountText && <bdi>{video.viewCountText}</bdi>}
-            {video.viewCountText && publishedText && <span className="mx-1">•</span>}
-            {publishedText && <bdi>{publishedText}</bdi>}
-          </div>
+          <CardByline views={video.viewCountText} published={publishedText} className="text-[13px] text-chrome-neutral-500" />
           <CardPills video={video} />
         </div>
 
@@ -850,11 +846,7 @@ function VideoCardComponent({
             >
               {displayTitle}
             </h3>
-            <div className="text-[13px] tabular-nums text-chrome-neutral-400">
-              {video.viewCountText && <bdi>{video.viewCountText}</bdi>}
-              {video.viewCountText && publishedText && <span className="mx-1">•</span>}
-              {publishedText && <bdi>{publishedText}</bdi>}
-            </div>
+            <CardByline views={video.viewCountText} published={publishedText} className="text-[13px] tabular-nums text-chrome-neutral-400" />
             <button
               type="button"
               onClick={(e) => { void handleChannelNavigate(e); }}
@@ -897,19 +889,15 @@ function VideoCardComponent({
             >
               <ChannelLabel name={byline} verified={video.isVerified} />
             </button>
-            <div className="mt-0.5 text-[13px] text-chrome-neutral-500">
-              {showAddedDate && video.addedAtInPlaylist ? (
+            {showAddedDate && video.addedAtInPlaylist ? (
+              <div className="mt-0.5 text-[13px] text-chrome-neutral-500">
                 <span>
                   {getString("playlist_video_added_template", formatYouTubeRelativeTime(video.addedAtInPlaylist))}
                 </span>
-              ) : (
-                <>
-                  {video.viewCountText && <bdi>{video.viewCountText}</bdi>}
-                  {video.viewCountText && publishedText && <span className="mx-1">•</span>}
-                  {publishedText && <bdi>{publishedText}</bdi>}
-                </>
-              )}
-            </div>
+              </div>
+            ) : (
+              <CardByline views={video.viewCountText} published={publishedText} className="mt-0.5 text-[13px] text-chrome-neutral-500" />
+            )}
             {reasonLine && <p className="truncate text-[13px] text-chrome-neutral-500">{reasonLine}</p>}
             <CardPills video={video} />
           </div>
@@ -1038,11 +1026,7 @@ function VideoCardComponent({
           </div>
 
           {/* View Count + Published */}
-          <div className="text-chrome-zinc-500 text-[13px]">
-            {video.viewCountText && <bdi>{video.viewCountText}</bdi>}
-            {video.viewCountText && publishedText && <span className="mx-1">•</span>}
-            {publishedText && <bdi>{publishedText}</bdi>}
-          </div>
+          <CardByline views={video.viewCountText} published={publishedText} className="text-chrome-zinc-500 text-[13px]" />
           {reasonLine && <p className="truncate text-[13px] text-chrome-neutral-500">{reasonLine}</p>}
           <CardPills video={video} />
         </div>

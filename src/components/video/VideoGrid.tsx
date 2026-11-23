@@ -1,4 +1,4 @@
-import { Fragment, memo, useRef, type ReactNode } from 'react';
+import { Fragment, memo, useMemo, useRef, type ReactNode } from 'react';
 import type { VideoSummary } from '../../types/video';
 import { VideoCard } from './VideoCard';
 import { SkeletonLoader } from '../ui/SkeletonLoader';
@@ -6,6 +6,7 @@ import { useGridStyle, useResolvedGridColumns } from '../../lib/useGridColumns';
 import { IMPRESSION_ATTRIBUTE, useFeedImpressions } from '../../lib/useFeedImpressions';
 import { GRID_INDEX_ATTRIBUTE, useLastVisibleCard } from '../../lib/useLastVisibleCard';
 import { useWidestWidth } from '../../lib/useWidestWidth';
+import { uniqueVideoKeys } from '../../lib/videoKeys';
 import { SCROLL_ANCHOR_ATTRIBUTE } from '../../lib/useScrollAnchor';
 
 interface VideoGridProps {
@@ -87,6 +88,7 @@ function VideoGridComponent({
 
   const shown = rows && columns > 0 ? videos.slice(0, rows * columns) : videos;
   const insertAfterIndex = insertAfterCard(Boolean(insertNode), columns, shown.length);
+  const defaultKeys = useMemo(() => uniqueVideoKeys(shown), [shown]);
 
   if (loading) {
     return (
@@ -105,7 +107,7 @@ function VideoGridComponent({
       style={gridStyle}
     >
       {shown.map((video, index) => {
-        const key = getVideoKey ? getVideoKey(video, index) : `${video.id}-${index}`;
+        const key = getVideoKey ? getVideoKey(video, index) : defaultKeys[index]!;
         return (
         <Fragment key={key}>
           {/*

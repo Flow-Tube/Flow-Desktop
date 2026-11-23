@@ -104,6 +104,14 @@ describe("formatPublishedText", () => {
     expect(formatPublishedText(video("Sep 13, 2026", published), published + 13 * DAY)).toBe("1 week ago");
   });
 
+  it("formats a card's date once a minute", () => {
+    const pinned = video("Streamed 1 hour ago", NOW - HOUR);
+    const almostTwoHours = NOW + HOUR - 10_000;
+    expect(formatPublishedText(pinned, almostTwoHours)).toBe("Streamed 1 hour ago");
+    expect(formatPublishedText(pinned, almostTwoHours + 30_000)).toBe("Streamed 1 hour ago");
+    expect(formatPublishedText(pinned, almostTwoHours + 60_000)).toBe("Streamed 2 hours ago");
+  });
+
   it("shows text as given without a pinned timestamp, and live text", () => {
     expect(formatPublishedText(video("1 hour ago"), NOW + 2 * DAY)).toBe("1 hour ago");
     expect(formatPublishedText(video("Sep 13, 2026"), NOW)).toBe("Sep 13, 2026");

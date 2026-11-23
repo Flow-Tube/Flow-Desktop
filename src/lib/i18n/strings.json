@@ -953,6 +953,8 @@
   "playlist_added_to_queue_one": "Added %d video to queue",
   "playlist_added_to_queue_other": "Added %d videos to queue",
   "playlist_already_in_queue": "Already in your queue",
+  "card_streamed_ago": "Streamed %s",
+  "card_premiered_ago": "Premiered %s",
   "playlist_video_added_template": "Added %s",
   "settings_title": "Settings",
   "settings_appearance": "Appearance",

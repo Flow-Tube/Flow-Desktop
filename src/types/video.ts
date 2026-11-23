@@ -506,7 +506,8 @@ export type PostAttachment =
   | { kind: "images"; urls: string[] }
   | { kind: "poll"; choices: PollChoice[]; totalVotesText?: string | null }
   | { kind: "quiz"; choices: QuizChoice[]; totalVotesText?: string | null }
-  | { kind: "video"; video: VideoSummary };
+  | { kind: "video"; video: VideoSummary }
+  | { kind: "playlist"; playlist: Omit<PlaylistSummary, "type"> };
 
 export interface PostSummary {
   type: "post";

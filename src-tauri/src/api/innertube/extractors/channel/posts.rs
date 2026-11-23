@@ -5,6 +5,8 @@ use serde_json::Value;
 use crate::api::innertube::json::text::text_of;
 use crate::api::innertube::json::thumbnail::largest_url;
 use crate::api::innertube::renderers::video::video_from_renderer;
+
+use super::items::shared_playlist;
 use crate::models::channel::{PollChoice, PostAttachment, PostSummary, QuizChoice};
 
 /// A post renderer: `backstagePostRenderer` on the Posts tab, `postRenderer` on Home.
@@ -118,6 +120,7 @@ fn attachment(node: &Value) -> Option<PostAttachment> {
         .map(|video| PostAttachment::Video {
             video: Box::new(video),
         })
+        .or_else(|| shared_playlist(node).map(|playlist| PostAttachment::Playlist { playlist }))
 }
 
 #[cfg(test)]
@@ -153,6 +156,41 @@ mod tests {
         assert!(choices[1].is_correct && !choices[0].is_correct);
         assert_eq!(choices[0].explanation.as_deref(), Some("No."));
         assert_eq!(total_votes_text.as_deref(), Some("12K votes"));
+    }
+
+    #[test]
+    fn a_shared_playlist_keeps_its_id_title_cover_and_count() {
+        let node = json!({ "playlistRenderer": {
+            "playlistId": "PLsynthetic01",
+            "title": { "simpleText": "Bench builds" },
+            "videoCountText": { "runs": [{ "text": "12" }, { "text": " videos" }] },
+            "thumbnails": [{ "thumbnails": [{ "url": "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg", "width": 480, "height": 270 }] }]
+        } });
+        let Some(PostAttachment::Playlist { playlist }) = attachment(&node) else {
+            panic!("no playlist");
+        };
+        assert_eq!(playlist.id, "PLsynthetic01");
+        assert_eq!(playlist.title, "Bench builds");
+        assert_eq!(
+            playlist.thumbnail_url.as_deref(),
+            Some("https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg")
+        );
+        assert_eq!(playlist.video_count_text.as_deref(), Some("12 videos"));
+    }
+
+    #[test]
+    fn a_playlist_without_an_id_is_not_an_attachment() {
+        let node = json!({ "playlistRenderer": { "title": { "simpleText": "No id" } } });
+        assert!(attachment(&node).is_none());
+    }
+
+    #[test]
+    fn a_video_lockup_is_not_a_shared_playlist() {
+        let node = json!({ "lockupViewModel": { "contentType": "LOCKUP_CONTENT_TYPE_VIDEO", "contentId": "dQw4w9WgXcQ" } });
+        assert!(!matches!(
+            attachment(&node),
+            Some(PostAttachment::Playlist { .. })
+        ));
     }
 
     #[test]

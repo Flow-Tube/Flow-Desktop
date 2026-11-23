@@ -8,6 +8,7 @@ import { useRichTargetHandler } from "../../lib/useRichTargetHandler";
 import type { PollChoice, PostAttachment as Attachment, QuizChoice, VideoSummary } from "../../types/video";
 import { useOriginalTitle } from "../../lib/useOriginalTitle";
 import { joinIsolated } from "../../lib/direction";
+import { PlaylistCard } from "./PlaylistCard";
 
 // The gallery's `max-h-[720px]`.
 const GALLERY_MAX_HEIGHT = 720;
@@ -168,5 +169,11 @@ export function PostAttachment({ attachment }: { attachment: Attachment }) {
       return <Quiz choices={attachment.choices} totalVotesText={attachment.totalVotesText} />;
     case "video":
       return <SharedVideo video={attachment.video} />;
+    case "playlist":
+      return (
+        <div className="mb-4 w-64 max-w-full">
+          <PlaylistCard playlist={{ type: "playlist", ...attachment.playlist }} />
+        </div>
+      );
   }
 }

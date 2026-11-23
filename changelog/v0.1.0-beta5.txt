@@ -32,6 +32,7 @@ SUBSCRIPTIONS AND CHANNELS
 - While a first check of your channels runs, videos already listed are no longer redrawn with every batch.
 - Channel pictures on cards, in the side menu and in lists are loaded at the size they are shown, not at 512 pixels each.
 - Cards look up their DeArrow title and channel picture only once they come near the screen, and no longer ask the backend for an image they never show.
+- A post that shares a playlist now shows the playlist as a card you can open, as on Flow for Android. Such posts used to show only their text.
 
 CARDS
 - Upload dates on cards, such as "3 days ago", now follow the app's language instead of the computer's, and "Streamed" and "Premiered" can be translated.

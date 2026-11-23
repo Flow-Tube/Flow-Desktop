@@ -12,6 +12,7 @@ use crate::api::innertube::renderers::video::video_from_renderer;
 use crate::models::channel::{
     ChannelItem, ChannelSection, ChannelSectionMore, ChannelSummary, PlaylistSummary,
 };
+use crate::models::video::RelatedContentItem;
 use crate::models::video::VideoSummary;
 
 /// The channel a page belongs to, for items that leave their channel out.
@@ -59,6 +60,26 @@ fn playlist_summary(renderer: &Value) -> Option<PlaylistSummary> {
     })
 }
 
+/// A playlist, podcast, album or mix lockup as a playlist card.
+fn lockup_playlist(item: RelatedContentItem) -> PlaylistSummary {
+    PlaylistSummary {
+        id: item.playlist_id.clone().unwrap_or(item.id),
+        title: item.title,
+        thumbnail_url: item.thumbnail_url,
+        video_count_text: item.view_count_text,
+    }
+}
+
+/// A playlist shared in a post, as a `playlistRenderer` or a playlist `lockupViewModel`.
+pub(super) fn shared_playlist(node: &Value) -> Option<PlaylistSummary> {
+    node.get("playlistRenderer")
+        .and_then(playlist_summary)
+        .or_else(|| {
+            let item = lockup_item(node.get("lockupViewModel")?)?;
+            (item.item_type != "video").then(|| lockup_playlist(item))
+        })
+}
+
 fn channel_summary(renderer: &Value) -> Option<ChannelSummary> {
     Some(ChannelSummary {
         channel_id: renderer["channelId"]
@@ -86,12 +107,7 @@ pub(super) fn item_of(node: &Value, owner: &Owner) -> Option<ChannelItem> {
         if item.item_type == "video" {
             return Some(ChannelItem::Video(owner.claim(related_to_video(item))));
         }
-        return Some(ChannelItem::Playlist(PlaylistSummary {
-            id: item.playlist_id.clone().unwrap_or(item.id),
-            title: item.title,
-            thumbnail_url: item.thumbnail_url,
-            video_count_text: item.view_count_text,
-        }));
+        return Some(ChannelItem::Playlist(lockup_playlist(item)));
     }
     if let Some(video) = node
         .get("videoRenderer")

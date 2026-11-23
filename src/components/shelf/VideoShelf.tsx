@@ -4,6 +4,9 @@ import { VideoCard } from "../video/VideoCard";
 import type { VideoSummary } from "../../types/video";
 import { hoverMotion } from "../../lib/platform";
 
+// The `sm:w-[320px]` below, the widest a shelf card is drawn.
+const SHELF_CARD_WIDTH = 320;
+
 interface VideoShelfProps {
   title?: string;
   /** Shown at the end of the header, such as a "See all" button. */
@@ -61,6 +64,7 @@ export const VideoShelf: React.FC<VideoShelfProps> = ({
               onRemoveFromContinueWatching={onRemoveFromContinueWatching}
               variant={variant}
               hideChannelAvatar={hideChannelAvatar}
+              thumbnailWidth={SHELF_CARD_WIDTH}
             />
           </div>
         ))}

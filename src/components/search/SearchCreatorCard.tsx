@@ -55,7 +55,7 @@ export function SearchCreatorCard({ creator, onPlay, onAddToQueue }: SearchCreat
         <ShelfScroller className="flex gap-4">
           {latest.videos.map((video) => (
             <div key={video.id} className="w-64 shrink-0">
-              <VideoCard video={video} onPlay={onPlay} onAddToQueue={onAddToQueue} />
+              <VideoCard video={video} onPlay={onPlay} onAddToQueue={onAddToQueue} thumbnailWidth={256} />
             </div>
           ))}
         </ShelfScroller>

@@ -1,5 +1,5 @@
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Download, Library, ListVideo, MoreVertical } from 'lucide-react';
 import type { PlaylistSummary } from '../../types/video';
@@ -14,6 +14,7 @@ import {
 import { loadPlaylistDownload } from '../../lib/useCollectionDownloads';
 import { useDownloadStore } from '../../store/useDownloadStore';
 import { useImageFallback } from '../../lib/useImageFallback';
+import { isUnavailableYoutubeThumbnail, resolveYoutubeThumbnailCandidates, thumbnailVideoId } from '../../lib/thumbnails';
 import { showSaveFailedToast, showSaveToast } from '../../lib/saveToast';
 import { getString } from '../../lib/i18n/index';
 import type { MenuAnchor } from '../ui/AnchoredPortalMenu';
@@ -40,6 +41,8 @@ interface PlaylistCardProps {
   /** Drawn over the thumbnail, such as a download's progress. */
   thumbnailOverlay?: React.ReactNode;
   appendActions?: MediaMenuAction[];
+  /** The widest the cover is drawn, in CSS px, for a row whose cards have a fixed width. */
+  thumbnailWidth?: number;
 }
 
 export function StackedPlaylistThumbnail({
@@ -47,13 +50,28 @@ export function StackedPlaylistThumbnail({
   title,
   videoCountText,
   overlay,
+  thumbnailWidth,
 }: {
   thumbnailUrl?: string | null;
   title: string;
   videoCountText: string;
   overlay?: React.ReactNode;
+  /** The widest the cover is drawn, in CSS px; left out, the screen's pixel ratio decides. */
+  thumbnailWidth?: number;
 }) {
-  const { src, onError } = useImageFallback([thumbnailUrl]);
+  // A YouTube cover is its first video's thumbnail, which an old upload may lack at the larger sizes.
+  // Any other cover, such as album art or a local playlist's, is drawn as given.
+  const candidates = useMemo(
+    () => thumbnailVideoId(thumbnailUrl)
+      ? resolveYoutubeThumbnailCandidates(null, thumbnailUrl, thumbnailWidth)
+      : [thumbnailUrl],
+    [thumbnailUrl, thumbnailWidth],
+  );
+  const { src, onError, onLoad, isLast } = useImageFallback(candidates);
+  const handleLoad = (event: React.SyntheticEvent<HTMLImageElement>) => {
+    if (!isLast && isUnavailableYoutubeThumbnail(event.currentTarget)) onError();
+    else onLoad();
+  };
 
   if (!src) {
     return (
@@ -93,6 +111,7 @@ export function StackedPlaylistThumbnail({
           src={src}
           alt={title}
           onError={onError}
+          onLoad={handleLoad}
           className={`h-full w-full object-cover ${hoverMotion("transition-transform duration-300 group-hover:scale-105")}`}
           loading="lazy"
         />
@@ -115,6 +134,7 @@ export function PlaylistCard({
   onDownload,
   thumbnailOverlay,
   appendActions = [],
+  thumbnailWidth,
 }: PlaylistCardProps) {
   const navigate = useNavigate();
   const [showMenu, setShowMenu] = useState(false);
@@ -306,6 +326,7 @@ export function PlaylistCard({
         title={playlist.title}
         videoCountText={videoCountText}
         overlay={thumbnailOverlay}
+        thumbnailWidth={thumbnailWidth}
       />
 
       <div className="flex items-start justify-between gap-3">

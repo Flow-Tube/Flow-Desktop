@@ -34,7 +34,7 @@ function VideoRun({ videos, layout, query, onPlay, onAddToQueue }: Pick<VideoRes
   return (
     <div className="flex flex-col gap-1">
       {videos.map((video) => (
-        <VideoCard key={video.id} video={video} variant="search" highResThumbnail searchQuery={query} onPlay={onPlay} onAddToQueue={onAddToQueue} />
+        <VideoCard key={video.id} video={video} variant="search" searchQuery={query} onPlay={onPlay} onAddToQueue={onAddToQueue} />
       ))}
     </div>
   );

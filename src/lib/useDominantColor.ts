@@ -6,8 +6,27 @@ export interface Rgb {
   b: number;
 }
 
+// Every hovered card adds an entry, so the oldest go once a long session fills it.
+const CACHE_LIMIT = 256;
 const cache = new Map<string, Rgb | null>();
 const BUCKET_SIZE = 24;
+
+function cachedColor(src: string): Rgb | null | undefined {
+  if (!cache.has(src)) return undefined;
+  const color = cache.get(src) ?? null;
+  cache.delete(src);
+  cache.set(src, color);
+  return color;
+}
+
+function cacheColor(src: string, color: Rgb | null) {
+  cache.delete(src);
+  cache.set(src, color);
+  if (cache.size > CACHE_LIMIT) {
+    const oldest = cache.keys().next().value;
+    if (oldest !== undefined) cache.delete(oldest);
+  }
+}
 
 type ColorBucket = {
   r: number;
@@ -102,15 +121,16 @@ export function extractDominantColorFromImage(img: HTMLImageElement): Rgb | null
 
 /** Extracts a vibrant dominant color from artwork for immersive theming. */
 export function useDominantColor(src: string | null | undefined): Rgb | null {
-  const [color, setColor] = useState<Rgb | null>(() => (src ? cache.get(src) ?? null : null));
+  const [color, setColor] = useState<Rgb | null>(() => (src ? cachedColor(src) ?? null : null));
 
   useEffect(() => {
     if (!src) {
       setColor(null);
       return;
     }
-    if (cache.has(src)) {
-      setColor(cache.get(src) ?? null);
+    const cached = cachedColor(src);
+    if (cached !== undefined) {
+      setColor(cached);
       return;
     }
     let cancelled = false;
@@ -118,11 +138,11 @@ export function useDominantColor(src: string | null | undefined): Rgb | null {
     img.crossOrigin = "anonymous";
     img.onload = () => {
       const c = extractDominantColorFromImage(img);
-      cache.set(src, c);
+      cacheColor(src, c);
       if (!cancelled) setColor(c);
     };
     img.onerror = () => {
-      cache.set(src, null);
+      cacheColor(src, null);
       if (!cancelled) setColor(null);
     };
     img.src = src;

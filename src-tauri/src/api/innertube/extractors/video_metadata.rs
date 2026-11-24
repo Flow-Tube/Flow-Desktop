@@ -145,7 +145,7 @@ impl InnertubeClient {
                 &clients::IOS,
                 &mut payload,
                 None,
-                Some("fields=miniPlayerByline,playabilityStatus.status"),
+                Some("&fields=miniPlayerByline,playabilityStatus.status"),
             )
             .await?;
         Ok(parse_paid_promotion(&response))

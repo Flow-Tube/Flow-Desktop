@@ -39,19 +39,27 @@ pub struct RequestSpec<'a> {
     pub client: &'a YouTubeClient,
     /// Overrides the host's referer, as the youtu.be retry does.
     pub referer: Option<&'a str>,
-    /// Appended to the URL, such as the music search's `&ctoken=…`.
+    /// Added to the URL's query, such as the music search's `ctoken=…`. A
+    /// leading `&` is optional.
     pub extra_query: Option<&'a str>,
 }
 
 impl RequestSpec<'_> {
     #[must_use]
     pub fn url(&self) -> String {
-        format!(
-            "{}/youtubei/v1/{}?prettyPrint=false{}",
+        let base = format!(
+            "{}/youtubei/v1/{}?prettyPrint=false",
             self.host.origin(),
-            self.endpoint,
-            self.extra_query.unwrap_or_default()
-        )
+            self.endpoint
+        );
+        match self
+            .extra_query
+            .map(|query| query.trim_start_matches('&'))
+            .filter(|query| !query.is_empty())
+        {
+            Some(query) => format!("{base}&{query}"),
+            None => base,
+        }
     }
 
     /// Every header the request carries. The visitor header mirrors the body's
@@ -190,6 +198,21 @@ mod tests {
         assert_eq!(
             spec.url(),
             "https://music.youtube.com/youtubei/v1/search?prettyPrint=false&ctoken=abc"
+        );
+    }
+
+    #[test]
+    fn an_extra_query_without_its_ampersand_is_still_its_own_parameter() {
+        let spec = RequestSpec {
+            host: Host::Www,
+            endpoint: "player",
+            client: &WEB,
+            referer: None,
+            extra_query: Some("fields=miniPlayerByline,playabilityStatus.status"),
+        };
+        assert_eq!(
+            spec.url(),
+            "https://www.youtube.com/youtubei/v1/player?prettyPrint=false&fields=miniPlayerByline,playabilityStatus.status"
         );
     }
 

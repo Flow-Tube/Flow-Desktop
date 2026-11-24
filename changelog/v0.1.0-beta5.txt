@@ -71,6 +71,8 @@ COMMENTS
 - Oldest used to sort only the comments already loaded and read their age in English, so in other languages the order was wrong.
 - Community post comments now switch between Top, Newest and Oldest, and a comment YouTube sends twice shows once.
 - The watch page and the fullscreen comments panel now share one list, so comments load once and threads you opened stay open after the panel closes.
+- Replies are now drawn as the conversation they are. YouTube sends them as one flat list, so Flow reads the @name a reply starts with and puts it under the earlier reply it answers, with lines from each avatar, as Flow for Android does.
+- Threads indent up to three steps; replies deeper than two levels fold behind "N replies" until you open them. Right-to-left languages get the same lines mirrored.
 - More comments load as you scroll to the end of the list, with Retry if a page fails. Timed keeps its Load more button.
 
 MUSIC

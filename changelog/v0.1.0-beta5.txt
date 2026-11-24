@@ -96,6 +96,8 @@ SYNC
 - Flow no longer opens the keychain at launch on a device that is in no sync group.
 - A computer removed from a sync group on the local network now finds out the next time it reaches a desktop still in the group, and stops syncing, instead of showing Linked forever (#662). That desktop gives it only the list of devices.
 - New installs name themselves after the computer, such as Flow Desktop (MY-PC - Windows), so two installs in one group are easy to tell apart. Development builds add Dev.
+- When a sync server or WebDAV folder can't be reached, Flow now says why: nothing answered, the port refused the connection, the name wasn't found, the server stopped answering, or the address isn't a web server (Flow for Android #2233).
+- A WebDAV folder address that the server redirects, doesn't have, or doesn't allow writing to now gets its own message, and each failed request is written to the log.
 
 DESKTOP
 - Flow starts with a smaller first script: Settings, Sync, Recap, your Persona, Extensions, Diagnostics, Import, Support and the welcome screens now load when they are first opened.

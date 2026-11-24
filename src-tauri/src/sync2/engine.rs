@@ -18,6 +18,7 @@ use super::forks::{Settlement, settle_roster};
 use super::gc::{Ack, Logged, VersionVector, record_ack, record_links, record_manifest};
 use super::kept::{Kept, keep};
 use super::keys::MemberSecrets;
+use super::network_failure::NetworkFailure;
 use super::paths::{kc_name, log_path, parse_log_path};
 use super::payload::{decode_payload, encode_payload};
 use super::profile_links::{Reading, forget_link, link_profile};
@@ -36,7 +37,7 @@ use super::state::{
 };
 use super::store::Store;
 use super::store_login::{decode_login, encode_login, note_login, note_login_sent, note_removal};
-use super::webdav::WebDavLogin;
+use super::webdav::{REFUSAL_CODE, WebDavLogin};
 use super::wrap::unwrap_epoch_key;
 use super::{Error, array};
 use crate::sync::canonical::to_canonical_json;
@@ -104,10 +105,13 @@ impl EngineError {
     pub fn kind(&self) -> &'static str {
         match self {
             Self::Store(StoreError::Insecure) => "linkedInsecure",
-            Self::Store(StoreError::Network(_)) => "linkedUnreachable",
+            Self::Store(StoreError::Network(error)) => NetworkFailure::of(error).kind(),
             // A server reset to an empty database no longer has the group.
             Self::Store(StoreError::Refused { code, .. }) if code == "unclaimed" => {
                 "linkedGroupMissing"
+            }
+            Self::Store(StoreError::Refused { status, code }) if code == REFUSAL_CODE => {
+                folder_refusal(*status)
             }
             Self::Store(StoreError::Refused { .. }) => "linkedRefused",
             Self::Store(StoreError::InstanceChanged) => "linkedInstanceChanged",
@@ -141,6 +145,16 @@ impl EngineError {
             Self::ProfileTaken => "linkedProfileTaken",
             Self::NotRunning => "linkedProfileNotRunning",
         }
+    }
+}
+
+/// A `WebDAV` folder's refusal: these statuses mean the address names no usable folder.
+fn folder_refusal(status: u16) -> &'static str {
+    match status {
+        300..=399 => "linkedFolderRedirected",
+        404 | 409 => "linkedFolderMissing",
+        403 | 405 => "linkedFolderForbidden",
+        _ => "linkedRefused",
     }
 }
 

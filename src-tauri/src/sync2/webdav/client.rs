@@ -12,7 +12,11 @@ use tokio::sync::Mutex;
 
 use crate::sync2::envelope::MAX_OBJECT_SIZE;
 use crate::sync2::http::{MAX_RESPONSE, Transport, read_body};
+use crate::sync2::network_failure::{NetworkFailure, cause_text};
 use crate::sync2::server::{Result, StoreError};
+
+/// The `code` of every refusal from a `WebDAV` folder.
+pub const REFUSAL_CODE: &str = "webdav";
 
 const PROPFIND_BODY: &str = r#"<?xml version="1.0" encoding="utf-8"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/></d:prop></d:propfind>"#;
 
@@ -63,9 +67,33 @@ impl WebDav {
             .basic_auth(&self.login.user, Some(&self.login.password)))
     }
 
+    /// The part of `url` under the group's folder: the folder's own path can name the account.
+    fn inside<'a>(&self, url: &'a Url) -> &'a str {
+        url.path()
+            .strip_prefix(self.base.path())
+            .unwrap_or_default()
+    }
+
     async fn send(&self, request: RequestBuilder) -> Result<Response> {
-        let response = request.send().await.map_err(StoreError::Network)?;
-        if response.status() == StatusCode::UNAUTHORIZED {
+        let request = request.build().map_err(StoreError::Network)?;
+        let method = request.method().clone();
+        let path = self.inside(request.url()).to_owned();
+        let response = self
+            .client
+            .execute(request)
+            .await
+            .map_err(|error| failed(&method, &path, error))?;
+        let status = response.status();
+        if !status.is_success() {
+            tracing::warn!(
+                target: "flow::sync2",
+                %method,
+                path = %format!("/{path}"),
+                status = status.as_u16(),
+                "WebDAV answered with an error status"
+            );
+        }
+        if status == StatusCode::UNAUTHORIZED {
             self.refused.store(true, Ordering::SeqCst);
             return Err(StoreError::Unauthorized);
         }
@@ -108,7 +136,33 @@ fn inside_folder(path: &str) -> bool {
 fn refused(response: &Response) -> StoreError {
     StoreError::Refused {
         status: response.status().as_u16(),
-        code: "webdav".to_owned(),
+        code: REFUSAL_CODE.to_owned(),
+    }
+}
+
+/// Logs why a request got no answer, without the folder's address or the login.
+fn failed(method: &Method, path: &str, error: reqwest::Error) -> StoreError {
+    tracing::warn!(
+        target: "flow::sync2",
+        %method,
+        path = %format!("/{path}"),
+        failure = ?NetworkFailure::of(&error),
+        cause = %cause_text(&error),
+        "WebDAV request failed"
+    );
+    StoreError::Network(error)
+}
+
+/// Reads a body, logging a transport failure the way [`failed`] does.
+async fn read_logged(
+    method: &Method,
+    path: &str,
+    response: Response,
+    limit: usize,
+) -> Result<Vec<u8>> {
+    match read_body(response, limit).await {
+        Err(StoreError::Network(error)) => Err(failed(method, path, error)),
+        read => read,
     }
 }
 
@@ -162,7 +216,9 @@ impl WebDav {
         let response = self.send(self.request(Method::GET, path)?).await?;
         match response.status() {
             StatusCode::NOT_FOUND => Ok(None),
-            status if status.is_success() => Ok(Some(read_body(response, MAX_OBJECT_SIZE).await?)),
+            status if status.is_success() => Ok(Some(
+                read_logged(&Method::GET, path, response, MAX_OBJECT_SIZE).await?,
+            )),
             _ => Err(refused(&response)),
         }
     }
@@ -179,7 +235,7 @@ impl WebDav {
     pub async fn list(&self, dir: &str) -> Result<Vec<String>> {
         let propfind = Method::from_bytes(b"PROPFIND").map_err(|_| StoreError::Malformed)?;
         let request = self
-            .request(propfind, dir)?
+            .request(propfind.clone(), dir)?
             .header("depth", "1")
             .header("content-type", "application/xml")
             .body(PROPFIND_BODY);
@@ -191,7 +247,7 @@ impl WebDav {
             return Err(refused(&response));
         }
         let folder = self.base.join(dir).map_err(|_| StoreError::Malformed)?;
-        let xml = read_body(response, MAX_RESPONSE).await?;
+        let xml = read_logged(&propfind, dir, response, MAX_RESPONSE).await?;
         Ok(parse_multistatus(&String::from_utf8_lossy(&xml))
             .into_iter()
             .filter_map(|(href, is_folder)| {

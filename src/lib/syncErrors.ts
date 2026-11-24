@@ -20,7 +20,16 @@ const SYNC_ERROR_KEYS: Record<string, StringKey> = {
   // Mirrors `EngineError::kind` in src-tauri/src/sync2/engine.rs.
   linkedInsecure: "linked_error_insecure",
   linkedUnreachable: "linked_error_unreachable",
+  // Mirrors `NetworkFailure::kind` in src-tauri/src/sync2/network_failure.rs.
+  linkedConnectTimeout: "linked_error_connect_timeout",
+  linkedConnectionRefused: "linked_error_connection_refused",
+  linkedNoSuchHost: "linked_error_no_such_host",
+  linkedNoAnswer: "linked_error_no_answer",
+  linkedNotHttp: "linked_error_not_http",
   linkedRefused: "linked_error_refused",
+  linkedFolderRedirected: "linked_error_folder_redirected",
+  linkedFolderMissing: "linked_error_folder_missing",
+  linkedFolderForbidden: "linked_error_folder_forbidden",
   linkedGroupMissing: "linked_error_group_missing",
   linkedRecoveryDue: "linked_error_recovery_due",
   linkedInstanceChanged: "linked_error_instance_changed",

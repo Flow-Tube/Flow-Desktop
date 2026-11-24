@@ -98,9 +98,11 @@ impl Transport {
         }
     }
 
-    /// A client for ordinary requests, each bounded to a minute.
+    /// A client for ordinary requests, each bounded to a minute, and to half that without a byte
+    /// from the server.
     pub fn client(&self) -> Result<Client> {
         self.builder()
+            .read_timeout(Duration::from_secs(30))
             .timeout(Duration::from_secs(60))
             .build()
             .map_err(StoreError::Network)

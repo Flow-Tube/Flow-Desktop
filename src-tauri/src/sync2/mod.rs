@@ -47,6 +47,7 @@ pub mod membership;
 pub mod meta;
 pub mod missed_notes;
 pub mod names;
+pub mod network_failure;
 pub mod pairing;
 pub mod paths;
 pub mod payload;

@@ -13,7 +13,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde_json::{Value, json};
 use tokio::sync::Mutex;
 
-pub use self::client::{WebDav, WebDavLogin};
+pub use self::client::{REFUSAL_CODE, WebDav, WebDavLogin};
 use super::envelope::MAX_OBJECT_SIZE;
 use super::forks::winning_chain;
 use super::mailbox::Mailbox;

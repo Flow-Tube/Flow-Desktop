@@ -126,6 +126,16 @@ impl YoutubeService {
         self.extractor.get_comments(video_id, page_token).await
     }
 
+    pub async fn get_short_comments(
+        &self,
+        video_id: &str,
+        page_token: Option<String>,
+    ) -> AppResult<CommentsResponse> {
+        self.extractor
+            .get_short_comments(video_id, page_token)
+            .await
+    }
+
     pub async fn get_timed_comments(
         &self,
         video_id: &str,

@@ -103,7 +103,12 @@ fn find_comments_header(value: &Value) -> Option<&Value> {
 }
 
 fn sort_options(header: &Value) -> Vec<CommentSort> {
-    header["sortMenu"]["sortFilterSubMenuRenderer"]["subMenuItems"]
+    sort_menu_options(&header["sortMenu"])
+}
+
+/// The entries of a menu that holds a `sortFilterSubMenuRenderer`.
+pub(super) fn sort_menu_options(menu: &Value) -> Vec<CommentSort> {
+    menu["sortFilterSubMenuRenderer"]["subMenuItems"]
         .as_array()
         .into_iter()
         .flatten()

@@ -7,6 +7,7 @@ pub mod mix;
 pub mod playability;
 pub mod player;
 pub mod playlist;
+pub mod reel_comments;
 pub mod resolve;
 pub mod search;
 pub mod shorts;

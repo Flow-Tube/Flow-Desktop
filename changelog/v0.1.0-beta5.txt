@@ -134,4 +134,5 @@ FIXES
 - Fixed a possible freeze after hours of use when Flow was started by a launcher that never reads its output.
 
 UNDER THE HOOD
+- The check for a video's paid promotion label now asks YouTube for only the two fields it reads, as it was meant to. A missing separator in the request address made YouTube send the whole player answer, about 238 KB, where 37 bytes do.
 - A first component, the video card, is built with the React Compiler, which only compiles components that opt in.

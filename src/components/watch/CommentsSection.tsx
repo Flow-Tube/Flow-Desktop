@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, X } from "lucide-react";
 import { Button } from "../ui/Button";
 import { Chip } from "../ui/Chip";
+import { LoadMoreRow } from "../ui/LoadMoreRow";
 import { ToggleSwitch } from "../ui/ToggleSwitch";
 import { CommentItem } from "./CommentItem";
 import { useVideoComments } from "../../lib/useVideoComments";
@@ -70,7 +71,6 @@ export function CommentsSection({
   const loading = isTimed ? timed.loading && comments.length === 0 : thread.loading;
   const hasMore = isTimed ? timed.hasMore : Boolean(thread.nextPageToken);
   const loadingMore = isTimed ? timed.loading : thread.loadingMore;
-  const loadMore = isTimed ? timed.loadMore : thread.loadMore;
   const emptyText = isTimed ? getString("comments_no_timed") : getString("watch_no_comments");
   // The Timed list scrolls by itself, so following it never moves the page or the player.
   const listClass = fill ? "min-h-0 flex-1 overflow-y-auto pe-1" : isTimed ? "max-h-[70vh] overflow-y-auto pe-1" : "";
@@ -181,24 +181,30 @@ export function CommentsSection({
             ))}
           </div>
 
-          {(hasMore || (isTimed && loadingMore)) && (
-            <div className="flex justify-center pt-4">
-              <Button
-                variant="outline"
-                onClick={loadMore}
-                disabled={loadingMore}
-                className="px-6 font-semibold"
-              >
-                {loadingMore ? (
-                  <>
-                    <Loader2 className="animate-spin text-chrome-neutral-400" size={16} />
-                    <span>{getString("watch_loading_more_comments")}</span>
-                  </>
-                ) : (
-                  getString("watch_load_more_comments")
-                )}
-              </Button>
-            </div>
+          {isTimed ? (
+            (hasMore || loadingMore) && (
+              <div className="flex justify-center pt-4">
+                <Button variant="outline" onClick={timed.loadMore} disabled={loadingMore} className="px-6 font-semibold">
+                  {loadingMore ? (
+                    <>
+                      <Loader2 className="animate-spin text-chrome-neutral-400" size={16} />
+                      <span>{getString("watch_loading_more_comments")}</span>
+                    </>
+                  ) : (
+                    getString("watch_load_more_comments")
+                  )}
+                </Button>
+              </div>
+            )
+          ) : (
+            <LoadMoreRow
+              hasMore={hasMore}
+              loading={loadingMore}
+              failed={thread.loadMoreFailed}
+              onLoadMore={() => void thread.loadMore()}
+              loadingText={getString("watch_loading_more_comments")}
+              failedText={getString("comments_load_more_failed")}
+            />
           )}
         </div>
       )}

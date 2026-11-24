@@ -2,15 +2,17 @@ import { Loader2 } from "lucide-react";
 import { getString } from "../../lib/i18n/index";
 import { useInfiniteScroll } from "../../lib/useInfiniteScroll";
 
-interface PlaylistLoadMoreProps {
+interface LoadMoreRowProps {
   hasMore: boolean;
   loading: boolean;
   failed: boolean;
   onLoadMore: () => void;
+  loadingText: string;
+  failedText: string;
 }
 
-/** The end of a long playlist: loads the next page as it scrolls into view, or offers Retry. */
-export function PlaylistLoadMore({ hasMore, loading, failed, onLoadMore }: PlaylistLoadMoreProps) {
+/** The end of a long list: loads the next page as it scrolls into view, or offers Retry. */
+export function LoadMoreRow({ hasMore, loading, failed, onLoadMore, loadingText, failedText }: LoadMoreRowProps) {
   const sentinelRef = useInfiniteScroll({ hasNextPage: hasMore && !failed, isLoading: loading, onLoadMore });
   if (!hasMore) return null;
 
@@ -18,7 +20,7 @@ export function PlaylistLoadMore({ hasMore, loading, failed, onLoadMore }: Playl
     <div ref={sentinelRef} className="flex items-center justify-center gap-3 py-6 text-sm text-chrome-neutral-400">
       {failed ? (
         <>
-          <span>{getString("playlist_load_more_failed")}</span>
+          <span>{failedText}</span>
           <button
             type="button"
             onClick={onLoadMore}
@@ -30,7 +32,7 @@ export function PlaylistLoadMore({ hasMore, loading, failed, onLoadMore }: Playl
       ) : (
         <>
           <Loader2 className="animate-spin" size={18} />
-          <span>{getString("playlist_loading_more")}</span>
+          <span>{loadingText}</span>
         </>
       )}
     </div>

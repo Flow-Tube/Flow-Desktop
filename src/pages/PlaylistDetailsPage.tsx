@@ -6,7 +6,7 @@ import { AddAllToPlaylistDialog } from "../components/playlist/AddAllToPlaylistD
 import { PlaylistAmbientHeader } from "../components/playlist/PlaylistAmbientHeader";
 import { PlaylistFormDialog } from "../components/playlist/PlaylistFormDialog";
 import { addVideosToQueueWithToast, PlaylistSelectionActions } from "../components/playlist/PlaylistSelectionActions";
-import { PlaylistLoadMore } from "../components/playlist/PlaylistLoadMore";
+import { LoadMoreRow } from "../components/ui/LoadMoreRow";
 import { PlaylistSortableList } from "../components/playlist/PlaylistSortableList";
 import {
   availablePlaylistSortOrders,
@@ -353,11 +353,13 @@ export function PlaylistDetailsPage({
             />
           }
           footer={
-            <PlaylistLoadMore
+            <LoadMoreRow
               hasMore={hasMore}
               loading={loadingMore}
               failed={loadMoreFailed}
               onLoadMore={() => void loadMore()}
+              loadingText={getString("playlist_loading_more")}
+              failedText={getString("playlist_load_more_failed")}
             />
           }
         />

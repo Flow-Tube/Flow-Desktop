@@ -2791,6 +2791,7 @@
   "live_chat_jump_latest": "Jump to latest",
   "watch_load_more_comments": "Load More Comments",
   "watch_loading_more_comments": "Loading more comments...",
+  "comments_load_more_failed": "Couldn't load more comments.",
   "watch_loading_replies": "Loading replies...",
   "watch_show_more_replies": "Show more replies",
   "watch_hide_replies": "Hide replies",

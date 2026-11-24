@@ -18,6 +18,8 @@
   --color-on-surface: var(--color-on-surface-val);
   --color-on-surface-variant: var(--color-on-surface-variant-val);
   --color-error: #F44336;
+  /* The creator's heart on a comment is YouTube's red in every theme, as on Flow for Android. */
+  --color-creator-heart: #FF0000;
 
   /* Profile colours: Flow for Android's eight seeds keep their hue and take the tones of
      ProfileColors.kt (light: container 90, content 10; dark: container 30, content 90). */

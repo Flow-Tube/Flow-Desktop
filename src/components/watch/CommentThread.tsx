@@ -1,8 +1,10 @@
 import { useMemo, type CSSProperties, type ReactNode } from "react";
-import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronUp, Loader2 } from "lucide-react";
 import { CommentItem } from "./CommentItem";
 import { buildCommentReplyTree, commentThreadRows, type CommentThreadLines } from "../../lib/commentThread";
 import { getPlural, getString } from "../../lib/i18n/index";
+import { upgradeAvatarUrl } from "../../lib/thumbnails";
+import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 import type { Comment } from "../../types/video";
 
 // Flow for Android's thread geometry, in CSS pixels. Columns are measured from the comment's own
@@ -98,6 +100,10 @@ interface ReplyThreadProps {
   isUnfolded: (commentId: string) => boolean;
   onUnfold: (commentId: string) => void;
   onLoadMore: () => void;
+  /** The creator's avatar, for the hearts on replies, which come without it. */
+  creatorAvatar: string | null;
+  isTextExpanded: (commentId: string) => boolean;
+  onExpandText: (commentId: string) => void;
 }
 
 /**
@@ -106,7 +112,17 @@ interface ReplyThreadProps {
  * level, so who answered whom comes from the leading `@handle`; the tree is rebuilt whenever another
  * page of replies arrives.
  */
-export function ReplyThread({ replies, hasMore, loadingMore, isUnfolded, onUnfold, onLoadMore }: ReplyThreadProps) {
+export function ReplyThread({
+  replies,
+  hasMore,
+  loadingMore,
+  isUnfolded,
+  onUnfold,
+  onLoadMore,
+  creatorAvatar,
+  isTextExpanded,
+  onExpandText,
+}: ReplyThreadProps) {
   const tree = useMemo(() => buildCommentReplyTree(replies), [replies]);
   const rows = commentThreadRows(tree, hasMore, isUnfolded);
   return (
@@ -120,7 +136,13 @@ export function ReplyThread({ replies, hasMore, loadingMore, isUnfolded, onUnfol
               style={{ paddingInlineStart: threadContentStart(row.lines.column) }}
             >
               <ThreadLines lines={row.lines} />
-              <CommentItem comment={row.comment} reply />
+              <CommentItem
+                comment={row.comment}
+                reply
+                creatorAvatar={creatorAvatar}
+                textExpanded={isTextExpanded(row.comment.id)}
+                onExpandText={() => onExpandText(row.comment.id)}
+              />
             </div>
           );
         }
@@ -140,5 +162,49 @@ export function ReplyThread({ replies, hasMore, loadingMore, isUnfolded, onUnfol
         );
       })}
     </div>
+  );
+}
+
+/** The creator's avatar for a thread's reply hearts: from the heart, the replies button, or a reply of theirs. */
+export function threadCreatorAvatar(comment: Comment, replies: Comment[] | undefined): string | null {
+  return (
+    comment.creatorHeartThumbnail ??
+    comment.creatorReplyThumbnail ??
+    replies?.find((reply) => reply.isCreator)?.authorThumbnail ??
+    null
+  );
+}
+
+interface RepliesToggleProps {
+  count: number;
+  open: boolean;
+  loading: boolean;
+  creatorAvatar: string | null | undefined;
+  creatorName: string | null | undefined;
+  onClick: () => void;
+}
+
+/** "⌄ 12 replies", with the creator's avatar while closed when the creator is among those who answered. */
+export function RepliesToggle({ count, open, loading, creatorAvatar, creatorName, onClick }: RepliesToggleProps) {
+  const avatar = useProxiedImageUrl(upgradeAvatarUrl(creatorAvatar, 48));
+  const Chevron = open ? ChevronUp : ChevronDown;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="-ms-2 mt-1 flex h-8 items-center gap-1.5 rounded-full px-2 text-xs font-semibold text-primary transition-colors duration-200 ease-out hover:bg-surface-container-high"
+    >
+      <Chevron size={16} />
+      {!open && avatar && (
+        <img
+          src={avatar}
+          alt={creatorName ? getString("comments_creator_replied", creatorName) : getString("comments_creator_replied_unnamed")}
+          loading="lazy"
+          className="h-[18px] w-[18px] rounded-full object-cover"
+        />
+      )}
+      <span>{open ? getString("watch_hide_replies") : getPlural("comments_view_replies", count)}</span>
+      {loading && <Loader2 className="animate-spin" size={12} />}
+    </button>
   );
 }

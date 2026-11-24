@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { Heart, Pin, ThumbsUp } from "lucide-react";
 import { ChannelLabel } from "../video/CardMeta";
@@ -10,8 +10,6 @@ import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 import type { Comment } from "../../types/video";
 import { isRtlText } from "../../lib/direction";
 
-const PREVIEW_LENGTH = 280;
-
 /** Comment avatars arrive from YouTube at 88px; every other avatar in the app is
  * upgraded and proxied the same way, so they match instead of looking soft. */
 function CommentAvatar({ src, author }: { src: string | null | undefined; author: string | null | undefined }) {
@@ -20,41 +18,97 @@ function CommentAvatar({ src, author }: { src: string | null | undefined; author
   return <img src={imageSrc} className="h-full w-full object-cover" alt="" loading="lazy" />;
 }
 
-/** A long comment shows its first lines with plain links until it is expanded. */
-function CommentText({ comment, className }: { comment: Comment; className: string }) {
-  const [expanded, setExpanded] = useState(false);
+/**
+ * The comment's text, clamped at four lines until it is read in full. "Read more" shows only when
+ * the text really runs past them, and a click on its plain text opens it too; links keep working
+ * while it is clamped.
+ */
+function CommentText({
+  comment,
+  className,
+  expanded,
+  onExpand,
+}: {
+  comment: Comment;
+  className: string;
+  expanded: boolean;
+  onExpand: () => void;
+}) {
+  const textRef = useRef<HTMLDivElement>(null);
+  const [overflowing, setOverflowing] = useState(false);
+  useLayoutEffect(() => {
+    const element = textRef.current;
+    if (!element || expanded) return;
+    const measure = () => setOverflowing(element.scrollHeight > element.clientHeight + 1);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [expanded, comment.text]);
+
   const text = comment.text;
   if (!text) return null;
-  const long = text.length > PREVIEW_LENGTH;
+  const clamped = !expanded && overflowing;
   return (
-    // From the text itself: dir="auto" would skip the text, which sets its own direction, and read
-    // the Read more button's language instead.
-    <div dir={isRtlText(text) ? "rtl" : "ltr"} className={className}>
-      {long && !expanded ? (
-        <LinkedText text={`${text.slice(0, PREVIEW_LENGTH)}...`} />
-      ) : (
+    <>
+      <div
+        ref={textRef}
+        // From the text itself: dir="auto" would skip the text, which sets its own direction.
+        dir={isRtlText(text) ? "rtl" : "ltr"}
+        className={`${className} ${expanded ? "" : "line-clamp-4"} ${clamped ? "cursor-pointer" : ""}`}
+        onClick={clamped ? onExpand : undefined}
+      >
         <LinkedText text={text} rich={comment.richText} />
-      )}
-      {long && (
+      </div>
+      {clamped && (
         <button
-          onClick={(event) => {
-            event.stopPropagation();
-            setExpanded((value) => !value);
-          }}
-          className="ms-1 cursor-pointer font-semibold text-primary hover:underline focus:outline-none"
+          type="button"
+          onClick={onExpand}
+          className="mt-1 text-xs font-semibold text-chrome-neutral-400 transition-colors hover:text-chrome-neutral-100"
         >
-          {expanded ? getString("watch_read_less") : getString("watch_read_more")}
+          {getString("watch_read_more")}
         </button>
       )}
-    </div>
+    </>
   );
+}
+
+/**
+ * The creator's heart: their avatar with a red heart on its corner, or the heart alone when no
+ * avatar is known.
+ */
+function CreatorHeart({ avatar, label }: { avatar: string | null | undefined; label: string }) {
+  const src = useProxiedImageUrl(upgradeAvatarUrl(avatar, 48));
+  if (!src) {
+    return (
+      <span title={label} aria-label={label} className="inline-flex">
+        <Heart size={13} className="fill-creator-heart text-creator-heart" />
+      </span>
+    );
+  }
+  return (
+    <span title={label} aria-label={label} className="relative inline-flex h-[18px] w-[18px] shrink-0">
+      <img src={src} alt="" loading="lazy" className="h-full w-full rounded-full object-cover" />
+      <Heart size={10} className="absolute -bottom-0.5 -end-1 fill-creator-heart text-creator-heart" />
+    </span>
+  );
+}
+
+interface CommentItemProps {
+  comment: Comment;
+  reply?: boolean;
+  /** The creator's avatar for a heart that came without one, as replies' hearts do. */
+  creatorAvatar?: string | null;
+  textExpanded: boolean;
+  onExpandText: () => void;
+  children?: ReactNode;
 }
 
 /**
  * One comment or reply: author line with its badges, text, likes and the creator's heart.
  * `children` sit under the likes, in the text column.
  */
-export function CommentItem({ comment, reply = false, children }: { comment: Comment; reply?: boolean; children?: ReactNode }) {
+export function CommentItem({ comment, reply = false, creatorAvatar, textExpanded, onExpandText, children }: CommentItemProps) {
   const navigate = useNavigate();
   const openAuthor = () => comment.authorChannelId && navigate(`/channel/${comment.authorChannelId}`);
   const likes = comment.likeCountText || (comment.likeCount ? formatCount(comment.likeCount) : null);
@@ -93,6 +147,8 @@ export function CommentItem({ comment, reply = false, children }: { comment: Com
         <CommentText
           comment={comment}
           className={`mt-1 select-text text-chrome-neutral-200 ${reply ? "font-normal" : "text-sm"}`}
+          expanded={textExpanded}
+          onExpand={onExpandText}
         />
         {(likes || comment.isHearted) && (
           <div className={`mt-2 flex items-center gap-3 text-chrome-neutral-400 ${reply ? "text-[10px]" : "text-xs"}`}>
@@ -102,9 +158,10 @@ export function CommentItem({ comment, reply = false, children }: { comment: Com
               </span>
             )}
             {comment.isHearted && (
-              <span title={comment.heartedByText ?? undefined} aria-label={comment.heartedByText ?? getString("comment_hearted")}>
-                <Heart size={reply ? 11 : 13} className="fill-primary text-primary" />
-              </span>
+              <CreatorHeart
+                avatar={comment.creatorHeartThumbnail ?? creatorAvatar}
+                label={comment.heartedByText ?? getString("comment_hearted")}
+              />
             )}
           </div>
         )}

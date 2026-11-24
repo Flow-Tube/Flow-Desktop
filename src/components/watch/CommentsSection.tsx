@@ -5,7 +5,7 @@ import { Chip } from "../ui/Chip";
 import { LoadMoreRow } from "../ui/LoadMoreRow";
 import { ToggleSwitch } from "../ui/ToggleSwitch";
 import { CommentItem } from "./CommentItem";
-import { ReplyThread, ThreadStem, threadContentStart } from "./CommentThread";
+import { RepliesToggle, ReplyThread, ThreadStem, threadContentStart, threadCreatorAvatar } from "./CommentThread";
 import { useVideoComments } from "../../lib/useVideoComments";
 import { useTimedComments } from "../../lib/useTimedComments";
 import { useTimedFollow } from "../../lib/useTimedFollow";
@@ -140,19 +140,24 @@ export function CommentsSection({
               >
                 <div className="relative">
                   {thread.expanded[c.id] && Boolean(thread.replies[c.id]?.length) && <ThreadStem />}
-                  <CommentItem comment={c}>
-                    {(c.continuationToken || (c.replyCount != null && c.replyCount > 0)) && (
-                      <button
+                  <CommentItem
+                    comment={c}
+                    textExpanded={Boolean(thread.textExpanded[c.id])}
+                    onExpandText={() => thread.toggleFlag("textExpanded", c.id)}
+                  >
+                    {/* YouTube's Timed list gives no way to load a comment's replies, so nothing to open. */}
+                    {(c.replyCount ?? 0) > 0 && (c.continuationToken || thread.replies[c.id]?.length) && (
+                      <RepliesToggle
+                        count={c.replyCount ?? 0}
+                        open={Boolean(thread.expanded[c.id])}
+                        loading={Boolean(thread.repliesLoading[c.id]) && !thread.replies[c.id]?.length}
+                        creatorAvatar={c.creatorReplyThumbnail}
+                        creatorName={c.creatorReplyName}
                         onClick={() => {
                           if (!thread.expanded[c.id]) pauseForReplies();
                           void thread.toggleReplies(c.id, c.continuationToken);
                         }}
-                        className="mt-2 flex items-center gap-1 border-none bg-transparent p-0 text-xs font-semibold text-primary hover:underline"
-                      >
-                        {thread.expanded[c.id]
-                          ? getString("watch_hide_replies")
-                          : getString("watch_show_replies", c.replyCount ?? "")}
-                      </button>
+                      />
                     )}
                   </CommentItem>
                 </div>
@@ -169,6 +174,9 @@ export function CommentsSection({
                         const token = thread.repliesNextToken[c.id];
                         if (token) void thread.loadReplies(c.id, token);
                       }}
+                      creatorAvatar={threadCreatorAvatar(c, thread.replies[c.id])}
+                      isTextExpanded={(id) => Boolean(thread.textExpanded[id])}
+                      onExpandText={(id) => thread.toggleFlag("textExpanded", id)}
                     />
                   ) : (
                     thread.repliesLoading[c.id] && (

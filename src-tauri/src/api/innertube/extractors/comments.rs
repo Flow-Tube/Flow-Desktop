@@ -13,7 +13,7 @@ use crate::api::innertube::json::thumbnail::{
     normalize_youtube_image_url, thumbnail_url_from_array,
 };
 use crate::errors::{AppError, AppResult};
-use crate::models::comment::{Comment, CommentSort, CommentsResponse};
+use crate::models::comment::{Comment, CommentImage, CommentSort, CommentsResponse};
 
 /// What a thread renders with when its comment is pinned to the top.
 const PINNED_PRIORITY: &str = "RENDERING_PRIORITY_PINNED_COMMENT";
@@ -384,6 +384,7 @@ fn collect_comments_from_value(
 /// A comment in the older `commentRenderer` shape.
 fn legacy_comment(renderer: &Value, replies_renderer: Option<&Value>) -> Option<Comment> {
     let id = renderer["commentId"].as_str().filter(|id| !id.is_empty())?;
+    let (creator_reply_thumbnail, creator_reply_name) = creator_reply(replies_renderer);
     Some(Comment {
         id: id.to_string(),
         author: text_of(&renderer["authorText"]).unwrap_or_else(|| "Anonymous".to_string()),
@@ -401,8 +402,37 @@ fn legacy_comment(renderer: &Value, replies_renderer: Option<&Value>) -> Option<
         continuation_token: comment_reply_token(replies_renderer),
         is_pinned: renderer.get("pinnedCommentBadge").is_some(),
         is_verified: renderer.get("authorCommentBadge").is_some(),
+        creator_reply_thumbnail,
+        creator_reply_name,
+        image: comment_image(&renderer["imageAttachmentViewModel"]),
         ..Default::default()
     })
+}
+
+/// The avatar and channel name on the replies button of a thread the creator
+/// answered.
+fn creator_reply(replies_renderer: Option<&Value>) -> (Option<String>, Option<String>) {
+    let Some(thumbnail) = replies_renderer.map(|renderer| &renderer["viewRepliesCreatorThumbnail"])
+    else {
+        return (None, None);
+    };
+    let Some(url) = thumbnail_url_from_array(&thumbnail["thumbnails"]) else {
+        return (None, None);
+    };
+    let name = thumbnail["accessibility"]["accessibilityData"]["label"]
+        .as_str()
+        .filter(|label| !label.trim().is_empty())
+        .map(ToOwned::to_owned);
+    (Some(url), name)
+}
+
+/// The GIF or picture YouTube shows under a comment's text, with its size.
+fn comment_image(attachment: &Value) -> Option<CommentImage> {
+    let view_model = &attachment["commentImageAttachmentViewModel"];
+    let url = thumbnail_url_from_array(&view_model["image"]["sources"])?;
+    let width = u32::try_from(view_model["width"].as_u64()?).ok()?;
+    let height = u32::try_from(view_model["height"].as_u64()?).ok()?;
+    (width > 0 && height > 0).then_some(CommentImage { url, width, height })
 }
 
 fn build_comment_mutation_map(value: &Value) -> HashMap<String, Value> {
@@ -489,6 +519,13 @@ fn build_comment_from_view_model(
     let pinned_text =
         text_of(&view_model["pinnedText"]).or_else(|| text_of(&properties["pinnedText"]));
     let flag = |key: &str| author[key].as_bool().unwrap_or(false);
+    let (creator_reply_thumbnail, creator_reply_name) = creator_reply(replies_renderer);
+    let image = view_model["commentSurfaceKey"]
+        .as_str()
+        .and_then(|key| mutation_payloads.get(key))
+        .and_then(|payload| {
+            comment_image(&payload["commentSurfaceEntityPayload"]["imageAttachmentViewModel"])
+        });
 
     Some(Comment {
         id,
@@ -507,8 +544,9 @@ fn build_comment_from_view_model(
             .map(ToOwned::to_owned),
         reply_count,
         continuation_token,
-        rich_text: rich_text(&properties["content"], own_video_id)
-            .filter(|rich| !rich.spans.is_empty() || !rich.emojis.is_empty()),
+        rich_text: rich_text(&properties["content"], own_video_id).filter(|rich| {
+            !rich.spans.is_empty() || !rich.emojis.is_empty() || !rich.styles.is_empty()
+        }),
         is_pinned: pinned || pinned_text.is_some(),
         pinned_text,
         is_hearted: toolbar_state.is_some_and(|state| state["heartState"] == HEARTED),
@@ -518,6 +556,13 @@ fn build_comment_from_view_model(
         is_verified: flag("isVerified"),
         is_creator: flag("isCreator"),
         is_artist: flag("isArtist"),
+        creator_heart_thumbnail: toolbar["creatorThumbnailUrl"]
+            .as_str()
+            .filter(|url| !url.trim().is_empty())
+            .map(normalize_youtube_image_url),
+        creator_reply_thumbnail,
+        creator_reply_name,
+        image,
     })
 }
 
@@ -668,7 +713,7 @@ impl InnertubeClient {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_comment_from_view_model, parse_comments_json};
+    use super::{build_comment_from_view_model, comment_image, parse_comments_json};
     use std::collections::HashMap;
 
     fn view_model() -> serde_json::Value {
@@ -801,6 +846,65 @@ mod tests {
         assert_eq!(parsed.sort_options.len(), 2);
         assert_eq!(parsed.sort_options[1].token, "NEW");
         assert!(parsed.sort_options[0].selected);
+    }
+
+    #[test]
+    fn reads_the_creator_avatars_the_gif_and_style_only_text() {
+        let view_model = serde_json::json!({
+            "commentKey": "key-1", "toolbarStateKey": "toolbar-1", "commentSurfaceKey": "surface-1"
+        });
+        let mut mutations = payloads(serde_json::json!({
+            "properties": { "commentId": "c4", "content": {
+                "content": "loud", "styleRuns": [{ "startIndex": 0, "length": 4, "weightLabel": "FONT_WEIGHT_BOLD" }]
+            } },
+            "author": { "displayName": "@fan" },
+            "toolbar": { "creatorThumbnailUrl": "//yt3.ggpht.com/creator=s48-c-k-c0x00ffffff-no-rj" }
+        }));
+        mutations.insert(
+            "surface-1".to_string(),
+            serde_json::json!({ "commentSurfaceEntityPayload": { "imageAttachmentViewModel": {
+                "commentImageAttachmentViewModel": {
+                    "image": { "sources": [{ "url": "https://yt3.ggpht.com/gif", "width": 220, "height": 124 }] },
+                    "width": 220, "height": 124
+                }
+            } } }),
+        );
+        let replies = serde_json::json!({ "viewRepliesCreatorThumbnail": {
+            "thumbnails": [{ "url": "https://yt3.ggpht.com/creator=s88-c-k-c0x00ffffff-no-rj", "width": 88, "height": 88 }],
+            "accessibility": { "accessibilityData": { "label": "Ridgeline Audio" } }
+        } });
+        let comment =
+            build_comment_from_view_model(&view_model, Some(&replies), &mutations, None, false)
+                .expect("comment");
+        assert!(
+            comment
+                .creator_heart_thumbnail
+                .as_deref()
+                .is_some_and(|url| url.starts_with("https://yt3.ggpht.com/creator"))
+        );
+        assert!(comment.creator_reply_thumbnail.is_some());
+        assert_eq!(
+            comment.creator_reply_name.as_deref(),
+            Some("Ridgeline Audio")
+        );
+        let image = comment.image.expect("gif");
+        assert_eq!((image.width, image.height), (220, 124));
+        assert_eq!(
+            comment
+                .rich_text
+                .expect("styles keep the rich text")
+                .styles
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn a_gif_without_a_size_is_dropped() {
+        let attachment = serde_json::json!({ "commentImageAttachmentViewModel": {
+            "image": { "sources": [{ "url": "https://yt3.ggpht.com/gif" }] }, "width": 0, "height": 124
+        } });
+        assert!(comment_image(&attachment).is_none());
     }
 
     #[test]

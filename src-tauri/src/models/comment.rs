@@ -37,6 +37,27 @@ pub struct Comment {
     pub is_creator: bool,
     #[serde(default)]
     pub is_artist: bool,
+    /// The creator's avatar on the heart they left.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub creator_heart_thumbnail: Option<String>,
+    /// The creator's avatar on the replies of a thread they answered.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub creator_reply_thumbnail: Option<String>,
+    /// The creator's channel name that goes with that avatar.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub creator_reply_name: Option<String>,
+    /// A GIF or picture shown under the text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image: Option<CommentImage>,
+}
+
+/// A picture attached to a comment, with the size YouTube draws it at.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommentImage {
+    pub url: String,
+    pub width: u32,
+    pub height: u32,
 }
 
 /// One way to order the comments, and the token that loads them that way.

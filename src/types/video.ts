@@ -102,11 +102,21 @@ export interface RichEmoji {
   label: string;
 }
 
-/** Text with its links and the custom emoji drawn over it. */
+/** A stretch of the text drawn in a different face. */
+export interface RichStyle {
+  start: number;
+  length: number;
+  bold: boolean;
+  italic: boolean;
+  strikethrough: boolean;
+}
+
+/** Text with its links, the custom emoji drawn over it and its bold, italic and struck-through stretches. */
 export interface RichText {
   text: string;
   spans: RichSpan[];
   emojis: RichEmoji[];
+  styles?: RichStyle[];
 }
 
 export interface DescriptionExtras {
@@ -597,6 +607,12 @@ export interface PlaylistDetailsResponse {
   nextPageToken?: string | null;
 }
 
+export interface CommentImage {
+  url: string;
+  width: number;
+  height: number;
+}
+
 export interface Comment {
   id: string;
   author: string;
@@ -620,6 +636,13 @@ export interface Comment {
   /** The comment is by the video's own channel. */
   isCreator?: boolean;
   isArtist?: boolean;
+  /** The creator's avatar on the heart they left. */
+  creatorHeartThumbnail?: string | null;
+  /** The creator's avatar on the replies of a thread they answered, and their channel name. */
+  creatorReplyThumbnail?: string | null;
+  creatorReplyName?: string | null;
+  /** A GIF or picture shown under the text, with the size YouTube draws it at. */
+  image?: CommentImage | null;
 }
 
 /** One way to order the comments, and the token that loads them that way. */

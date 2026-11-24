@@ -22,9 +22,10 @@ use super::keys::MemberSecrets;
 use super::lan::lan_tag;
 use super::lan_link::{IDLE, LiveSink};
 use super::lan_peers::{
-    addresses, keep_only, listen, load_addresses, met, nearby, note, save_addresses, unreached,
+    addresses, keep_only, listen, load_addresses, met, nearby, note, reach_now, reach_wanted,
+    save_addresses, unreached,
 };
-use super::lan_sync::{meet, meet_as, serve};
+use super::lan_sync::{deliver_removal, meet, meet_as, serve};
 use super::live_hub::{announce, changed, forget_keys, receive, subscribe};
 use super::roster::Role;
 use super::sealed::random_bytes;
@@ -37,8 +38,9 @@ const CHECK_EVERY: Duration = Duration::from_mins(1);
 const MEET_EVERY_MS: i64 = 5 * 60 * 1000;
 /// How often a member not met lately is dialed at the address kept for it.
 const DIAL_EVERY_MS: i64 = 60 * 1000;
-/// How long a device that leaves a LAN group spends passing its `leave` on.
-const LEAVE_WITHIN: Duration = Duration::from_secs(10);
+/// How long a device that leaves a LAN group spends passing its `leave` on, and one that removes
+/// devices spends bringing them their removal.
+const PASS_ON_WITHIN: Duration = Duration::from_secs(10);
 /// Members dialed at once in a round, so one that stays silent doesn't hold up the others.
 const DIALS_AT_ONCE: usize = 8;
 
@@ -179,6 +181,21 @@ fn start_round(rounds: &mut JoinSet<()>, app: &AppHandle, local: &Local, port: u
     });
 }
 
+/// The group's [`meeting`], after forgetting the devices no longer in it.
+async fn meeting_members(app: &AppHandle, local: &Local) -> Option<Meeting> {
+    let meeting = meeting(local).await;
+    if let Ok(meeting) = &meeting {
+        keep_only(
+            app,
+            &meeting
+                .as_ref()
+                .map(|m| m.members.clone())
+                .unwrap_or_default(),
+        );
+    }
+    meeting.unwrap_or(None)
+}
+
 /// Members found over mDNS under one of `tags` and due, every few minutes.
 fn due_found(found: &mut BTreeMap<String, Found>, tags: &[String; 3]) -> Vec<(Vec<String>, u16)> {
     let now = now_ms();
@@ -234,7 +251,33 @@ pub async fn spread_leave<T: Store>(app: &AppHandle, session: &Session<'_, T>, l
         // A member's session closes once it stopped asking, which includes pulling the entry.
         tokio::time::sleep(IDLE).await;
     };
-    let _ = tokio::time::timeout(LEAVE_WITHIN, spread).await;
+    let _ = tokio::time::timeout(PASS_ON_WITHIN, spread).await;
+}
+
+/// After a removal: brings the removed devices, at `targets` ([`removal_targets`]), the roster
+/// that removes them, so one that is reachable stops now instead of on its next dial, and meets
+/// the members left straight away so they pull it (spec/live.md, LAN groups, Removing). Returns
+/// at once; the deliveries run in the background for at most 10 seconds.
+///
+/// [`removal_targets`]: super::lan_peers::removal_targets
+pub fn notice_removal(app: &AppHandle, local: &Local, targets: Vec<(String, u16)>) {
+    reach_now(app);
+    if targets.is_empty() {
+        return;
+    }
+    let local = local.clone();
+    tauri::async_runtime::spawn(async move {
+        let deliveries = targets.iter().map(|(address, port)| async {
+            match deliver_removal(&local.pool, &local.device, (address, *port)).await {
+                Ok(()) => tracing::info!(target: "flow::sync2", "LAN removal delivered"),
+                Err(error) => {
+                    tracing::debug!(target: "flow::sync2", kind = error.kind(), "LAN removal not delivered");
+                }
+            }
+        });
+        let _ =
+            tokio::time::timeout(PASS_ON_WITHIN, futures_util::future::join_all(deliveries)).await;
+    });
 }
 
 /// Hands live envelopes that arrive in LAN sessions to the live channel.
@@ -434,6 +477,11 @@ async fn run(app: &AppHandle, daemon: Option<&ServiceDaemon>) -> Result<()> {
                 }
                 event
             }
+            // Like a network change: every member is due again, once.
+            () = reach_wanted(app) => {
+                (tried, network_changed_at) = (BTreeMap::new(), now_ms());
+                None
+            }
             change = next_event(network.as_ref()) => match change {
                 Some(DaemonEvent::IpAdd(IpAddr::V4(_))) => {
                     tracing::info!(target: "flow::sync2", "network changed; meeting LAN members again");
@@ -447,17 +495,7 @@ async fn run(app: &AppHandle, daemon: Option<&ServiceDaemon>) -> Result<()> {
                 }
             },
         };
-        let meeting = meeting(&local).await;
-        if let Ok(meeting) = &meeting {
-            keep_only(
-                app,
-                &meeting
-                    .as_ref()
-                    .map(|m| m.members.clone())
-                    .unwrap_or_default(),
-            );
-        }
-        let meeting = meeting.unwrap_or(None);
+        let meeting = meeting_members(app, &local).await;
         if let Some(daemon) = daemon {
             let tag = meeting.as_ref().map(|m| m.tags[1].clone());
             advertise(daemon, &instance, port, &mut advertised, tag);

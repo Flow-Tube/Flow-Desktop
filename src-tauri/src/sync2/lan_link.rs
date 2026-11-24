@@ -250,13 +250,16 @@ fn did_bytes(did: &str) -> Result<[u8; 16]> {
 }
 
 /// The connecting side: says hello under `epoch`, whose key is `epoch_key`, with the port it listens
-/// on, and checks the advertiser. [`EngineError::LanUnreachable`] when the advertiser didn't answer.
+/// on, and checks the advertiser has the `standing` it dialed for: a current device, or one this
+/// device removed and is bringing its removal. [`EngineError::LanUnreachable`] when the advertiser
+/// didn't answer.
 pub async fn hello_as_client<S, T>(
     mut socket: WsChannel<S>,
     session: &Session<'_, T>,
     device: &MemberSecrets,
     (epoch, epoch_key): (u32, &[u8]),
     listening: Option<u16>,
+    standing: Standing,
 ) -> Result<(Framed<S>, String)>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send,
@@ -294,11 +297,13 @@ where
         &client,
         &server,
     );
-    if !verify(
-        &device_key(session, &peer)?,
-        &signed,
-        &field::<64>(&reply, "sig")?,
-    ) {
+    let peer_key = match standing {
+        Standing::Member => device_key(session, &peer)?,
+        Standing::Removed => {
+            removed_device_key(session, &peer, epoch).ok_or(EngineError::Unexpected)?
+        }
+    };
+    if !verify(&peer_key, &signed, &field::<64>(&reply, "sig")?) {
         return Err(Error::Signature.into());
     }
 

@@ -9,6 +9,8 @@ use std::sync::atomic::{AtomicU16, Ordering};
 use sqlx::SqlitePool;
 use tauri::{AppHandle, Manager};
 use tokio::net::TcpListener;
+use tokio::sync::Notify;
+use tokio::sync::futures::Notified;
 
 use super::auto_sync::SyncTrigger;
 use super::engine::now_ms;
@@ -39,6 +41,7 @@ pub fn service_port() -> Option<u16> {
 pub struct LanPeers {
     seen: Mutex<BTreeMap<String, i64>>,
     addresses: Mutex<Addresses>,
+    reach: Notify,
 }
 
 fn peers(app: &AppHandle) -> &LanPeers {
@@ -100,6 +103,28 @@ pub fn unreached(app: &AppHandle, did: &str) {
     if let Ok(mut seen) = peers(app).seen.lock() {
         seen.remove(did);
     }
+}
+
+/// Asks the LAN service to dial every member it kept an address for now, past the once-a-minute
+/// limit, as after a removal so they pull it straight away.
+pub fn reach_now(app: &AppHandle) {
+    peers(app).reach.notify_one();
+}
+
+/// Completes once [`reach_now`] was asked for.
+pub fn reach_wanted(app: &AppHandle) -> Notified<'_> {
+    peers(app).reach.notified()
+}
+
+/// Where the `removed` devices were reached last, each address once. Read before the removal,
+/// which makes this device forget them.
+pub fn removal_targets(addresses: &Addresses, removed: &[String]) -> Vec<(String, u16)> {
+    let targets: BTreeSet<_> = addresses
+        .iter()
+        .filter(|(did, _)| removed.contains(did))
+        .map(|(_, address)| address.clone())
+        .collect();
+    targets.into_iter().collect()
 }
 
 /// Forgets everything about devices that are no longer `members`, as after a leave or a removal.
@@ -172,8 +197,25 @@ pub async fn listen(pool: &SqlitePool) -> std::io::Result<TcpListener> {
 
 #[cfg(test)]
 mod tests {
-    use super::bind_first_free;
+    use super::{Addresses, bind_first_free, removal_targets};
     use tokio::net::TcpListener;
+
+    #[test]
+    fn only_the_removed_devices_are_dialed_each_address_once() {
+        let at = |host: &str| (host.to_owned(), 47900);
+        let addresses = Addresses::from([
+            ("removed".to_owned(), at("192.168.1.14")),
+            ("kept".to_owned(), at("192.168.1.15")),
+            ("removed-too".to_owned(), at("192.168.1.16")),
+            ("removed-again".to_owned(), at("192.168.1.16")),
+        ]);
+        let removed = ["removed", "removed-too", "removed-again", "unknown"].map(str::to_owned);
+
+        assert_eq!(
+            removal_targets(&addresses, &removed),
+            [at("192.168.1.14"), at("192.168.1.16")]
+        );
+    }
 
     #[tokio::test]
     async fn skips_ports_that_are_taken() {

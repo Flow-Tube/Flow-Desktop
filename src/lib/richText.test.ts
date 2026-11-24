@@ -47,3 +47,25 @@ describe("richSegments", () => {
     expect(segments.map((segment) => segment.text)).toEqual(["abcd", "ef"]);
   });
 });
+
+describe("richSegments with styles", () => {
+  it("cuts text and links where a style starts or ends", () => {
+    const segments = richSegments({
+      text: "so bold and a link here",
+      spans: [{ start: 14, length: 4, target: { kind: "url", url: "https://a.b" } }],
+      emojis: [],
+      styles: [
+        { start: 3, length: 4, bold: true, italic: false, strikethrough: false },
+        { start: 16, length: 7, bold: false, italic: true, strikethrough: false },
+      ],
+    });
+    expect(segments.map((s) => [s.text, s.target?.kind ?? null, s.style ?? null])).toEqual([
+      ["so ", null, null],
+      ["bold", null, { bold: true, italic: false, strikethrough: false }],
+      [" and a ", null, null],
+      ["li", "url", null],
+      ["nk", "url", { bold: false, italic: true, strikethrough: false }],
+      [" here", null, { bold: false, italic: true, strikethrough: false }],
+    ]);
+  });
+});

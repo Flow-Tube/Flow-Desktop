@@ -1,4 +1,4 @@
-import { richSegments } from "../../lib/richText";
+import { richSegments, type RichSegment } from "../../lib/richText";
 import type { RichTarget, RichText as RichTextValue } from "../../types/video";
 
 export interface RichTextProps {
@@ -10,7 +10,14 @@ export interface RichTextProps {
   className?: string;
 }
 
-/** Text with its links and custom emoji. Line breaks in the text are kept. */
+function styleClass(style: RichSegment["style"]): string {
+  if (!style) return "";
+  return [style.bold && "font-semibold", style.italic && "italic", style.strikethrough && "line-through"]
+    .filter(Boolean)
+    .join(" ");
+}
+
+/** Text with its links, custom emoji and bold, italic or struck-through stretches. Line breaks are kept. */
 export function RichText({ value, onActivate, imageSrc, className }: RichTextProps) {
   return (
     <span dir="auto" className={`whitespace-pre-wrap break-words ${className ?? ""}`}>
@@ -36,13 +43,14 @@ export function RichText({ value, onActivate, imageSrc, className }: RichTextPro
                 event.stopPropagation();
                 onActivate(target);
               }}
-              className="inline cursor-pointer break-all text-start font-medium text-primary hover:underline"
+              className={`inline cursor-pointer break-all text-start font-medium text-primary hover:underline ${styleClass(segment.style)}`}
             >
               {segment.text}
             </button>
           );
         }
-        return <span key={index}>{segment.text}</span>;
+        const style = styleClass(segment.style);
+        return style ? <span key={index} className={style}>{segment.text}</span> : <span key={index}>{segment.text}</span>;
       })}
     </span>
   );

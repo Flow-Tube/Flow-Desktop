@@ -1,9 +1,11 @@
-import type { RichEmoji, RichTarget, RichText } from "../types/video";
+import type { RichEmoji, RichStyle, RichTarget, RichText } from "../types/video";
 
 export interface RichSegment {
   text: string;
   target?: RichTarget;
   emoji?: RichEmoji;
+  /** Bold, italic or struck through, when a style run covers the piece. */
+  style?: Pick<RichStyle, "bold" | "italic" | "strikethrough">;
 }
 
 // Each pattern's first group is what may precede the match and the second the match itself.
@@ -58,5 +60,40 @@ export function richSegments(rich: RichText): RichSegment[] {
     cursor = mark.end;
   }
   if (cursor < rich.text.length) segments.push({ text: rich.text.slice(cursor) });
-  return segments;
+  return rich.styles?.length ? splitAtStyles(segments, rich.styles) : segments;
+}
+
+/** Cuts text and link pieces where a style run starts or ends; an emoji stays whole. */
+function splitAtStyles(segments: RichSegment[], styles: RichStyle[]): RichSegment[] {
+  const pieces: RichSegment[] = [];
+  let offset = 0;
+  for (const segment of segments) {
+    const start = offset;
+    const end = offset + segment.text.length;
+    offset = end;
+    if (segment.emoji) {
+      pieces.push(segment);
+      continue;
+    }
+    const edges = new Set([start, end]);
+    for (const style of styles) {
+      for (const edge of [style.start, style.start + style.length]) if (edge > start && edge < end) edges.add(edge);
+    }
+    const points = [...edges].sort((a, b) => a - b);
+    for (let index = 0; index < points.length - 1; index++) {
+      const from = points[index]!;
+      const to = points[index + 1]!;
+      const covering = styles.filter((style) => style.start <= from && style.start + style.length >= to);
+      const piece: RichSegment = { ...segment, text: segment.text.slice(from - start, to - start) };
+      if (covering.length) {
+        piece.style = {
+          bold: covering.some((style) => style.bold),
+          italic: covering.some((style) => style.italic),
+          strikethrough: covering.some((style) => style.strikethrough),
+        };
+      }
+      pieces.push(piece);
+    }
+  }
+  return pieces;
 }

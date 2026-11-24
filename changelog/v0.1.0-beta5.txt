@@ -73,6 +73,8 @@ COMMENTS
 - The watch page and the fullscreen comments panel now share one list, so comments load once and threads you opened stay open after the panel closes.
 - Replies are now drawn as the conversation they are. YouTube sends them as one flat list, so Flow reads the @name a reply starts with and puts it under the earlier reply it answers, with lines from each avatar, as Flow for Android does.
 - Threads indent up to three steps; replies deeper than two levels fold behind "N replies" until you open them. Right-to-left languages get the same lines mirrored.
+- The creator's heart on a comment now shows the creator's avatar with a red heart on it, and a thread the creator answered shows their avatar next to its reply count.
+- Bold, italic and struck-through text in comments keeps its style. Long comments stop at four lines with Read more, and keep their links and custom emoji while shortened.
 - More comments load as you scroll to the end of the list, with Retry if a page fails. Timed keeps its Load more button.
 
 MUSIC

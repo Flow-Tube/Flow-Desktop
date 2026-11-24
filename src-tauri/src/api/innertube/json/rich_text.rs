@@ -1,11 +1,11 @@
-//! Attributed text (`content` plus `commandRuns` and `attachmentRuns`), as
-//! descriptions and comments carry it, read into [`RichText`]. Ported from Flow
-//! for Android's `toRichText`.
+//! Attributed text (`content` plus `commandRuns`, `attachmentRuns` and
+//! `styleRuns`), as descriptions and comments carry it, read into [`RichText`].
+//! Ported from Flow for Android's `toRichText`.
 
 use serde_json::Value;
 
 use crate::api::innertube::json::thumbnail::largest_url;
-use crate::models::rich_text::{RichEmoji, RichSpan, RichTarget, RichText};
+use crate::models::rich_text::{RichEmoji, RichSpan, RichStyle, RichTarget, RichText};
 
 /// `attributed`'s text and spans. `own_video_id` tells a timestamp in this
 /// video from a link to another one.
@@ -60,11 +60,62 @@ pub fn rich_text(attributed: &Value, own_video_id: Option<&str>) -> Option<RichT
             })
         })
         .collect();
+    let styles = attributed["styleRuns"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|run| style(run, units))
+        .collect();
     Some(RichText {
         text: text.to_string(),
         spans,
         emojis,
+        styles,
     })
+}
+
+const HEAVY_WEIGHTS: [&str; 5] = [
+    "FONT_WEIGHT_MEDIUM",
+    "FONT_WEIGHT_SEMIBOLD",
+    "FONT_WEIGHT_BOLD",
+    "FONT_WEIGHT_EXTRA_BOLD",
+    "FONT_WEIGHT_BLACK",
+];
+
+/// A run with no range covers the whole text. Every link also carries a run at
+/// `FONT_WEIGHT_NORMAL`, so only runs that change the face are kept.
+fn style(run: &Value, units: usize) -> Option<RichStyle> {
+    let start = run["startIndex"]
+        .as_u64()
+        .map_or(Some(0), |start| usize::try_from(start).ok())?;
+    let length = match run["length"].as_u64() {
+        Some(length) => usize::try_from(length).ok()?,
+        None => units.checked_sub(start)?,
+    };
+    if length == 0 || start.checked_add(length)? > units {
+        return None;
+    }
+    let bold = run["weightLabel"]
+        .as_str()
+        .is_some_and(|weight| HEAVY_WEIGHTS.contains(&weight));
+    let italic = is_on(&run["italic"]);
+    let strikethrough = is_on(&run["strikethrough"]);
+    (bold || italic || strikethrough).then_some(RichStyle {
+        start,
+        length,
+        bold,
+        italic,
+        strikethrough,
+    })
+}
+
+/// `true`, or a line style other than none: strike-through arrives as
+/// `LINE_STYLE_SINGLE`.
+fn is_on(value: &Value) -> bool {
+    value.as_bool().unwrap_or(false)
+        || value.as_str().is_some_and(|line| {
+            line == "true" || (line.starts_with("LINE_STYLE_") && line != "LINE_STYLE_NONE")
+        })
 }
 
 fn run_range(run: &Value) -> Option<(usize, usize)> {
@@ -221,5 +272,44 @@ mod tests {
             "https://example.com"
         );
         assert_eq!(unwrap_redirect("https://a.b/c"), "https://a.b/c");
+    }
+
+    #[test]
+    fn styles_keep_only_runs_that_change_the_face() {
+        let attributed = json!({
+            "content": "bold slanted gone link",
+            "styleRuns": [
+                { "startIndex": 0, "length": 4, "weightLabel": "FONT_WEIGHT_MEDIUM" },
+                { "startIndex": 5, "length": 7, "italic": true },
+                { "startIndex": 13, "length": 4, "strikethrough": "LINE_STYLE_SINGLE" },
+                { "startIndex": 18, "length": 4, "weightLabel": "FONT_WEIGHT_NORMAL" },
+                { "startIndex": 18, "length": 4, "strikethrough": "LINE_STYLE_NONE" },
+                { "startIndex": 20, "length": 9, "weightLabel": "FONT_WEIGHT_BOLD" }
+            ]
+        });
+        let styles = rich_text(&attributed, None).expect("content").styles;
+        let ranges: Vec<(usize, usize, bool, bool, bool)> = styles
+            .iter()
+            .map(|s| (s.start, s.length, s.bold, s.italic, s.strikethrough))
+            .collect();
+        assert_eq!(
+            ranges,
+            [
+                (0, 4, true, false, false),
+                (5, 7, false, true, false),
+                (13, 4, false, false, true),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_style_run_without_a_range_covers_the_whole_text() {
+        let attributed = json!({
+            "content": "héllo",
+            "styleRuns": [{ "weightLabel": "FONT_WEIGHT_BOLD" }]
+        });
+        let styles = rich_text(&attributed, None).expect("content").styles;
+        assert_eq!(styles.len(), 1);
+        assert_eq!((styles[0].start, styles[0].length), (0, 5));
     }
 }

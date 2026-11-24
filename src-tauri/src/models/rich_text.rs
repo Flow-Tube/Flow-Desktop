@@ -8,6 +8,20 @@ pub struct RichText {
     pub text: String,
     pub spans: Vec<RichSpan>,
     pub emojis: Vec<RichEmoji>,
+    /// Bold, italic and struck-through stretches.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub styles: Vec<RichStyle>,
+}
+
+/// A stretch of the text drawn in a different face.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RichStyle {
+    pub start: usize,
+    pub length: usize,
+    pub bold: bool,
+    pub italic: bool,
+    pub strikethrough: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

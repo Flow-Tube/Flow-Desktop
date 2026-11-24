@@ -1,10 +1,13 @@
 import { create } from "zustand";
-import { getComments, getPostComments } from "../lib/api/youtube";
+import { getComments, getPostComments, getShortComments } from "../lib/api/youtube";
 import { mergeCommentsById, OLDEST_PAGE_LIMIT } from "../lib/commentFilters";
 import type { Comment, CommentSort, CommentsResponse } from "../types/video";
 
-/** Where a comment list comes from: a video's comment section, or a community post's. */
-export type CommentSource = { kind: "video"; videoId: string } | { kind: "post"; postId: string; params: string | null };
+/** Where a comment list comes from: a video's comment section, a Short's, or a community post's. */
+export type CommentSource =
+  | { kind: "video"; videoId: string }
+  | { kind: "short"; videoId: string }
+  | { kind: "post"; postId: string; params: string | null };
 
 /** Comment-level switches kept with the list: an open thread, an unfolded deep reply, a long text read in full. */
 export type CommentFlag = "open" | "unfolded" | "textExpanded";
@@ -44,13 +47,12 @@ const MAX_UNUSED_ENTRIES = 3;
 const readers = new Map<string, number>();
 
 export function commentSourceKey(source: CommentSource): string {
-  return source.kind === "post" ? `post:${source.postId}:${source.params ?? ""}` : `video:${source.videoId}`;
+  return source.kind === "post" ? `post:${source.postId}:${source.params ?? ""}` : `${source.kind}:${source.videoId}`;
 }
 
 function fetchPage(source: CommentSource, token: string | null): Promise<CommentsResponse> {
-  return source.kind === "post"
-    ? getPostComments(source.postId, source.params, token)
-    : getComments(source.videoId, token);
+  if (source.kind === "post") return getPostComments(source.postId, source.params, token);
+  return source.kind === "short" ? getShortComments(source.videoId, token) : getComments(source.videoId, token);
 }
 
 /**

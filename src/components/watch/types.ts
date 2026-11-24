@@ -48,6 +48,8 @@ export interface RelatedVideosProps {
 export interface CommentsSectionProps {
   videoId: string;
   hideHeader?: boolean;
+  /** The video is a Short, whose comments come from its reel's own panel. */
+  short?: boolean;
   postId?: string | null;
   postCommentParams?: string | null;
   /** Fills a side panel: the header stays and the list scrolls. */

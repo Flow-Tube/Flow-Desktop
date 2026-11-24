@@ -116,7 +116,7 @@ function ShortComments({ videoId }: { videoId: string }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto px-4">
-        <CommentsSection videoId={videoId} hideHeader />
+        <CommentsSection videoId={videoId} short hideHeader />
       </div>
     </div>
   );

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo } from "react";
 import { commentSourceKey, useCommentsStore, type CommentFlag, type CommentSource } from "../store/useCommentsStore";
 
 interface UseVideoCommentsOptions {
+  /** The video is a Short, whose comments come from its reel's own panel. */
+  short?: boolean;
   postId?: string | null;
   postCommentParams?: string | null;
 }
@@ -15,10 +17,12 @@ const NO_FLAGS: Record<string, boolean> = {};
 export function useVideoComments(videoId: string | undefined, options: UseVideoCommentsOptions = {}) {
   const postId = options.postId?.trim() || null;
   const postCommentParams = options.postCommentParams?.trim() || null;
+  const short = Boolean(options.short);
   const source = useMemo<CommentSource | null>(() => {
     if (postId) return { kind: "post", postId, params: postCommentParams };
-    return videoId ? { kind: "video", videoId } : null;
-  }, [postId, postCommentParams, videoId]);
+    if (!videoId) return null;
+    return short ? { kind: "short", videoId } : { kind: "video", videoId };
+  }, [postId, postCommentParams, short, videoId]);
   const key = source ? commentSourceKey(source) : "";
   const entry = useCommentsStore((state) => state.entries[key]);
   const store = useCommentsStore.getState;

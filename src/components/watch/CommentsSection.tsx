@@ -32,12 +32,13 @@ const FILTER_LABELS = {
 export function CommentsSection({
   videoId,
   hideHeader = false,
+  short = false,
   postId,
   postCommentParams,
   fill = false,
   onClose,
 }: CommentsSectionProps) {
-  const thread = useVideoComments(videoId, { postId, postCommentParams });
+  const thread = useVideoComments(videoId, { short, postId, postCommentParams });
   const [filter, setFilter] = useState<CommentFilter>("top");
   useEffect(() => setFilter("top"), [videoId, postId]);
   const filtersShown = thread.sortOptions.length >= 2;

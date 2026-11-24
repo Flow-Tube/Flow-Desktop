@@ -66,6 +66,11 @@ PLAYER
 - Space and Enter on a button you reached with Tab now press that button instead of pausing the video, and the arrow keys on a focused slider or seek bar no longer also seek or change the volume. A button clicked with the mouse still leaves Space to the player, and the same now holds in Shorts and the music player.
 - The buffering circle waits a fifth of a second before it shows, so a short refill after a seek or speed change no longer flashes it.
 
+COMMENTS
+- Oldest now starts from the oldest comment. YouTube has no oldest-first order, so Flow reads the Newest order to its end, up to about 500 comments on big videos, and turns it around. Past that it says how far it reached.
+- Oldest used to sort only the comments already loaded and read their age in English, so in other languages the order was wrong.
+- Community post comments now switch between Top, Newest and Oldest, and a comment YouTube sends twice shows once.
+
 MUSIC
 - Fixed the full music player sliding under the title bar on Windows and Linux and leaving a coloured strip along the bottom of the window (#693). It now opens just below the title bar and fills the rest of the window.
 - Album, song and artist cards on music shelves, and song rows, now load their artwork at the size they are drawn instead of at 1080 pixels. A song whose artwork is its video's thumbnail uses the 320 pixel picture in a row.

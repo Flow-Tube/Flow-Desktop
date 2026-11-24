@@ -77,6 +77,7 @@ COMMENTS
 - Bold, italic and struck-through text in comments keeps its style. Long comments stop at four lines with Read more, and keep their links and custom emoji while shortened.
 - GIFs attached to comments and replies now show under their text. GIFs in comments, in Settings > Content, turns them off and syncs with Flow for Android.
 - Timed now opens with YouTube's own Timed list in one request, about a third of a second in a test, where it used to read up to 16 pages. Each comment sits at the time YouTube gives it. Videos without such a list still read pages as before.
+- Shorts comments now load from the Short's own comment panel instead of its full watch page, as Flow for Android does. A Short without that panel still loads through the watch page.
 - More comments load as you scroll to the end of the list, with Retry if a page fails. Timed keeps its Load more button.
 
 MUSIC

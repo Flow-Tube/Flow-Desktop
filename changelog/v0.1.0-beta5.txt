@@ -70,6 +70,8 @@ COMMENTS
 - Oldest now starts from the oldest comment. YouTube has no oldest-first order, so Flow reads the Newest order to its end, up to about 500 comments on big videos, and turns it around. Past that it says how far it reached.
 - Oldest used to sort only the comments already loaded and read their age in English, so in other languages the order was wrong.
 - Community post comments now switch between Top, Newest and Oldest, and a comment YouTube sends twice shows once.
+- The watch page and the fullscreen comments panel now share one list, so comments load once and threads you opened stay open after the panel closes.
+- More comments load as you scroll to the end of the list, with Retry if a page fails. Timed keeps its Load more button.
 
 MUSIC
 - Fixed the full music player sliding under the title bar on Windows and Linux and leaving a coloured strip along the bottom of the window (#693). It now opens just below the title bar and fills the rest of the window.

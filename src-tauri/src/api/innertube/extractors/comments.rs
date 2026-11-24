@@ -74,12 +74,25 @@ fn find_comment_count_text(val: &Value) -> Option<String> {
     None
 }
 
-/// The comments page's header: the sort options and the exact count.
+/// The comments page's header: the sort options and the exact count. A
+/// community post's page can carry it inside its sections rather than in the
+/// continuation items, so the rest of the answer is searched after those.
 fn comments_header(val: &Value) -> Option<&Value> {
     continuation_item_lists(val)
         .into_iter()
         .flatten()
         .find_map(|item| item.get("commentsHeaderRenderer"))
+        .or_else(|| find_comments_header(val))
+}
+
+fn find_comments_header(value: &Value) -> Option<&Value> {
+    match value {
+        Value::Object(map) => map
+            .get("commentsHeaderRenderer")
+            .or_else(|| map.values().find_map(find_comments_header)),
+        Value::Array(items) => items.iter().find_map(find_comments_header),
+        _ => None,
+    }
 }
 
 fn sort_options(header: &Value) -> Vec<CommentSort> {
@@ -624,7 +637,7 @@ impl InnertubeClient {
         let mut comments_res = parse_comments_json(&res, None);
 
         if page_token.is_none() && comments_res.comments.is_empty() {
-            let initial_count_text = comments_res.comment_count_text.clone();
+            let initial = comments_res.clone();
             let continuation_token =
                 find_initial_comments_token(&res).or_else(|| comments_res.next_page_token.clone());
 
@@ -637,7 +650,14 @@ impl InnertubeClient {
                     .await?;
                 comments_res = parse_comments_json(&next_res, None);
                 if comments_res.comment_count_text.is_none() {
-                    comments_res.comment_count_text = initial_count_text;
+                    comments_res.comment_count_text = initial.comment_count_text;
+                }
+                // The post's own page can hold the sort menu its first comments page leaves out.
+                if comments_res.sort_options.is_empty() {
+                    comments_res.sort_options = initial.sort_options;
+                }
+                if comments_res.total_count.is_none() {
+                    comments_res.total_count = initial.total_count;
                 }
             }
         }
@@ -781,6 +801,23 @@ mod tests {
         assert_eq!(parsed.sort_options.len(), 2);
         assert_eq!(parsed.sort_options[1].token, "NEW");
         assert!(parsed.sort_options[0].selected);
+    }
+
+    #[test]
+    fn a_post_page_gives_the_sort_options_from_inside_its_section() {
+        let response = serde_json::json!({ "contents": { "twoColumnBrowseResultsRenderer": { "tabs": [{
+            "tabRenderer": { "content": { "sectionListRenderer": { "contents": [{ "itemSectionRenderer": {
+                "header": { "commentsHeaderRenderer": {
+                    "sortMenu": { "sortFilterSubMenuRenderer": { "subMenuItems": [
+                        { "title": "Top", "selected": true, "serviceEndpoint": { "continuationCommand": { "token": "TOP" } } },
+                        { "title": "Newest", "selected": false, "serviceEndpoint": { "continuationCommand": { "token": "NEW" } } }
+                    ] } }
+                } }
+            } }] } } }
+        }] } } });
+        let parsed = parse_comments_json(&response, None);
+        assert_eq!(parsed.sort_options.len(), 2);
+        assert_eq!(parsed.sort_options[0].token, "TOP");
     }
 
     #[test]

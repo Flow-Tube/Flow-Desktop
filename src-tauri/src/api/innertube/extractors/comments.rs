@@ -438,7 +438,7 @@ fn creator_reply(replies_renderer: Option<&Value>) -> (Option<String>, Option<St
     (Some(url), name)
 }
 
-/// The GIF or picture YouTube shows under a comment's text, with its size.
+/// The GIF or picture `YouTube` shows under a comment's text, with its size.
 fn comment_image(attachment: &Value) -> Option<CommentImage> {
     let view_model = &attachment["commentImageAttachmentViewModel"];
     let url = thumbnail_url_from_array(&view_model["image"]["sources"])?;
@@ -579,8 +579,8 @@ fn build_comment_from_view_model(
     })
 }
 
-/// YouTube's Timed list, in playback order, each comment with the time YouTube
-/// shows it at. The order and the times come from the list's sync entity; the
+/// `YouTube`'s Timed list, in playback order, each comment with the time
+/// `YouTube` shows it at. The order and the times come from the list's sync entity; the
 /// comments are ordinary comment entities, found by their id.
 fn parse_timed_comments(response: &Value, own_video_id: Option<&str>) -> Vec<Comment> {
     let mutations = build_comment_mutation_map(response);
@@ -701,9 +701,9 @@ impl InnertubeClient {
         Ok(comments_res)
     }
 
-    /// YouTube's Timed list for the comment section `section_token` opens (its
+    /// `YouTube`'s Timed list for the comment section `section_token` opens (its
     /// Newest order), in one IOS request. Only IOS serves it: ANDROID answers 400
-    /// and WEB has no Timed filter. IOS never gets a BotGuard token.
+    /// and WEB has no Timed filter. IOS never gets a `BotGuard` token.
     pub async fn get_timed_comments(
         &self,
         video_id: &str,

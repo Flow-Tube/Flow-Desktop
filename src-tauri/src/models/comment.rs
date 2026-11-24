@@ -49,12 +49,12 @@ pub struct Comment {
     /// A GIF or picture shown under the text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image: Option<CommentImage>,
-    /// Where YouTube's Timed list places the comment in the video, in milliseconds.
+    /// Where `YouTube`'s Timed list places the comment in the video, in milliseconds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timed_at_ms: Option<u64>,
 }
 
-/// A picture attached to a comment, with the size YouTube draws it at.
+/// A picture attached to a comment, with the size `YouTube` draws it at.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CommentImage {

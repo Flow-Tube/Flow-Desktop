@@ -1,200 +1,71 @@
-import { useCallback, useEffect, useState } from "react";
-import { getComments, getPostComments } from "./api/youtube";
-import { mergeCommentsById, OLDEST_PAGE_LIMIT } from "./commentFilters";
-import type { Comment, CommentSort, CommentsResponse } from "../types/video";
-
-/**
- * Reads the order `token` names page after page, one request at a time, to its end or
- * [OLDEST_PAGE_LIMIT] pages, for Oldest to turn around. A page that fails ends the walk with what
- * has arrived. `capped` is true when older comments were left unread.
- */
-export async function readToTheEnd(
-  fetchPage: (token: string | null) => Promise<CommentsResponse>,
-  token: string,
-  cancelled: () => boolean,
-): Promise<{ first: CommentsResponse; comments: Comment[]; capped: boolean }> {
-  const first = await fetchPage(token);
-  let comments = mergeCommentsById([], first.comments ?? []);
-  let next = first.nextPageToken || null;
-  for (let pages = 1; next && pages < OLDEST_PAGE_LIMIT && !cancelled(); pages++) {
-    try {
-      const page = await fetchPage(next);
-      comments = mergeCommentsById(comments, page.comments ?? []);
-      next = page.nextPageToken || null;
-    } catch (error) {
-      console.warn("Stopped reading comments to their oldest", error);
-      break;
-    }
-  }
-  return { first, comments, capped: Boolean(next) };
-}
+import { useCallback, useEffect, useMemo } from "react";
+import { commentSourceKey, useCommentsStore, type CommentFlag, type CommentSource } from "../store/useCommentsStore";
 
 interface UseVideoCommentsOptions {
   postId?: string | null;
   postCommentParams?: string | null;
 }
 
+const NO_FLAGS: Record<string, boolean> = {};
+
+/**
+ * A video's or a post's comment list, shared by everything that shows it: the watch column and the
+ * fullscreen panel read one list, with one request per page and the same open threads.
+ */
 export function useVideoComments(videoId: string | undefined, options: UseVideoCommentsOptions = {}) {
   const postId = options.postId?.trim() || null;
   const postCommentParams = options.postCommentParams?.trim() || null;
-  const sourceId = postId ?? videoId;
-  const sourceKey = postId ? `post:${postId}:${postCommentParams ?? ""}` : `video:${videoId ?? ""}`;
-  const [comments, setComments] = useState<Comment[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [nextPageToken, setNextPageToken] = useState<string | null>(null);
-  const [countText, setCountText] = useState<string | null>(null);
-  const [totalCount, setTotalCount] = useState<number | null>(null);
-  const [disabled, setDisabled] = useState(false);
-  const [sortOptions, setSortOptions] = useState<CommentSort[]>([]);
-  // The sort chosen for this source; any other source starts on YouTube's default first page.
-  const [chosenSort, setChosenSort] = useState<{ key: string; token: string; oldest: boolean } | null>(null);
-  const sortToken = chosenSort?.key === sourceKey ? chosenSort.token : null;
-  const oldest = Boolean(sortToken && chosenSort?.oldest);
-  const [oldestCapped, setOldestCapped] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [replies, setReplies] = useState<Record<string, Comment[]>>({});
-  const [repliesLoading, setRepliesLoading] = useState<Record<string, boolean>>({});
-  const [repliesNextToken, setRepliesNextToken] = useState<Record<string, string | null>>({});
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-
-  const fetchComments = useCallback(
-    (pageToken?: string | null) => {
-      if (postId) return getPostComments(postId, postCommentParams, pageToken);
-      return getComments(videoId || "", pageToken);
-    },
-    [postId, postCommentParams, videoId],
-  );
+  const source = useMemo<CommentSource | null>(() => {
+    if (postId) return { kind: "post", postId, params: postCommentParams };
+    return videoId ? { kind: "video", videoId } : null;
+  }, [postId, postCommentParams, videoId]);
+  const key = source ? commentSourceKey(source) : "";
+  const entry = useCommentsStore((state) => state.entries[key]);
+  const store = useCommentsStore.getState;
 
   useEffect(() => {
-    setSortOptions([]);
-    setTotalCount(null);
-    setDisabled(false);
-  }, [sourceKey]);
+    if (!source) return;
+    store().open(source);
+    return () => store().close(commentSourceKey(source));
+  }, [source, store]);
 
-  useEffect(() => {
-    setComments([]);
-    setNextPageToken(null);
-    setOldestCapped(false);
-    if (!sortToken) setCountText(null);
-    setReplies({});
-    setRepliesLoading({});
-    setRepliesNextToken({});
-    setExpanded({});
-    if (!sourceId) return;
-
-    let cancelled = false;
-    setLoading(true);
-    // Oldest shows everything it read at once; nothing pages in after it.
-    const load: Promise<CommentsResponse & { capped?: boolean }> =
-      oldest && sortToken
-        ? readToTheEnd(fetchComments, sortToken, () => cancelled).then(({ first, comments, capped }) => ({
-            ...first,
-            comments,
-            nextPageToken: null,
-            capped,
-          }))
-        : fetchComments(sortToken);
-    load
-      .then((res) => {
-        if (cancelled) return;
-        setComments(mergeCommentsById([], res.comments || []));
-        setOldestCapped(Boolean(res.capped));
-        setNextPageToken(res.nextPageToken || null);
-        if (res.commentCountText) setCountText(res.commentCountText);
-        if (res.totalCount != null) setTotalCount(res.totalCount);
-        if (res.sortOptions?.length) setSortOptions(res.sortOptions);
-        setDisabled(Boolean(res.commentsDisabled));
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        console.warn("Failed to load comments", err);
-        setComments([]);
-        setNextPageToken(null);
-        setCountText(null);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [fetchComments, oldest, sourceId, sourceKey, sortToken]);
-
-  /**
-   * Reloads the list in the order `token` names (Top or Newest). With `toOldest`, reads that order to
-   * its end so Oldest can turn it around.
-   */
-  const selectSort = useCallback(
-    (token: string, toOldest = false) => {
-      setSortOptions((options) => options.map((option) => ({ ...option, selected: option.token === token })));
-      setChosenSort({ key: sourceKey, token, oldest: toOldest });
-    },
-    [sourceKey],
-  );
-
-  const loadMore = useCallback(async () => {
-    if (!sourceId || !nextPageToken || loadingMore) return;
-    setLoadingMore(true);
-    try {
-      const res = await fetchComments(nextPageToken);
-      setComments((prev) => mergeCommentsById(prev, res.comments || []));
-      setNextPageToken(res.nextPageToken || null);
-      if (res.commentCountText) setCountText(res.commentCountText);
-    } catch (err) {
-      console.error("Failed to load more comments", err);
-    } finally {
-      setLoadingMore(false);
-    }
-  }, [fetchComments, sourceId, nextPageToken, loadingMore]);
-
-  const loadReplies = useCallback(
-    async (commentId: string, replyToken: string) => {
-      if (!sourceId || repliesLoading[commentId]) return;
-      setRepliesLoading((prev) => ({ ...prev, [commentId]: true }));
-      try {
-        const res = await fetchComments(replyToken);
-        setReplies((prev) => ({ ...prev, [commentId]: mergeCommentsById(prev[commentId] || [], res.comments || []) }));
-        setRepliesNextToken((prev) => ({ ...prev, [commentId]: res.nextPageToken || null }));
-      } catch (err) {
-        console.error(`Failed to load replies for comment ${commentId}`, err);
-      } finally {
-        setRepliesLoading((prev) => ({ ...prev, [commentId]: false }));
-      }
-    },
-    [fetchComments, sourceId, repliesLoading],
-  );
-
+  const selectSort = useCallback((token: string, toOldest = false) => store().selectSort(key, token, toOldest), [key, store]);
+  const loadMore = useCallback(() => store().loadMore(key), [key, store]);
   const toggleReplies = useCallback(
-    async (commentId: string, replyToken: string | null | undefined) => {
-      if (expanded[commentId]) {
-        setExpanded((prev) => ({ ...prev, [commentId]: false }));
-        return;
-      }
-      setExpanded((prev) => ({ ...prev, [commentId]: true }));
-      if (!replies[commentId] && replyToken) await loadReplies(commentId, replyToken);
-    },
-    [expanded, replies, loadReplies],
+    (commentId: string, token: string | null | undefined) => store().toggleReplies(key, commentId, token),
+    [key, store],
+  );
+  const loadReplies = useCallback(
+    (commentId: string, token: string) => store().loadReplies(key, commentId, token),
+    [key, store],
+  );
+  const toggleFlag = useCallback(
+    (flag: CommentFlag, commentId: string) => store().toggleFlag(key, flag, commentId),
+    [key, store],
   );
 
   return {
-    comments,
-    loading,
-    countText,
-    totalCount,
-    disabled,
-    sortOptions,
+    comments: entry?.comments ?? [],
+    loading: entry ? entry.loading : Boolean(source),
+    countText: entry?.countText ?? null,
+    totalCount: entry?.totalCount ?? null,
+    disabled: entry?.disabled ?? false,
+    sortOptions: entry?.sortOptions ?? [],
+    oldest: entry?.oldest ?? false,
+    oldestCapped: entry?.oldestCapped ?? false,
+    nextPageToken: entry?.nextPageToken ?? null,
+    loadingMore: entry?.loadingMore ?? false,
+    loadMoreFailed: entry?.loadMoreFailed ?? false,
+    replies: entry?.replies ?? {},
+    repliesLoading: entry?.repliesLoading ?? {},
+    repliesNextToken: entry?.repliesNextToken ?? {},
+    expanded: entry?.flags.open ?? NO_FLAGS,
+    unfolded: entry?.flags.unfolded ?? NO_FLAGS,
+    textExpanded: entry?.flags.textExpanded ?? NO_FLAGS,
     selectSort,
-    oldest,
-    oldestCapped,
-    nextPageToken,
-    loadingMore,
-    replies,
-    repliesLoading,
-    repliesNextToken,
-    expanded,
     loadMore,
     toggleReplies,
     loadReplies,
+    toggleFlag,
   };
 }

@@ -75,6 +75,7 @@ COMMENTS
 - Threads indent up to three steps; replies deeper than two levels fold behind "N replies" until you open them. Right-to-left languages get the same lines mirrored.
 - The creator's heart on a comment now shows the creator's avatar with a red heart on it, and a thread the creator answered shows their avatar next to its reply count.
 - Bold, italic and struck-through text in comments keeps its style. Long comments stop at four lines with Read more, and keep their links and custom emoji while shortened.
+- GIFs attached to comments and replies now show under their text. GIFs in comments, in Settings > Content, turns them off and syncs with Flow for Android.
 - More comments load as you scroll to the end of the list, with Retry if a page fails. Timed keeps its Load more button.
 
 MUSIC

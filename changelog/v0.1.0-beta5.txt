@@ -43,6 +43,10 @@ CARDS
 - Fixed a playlist or mix whose first video is an old upload showing a broken cover or YouTube's grey placeholder. The cover now steps down to a size the video has.
 - Playlist and mix cards have a new stack: the two sheets behind the cover are now the theme's own surface colours, tinted with the cover's colour once it loads, as on Flow for Android. They used to be two blurred copies of the cover under a black shade, which looked dark in the light theme. A playlist without a cover now shows the stack too.
 - The number of videos on a playlist card, and the word Playlist when there is no count, now follow the app's language.
+- Post cards in a shelf, on a channel's Home and in search, are now all the same size. The text is shortened and a picture, video or playlist shows as a small square at the side. Clicking a card opens the whole post with its comments.
+- Shelves no longer show how many items they hold next to their title.
+- The Continue Watching shelf on Home has a View all button that opens History.
+- See all, Show all and View all on every shelf are now a rounded button, as on the Library page. More like this in a card's menu has a thumbs up icon instead of sparkles.
 
 PLAYER
 - The player, its controls and its menus no longer redraw several times a second while a video plays. Only the parts that show the time follow it.

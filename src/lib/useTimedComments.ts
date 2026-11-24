@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getComments } from "./api/youtube";
+import { getComments, getTimedComments } from "./api/youtube";
 import { timedCommentOrders } from "./commentFilters";
 import type { Comment, CommentSort } from "../types/video";
 
@@ -10,7 +10,11 @@ import type { Comment, CommentSort } from "../types/video";
 const OPENING_PAGES_PER_ORDER = 8;
 const MORE_PAGES_PER_ORDER = 2;
 
-/** Reads YouTube's two orders in turn into one list, since neither has every timestamped comment. */
+/**
+ * YouTube's own Timed list, in one request. When YouTube has none for the video, or the request
+ * fails, it reads YouTube's two orders in turn into one list instead, since neither has every
+ * timestamped comment.
+ */
 export function useTimedComments(videoId: string, sortOptions: CommentSort[], active: boolean) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(false);
@@ -51,16 +55,33 @@ export function useTimedComments(videoId: string, sortOptions: CommentSort[], ac
   const orders = active ? timedCommentOrders(sortOptions).map((order) => order.token).join("|") : "";
   useEffect(() => {
     if (!orders) return;
-    cursorsRef.current = orders.split("|");
+    const tokens = orders.split("|");
+    cursorsRef.current = tokens;
     setComments([]);
     setHasMore(false);
-    void walk(OPENING_PAGES_PER_ORDER);
+    const walkId = ++walkRef.current;
+    setLoading(true);
+    // The first order is Newest, the section YouTube's Timed filter applies to.
+    getTimedComments(videoId, tokens[0]!)
+      .catch((error) => {
+        console.warn("YouTube's Timed list failed; reading pages instead", error);
+        return [];
+      })
+      .then((list) => {
+        if (walkRef.current !== walkId) return;
+        if (list.length) {
+          setComments(list);
+          setLoading(false);
+        } else {
+          void walk(OPENING_PAGES_PER_ORDER);
+        }
+      });
     const walks = walkRef;
     return () => {
       walks.current++;
       setLoading(false);
     };
-  }, [orders, walk]);
+  }, [orders, videoId, walk]);
 
   const loadMore = useCallback(() => void walk(MORE_PAGES_PER_ORDER), [walk]);
 

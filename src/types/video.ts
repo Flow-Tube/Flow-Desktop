@@ -643,6 +643,8 @@ export interface Comment {
   creatorReplyName?: string | null;
   /** A GIF or picture shown under the text, with the size YouTube draws it at. */
   image?: CommentImage | null;
+  /** Where YouTube's Timed list places the comment in the video, in milliseconds. */
+  timedAtMs?: number | null;
 }
 
 /** One way to order the comments, and the token that loads them that way. */

@@ -5,7 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Comment, CommentSort } from "../types/video";
 
 const getComments = vi.fn();
-vi.mock("./api/youtube", () => ({ getComments: (...args: unknown[]) => getComments(...args) }));
+const getTimedComments = vi.fn();
+vi.mock("./api/youtube", () => ({
+  getComments: (...args: unknown[]) => getComments(...args),
+  getTimedComments: (...args: unknown[]) => getTimedComments(...args),
+}));
 const { useTimedComments } = await import("./useTimedComments");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -26,6 +30,8 @@ const render = (active: boolean) => act(async () => root.render(createElement(Pr
 
 beforeEach(() => {
   getComments.mockReset();
+  // YouTube's own list is empty unless a test gives one, so the page walk runs.
+  getTimedComments.mockReset().mockResolvedValue([]);
   root = createRoot(document.createElement("div"));
 });
 afterEach(() => act(async () => root.unmount()));
@@ -34,6 +40,26 @@ describe("useTimedComments", () => {
   it("reads nothing until Timed is chosen", async () => {
     await render(false);
     expect(getComments).not.toHaveBeenCalled();
+    expect(getTimedComments).not.toHaveBeenCalled();
+  });
+
+  it("takes YouTube's Timed list in one request when it has one", async () => {
+    getTimedComments.mockResolvedValue([{ ...c("x"), timedAtMs: 4000 }]);
+    await render(true);
+    expect(getTimedComments).toHaveBeenCalledWith("v", "new");
+    expect(getComments).not.toHaveBeenCalled();
+    expect(hook.comments.map((x) => x.id)).toEqual(["x"]);
+    expect(hook.hasMore).toBe(false);
+    expect(hook.loading).toBe(false);
+  });
+
+  it("reads pages when YouTube's Timed list fails", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    getTimedComments.mockRejectedValue(new Error("400"));
+    getComments.mockResolvedValue({ comments: [c("a")], nextPageToken: null });
+    await render(true);
+    expect(hook.comments.map((x) => x.id)).toEqual(["a"]);
+    warn.mockRestore();
   });
 
   it("reads both orders, newest first, into one list without repeats", async () => {

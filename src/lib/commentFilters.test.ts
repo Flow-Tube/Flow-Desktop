@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   commentSortFor,
-  firstTimestampSeconds,
+  timedPositionSeconds,
   oldestFirst,
   timedAnchorIndex,
   timedCommentOrders,
@@ -32,8 +32,12 @@ describe("comment filters", () => {
   });
 
   it("reads the first timestamp by place in the text", () => {
-    expect(firstTimestampSeconds(comment("a", {}, [stamp(9, 50), stamp(2, 10)]))).toBe(10);
-    expect(firstTimestampSeconds(comment("a"))).toBeNull();
+    expect(timedPositionSeconds(comment("a", {}, [stamp(9, 50), stamp(2, 10)]))).toBe(10);
+    expect(timedPositionSeconds(comment("a"))).toBeNull();
+  });
+
+  it("prefers the time YouTube's Timed list gives a comment", () => {
+    expect(timedPositionSeconds(comment("a", { timedAtMs: 95_400 }, [stamp(0, 10)]))).toBe(95);
   });
 
   it("orders timed comments latest first, most liked first at the same spot, without past-the-end times", () => {

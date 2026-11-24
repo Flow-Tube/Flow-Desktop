@@ -36,8 +36,12 @@ export function timedCommentOrders(options: CommentSort[]): CommentSort[] {
   return [options[1], options[0]].filter((option): option is CommentSort => Boolean(option));
 }
 
-/** Where a comment first points in its video, in seconds, or null when it points nowhere. */
-export function firstTimestampSeconds(comment: Comment): number | null {
+/**
+ * Where a comment sits in its video, in seconds, or null when it points nowhere: the time YouTube's
+ * Timed list gives it, else the first timestamp in its text.
+ */
+export function timedPositionSeconds(comment: Comment): number | null {
+  if (comment.timedAtMs != null) return Math.floor(comment.timedAtMs / 1000);
   let first: { start: number; seconds: number } | null = null;
   for (const span of comment.richText?.spans ?? []) {
     if (span.target.kind !== "timestamp") continue;
@@ -54,7 +58,7 @@ export function firstTimestampSeconds(comment: Comment): number | null {
 export function timedCommentsInOrder(comments: Comment[], durationSeconds: number): Comment[] {
   const timed: { comment: Comment; seconds: number }[] = [];
   for (const comment of comments) {
-    const seconds = firstTimestampSeconds(comment);
+    const seconds = timedPositionSeconds(comment);
     if (seconds !== null && (durationSeconds <= 0 || seconds <= durationSeconds)) timed.push({ comment, seconds });
   }
   timed.sort((a, b) => b.seconds - a.seconds || (b.comment.likeCount ?? 0) - (a.comment.likeCount ?? 0));

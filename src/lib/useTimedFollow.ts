@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
 import { usePlayerStore } from "../store/usePlayerStore";
-import { firstTimestampSeconds, timedAnchorIndex } from "./commentFilters";
+import { timedPositionSeconds, timedAnchorIndex } from "./commentFilters";
 import type { Comment } from "../types/video";
 
 const READING_PAUSE_MS = 5_000;
@@ -12,7 +12,7 @@ const REPLIES_PAUSE_MS = 20_000;
  * derived in the selector, so the position can tick as it likes and only a crossing re-renders.
  */
 export function useTimedFollow(listRef: RefObject<HTMLElement | null>, comments: Comment[], enabled: boolean) {
-  const seconds = useMemo(() => comments.map((comment) => firstTimestampSeconds(comment) ?? 0), [comments]);
+  const seconds = useMemo(() => comments.map((comment) => timedPositionSeconds(comment) ?? 0), [comments]);
   const anchor = usePlayerStore((state) => (enabled ? timedAnchorIndex(seconds, state.currentTime) : -1));
   const pausedUntilRef = useRef(0);
 

@@ -2794,6 +2794,8 @@
   "comments_load_more_failed": "Couldn't load more comments.",
   "watch_loading_replies": "Loading replies...",
   "watch_show_more_replies": "Show more replies",
+  "comments_folded_replies_one": "%d reply",
+  "comments_folded_replies_other": "%d replies",
   "watch_hide_replies": "Hide replies",
   "watch_show_replies": "Show %s replies",
   "watch_read_more": "Read more",

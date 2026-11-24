@@ -5,6 +5,7 @@ import { Chip } from "../ui/Chip";
 import { LoadMoreRow } from "../ui/LoadMoreRow";
 import { ToggleSwitch } from "../ui/ToggleSwitch";
 import { CommentItem } from "./CommentItem";
+import { ReplyThread, ThreadStem, threadContentStart } from "./CommentThread";
 import { useVideoComments } from "../../lib/useVideoComments";
 import { useTimedComments } from "../../lib/useTimedComments";
 import { useTimedFollow } from "../../lib/useTimedFollow";
@@ -137,46 +138,49 @@ export function CommentsSection({
                   c.id === anchorId ? "bg-surface-container-high" : ""
                 }`}
               >
-                <CommentItem comment={c} />
-                <div className="ms-14">
-                  {(c.continuationToken || (c.replyCount != null && c.replyCount > 0)) && (
-                    <button
-                      onClick={() => {
-                        if (!thread.expanded[c.id]) pauseForReplies();
-                        void thread.toggleReplies(c.id, c.continuationToken);
-                      }}
-                      className="mt-2 flex items-center gap-1 border-none bg-transparent p-0 text-xs font-semibold text-primary hover:underline"
-                    >
-                      {thread.expanded[c.id]
-                        ? getString("watch_hide_replies")
-                        : getString("watch_show_replies", c.replyCount ?? "")}
-                    </button>
-                  )}
-
-                  {thread.expanded[c.id] && (
-                    <div className="mt-4 space-y-4 border-s-2 border-chrome-neutral-800 ps-4">
-                      {thread.replies[c.id]?.map((reply, rIdx) => (
-                        <CommentItem key={reply.id || `reply-${rIdx}`} comment={reply} reply />
-                      ))}
-
-                      {thread.repliesLoading[c.id] && (
-                        <div className="flex items-center gap-2 py-1 text-xs text-chrome-neutral-400">
-                          <Loader2 className="animate-spin text-chrome-neutral-400" size={14} />
-                          <span>{getString("watch_loading_replies")}</span>
-                        </div>
-                      )}
-
-                      {!thread.repliesLoading[c.id] && thread.repliesNextToken[c.id] && (
-                        <button
-                          onClick={() => thread.loadReplies(c.id, thread.repliesNextToken[c.id]!)}
-                          className="mt-2 block border-none bg-transparent p-0 text-[11px] font-bold text-primary hover:underline"
-                        >
-                          {getString("watch_show_more_replies")}
-                        </button>
-                      )}
-                    </div>
-                  )}
+                <div className="relative">
+                  {thread.expanded[c.id] && Boolean(thread.replies[c.id]?.length) && <ThreadStem />}
+                  <CommentItem comment={c}>
+                    {(c.continuationToken || (c.replyCount != null && c.replyCount > 0)) && (
+                      <button
+                        onClick={() => {
+                          if (!thread.expanded[c.id]) pauseForReplies();
+                          void thread.toggleReplies(c.id, c.continuationToken);
+                        }}
+                        className="mt-2 flex items-center gap-1 border-none bg-transparent p-0 text-xs font-semibold text-primary hover:underline"
+                      >
+                        {thread.expanded[c.id]
+                          ? getString("watch_hide_replies")
+                          : getString("watch_show_replies", c.replyCount ?? "")}
+                      </button>
+                    )}
+                  </CommentItem>
                 </div>
+
+                {thread.expanded[c.id] &&
+                  (thread.replies[c.id]?.length ? (
+                    <ReplyThread
+                      replies={thread.replies[c.id]!}
+                      hasMore={Boolean(thread.repliesNextToken[c.id])}
+                      loadingMore={Boolean(thread.repliesLoading[c.id])}
+                      isUnfolded={(id) => Boolean(thread.unfolded[id])}
+                      onUnfold={(id) => thread.toggleFlag("unfolded", id)}
+                      onLoadMore={() => {
+                        const token = thread.repliesNextToken[c.id];
+                        if (token) void thread.loadReplies(c.id, token);
+                      }}
+                    />
+                  ) : (
+                    thread.repliesLoading[c.id] && (
+                      <div
+                        className="flex items-center gap-2 py-2 text-xs text-chrome-neutral-400"
+                        style={{ paddingInlineStart: threadContentStart(1) }}
+                      >
+                        <Loader2 className="animate-spin text-chrome-neutral-400" size={14} />
+                        <span>{getString("watch_loading_replies")}</span>
+                      </div>
+                    )
+                  ))}
               </div>
             ))}
           </div>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { Heart, Pin, ThumbsUp } from "lucide-react";
 import { ChannelLabel } from "../video/CardMeta";
@@ -50,17 +50,20 @@ function CommentText({ comment, className }: { comment: Comment; className: stri
   );
 }
 
-/** One comment or reply: author line with its badges, text, likes and the creator's heart. */
-export function CommentItem({ comment, reply = false }: { comment: Comment; reply?: boolean }) {
+/**
+ * One comment or reply: author line with its badges, text, likes and the creator's heart.
+ * `children` sit under the likes, in the text column.
+ */
+export function CommentItem({ comment, reply = false, children }: { comment: Comment; reply?: boolean; children?: ReactNode }) {
   const navigate = useNavigate();
   const openAuthor = () => comment.authorChannelId && navigate(`/channel/${comment.authorChannelId}`);
   const likes = comment.likeCountText || (comment.likeCount ? formatCount(comment.likeCount) : null);
 
   return (
-    <div className={`flex ${reply ? "gap-3 text-xs" : "gap-4"}`}>
+    <div className={`flex ${reply ? "gap-2 text-xs" : "gap-3"}`}>
       <div
         className={`flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-container-high font-bold text-chrome-neutral-400 ${
-          reply ? "h-8 w-8" : "h-10 w-10 text-sm"
+          reply ? "h-6 w-6 text-[10px]" : "h-10 w-10 text-sm"
         } ${comment.authorChannelId ? "cursor-pointer" : ""}`}
         onClick={openAuthor}
       >
@@ -105,6 +108,7 @@ export function CommentItem({ comment, reply = false }: { comment: Comment; repl
             )}
           </div>
         )}
+        {children}
       </div>
     </div>
   );

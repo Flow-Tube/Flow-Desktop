@@ -10,6 +10,15 @@ describe("syncErrorMessage", () => {
     expect(syncErrorMessage("syncCodeRejected", "x")).toBe(getString("sync_error_code_rejected"));
   });
 
+  it("says why a store or folder couldn't be reached", () => {
+    expect(syncErrorMessage("linkedConnectionRefused", "could not reach the server")).toBe(
+      getString("linked_error_connection_refused"),
+    );
+    expect(syncErrorMessage("linkedNoAnswer", null)).toBe(getString("linked_error_no_answer"));
+    expect(syncErrorMessage("linkedFolderRedirected", null)).toBe(getString("linked_error_folder_redirected"));
+    expect(syncErrorMessage("linkedFolderMissing", null)).toBe(getString("linked_error_folder_missing"));
+  });
+
   it("shows the peer's own words for an error the other device reported", () => {
     expect(syncErrorMessage("syncPeerError", "disk full")).toBe(getString("sync_error_peer", "disk full"));
     expect(syncErrorMessage("syncNotDefaultProfile", "Home")).toBe(getString("sync_error_not_default_profile", "Home"));

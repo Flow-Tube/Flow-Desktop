@@ -1039,3 +1039,46 @@ async fn an_unreachable_folder_still_fails_the_read() {
         Err(StoreError::Network(_))
     ));
 }
+
+#[tokio::test]
+async fn a_closed_port_says_the_connection_was_refused() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    drop(listener);
+    let store = store_for(
+        &format!("http://127.0.0.1:{port}/flow-sync/"),
+        &random_bytes(),
+    )
+    .await;
+
+    let error = EngineError::from(store.probe().await.unwrap_err());
+    assert_eq!(error.kind(), "linkedConnectionRefused");
+}
+
+#[tokio::test]
+async fn a_folder_moved_missing_or_closed_is_named() {
+    for (status, kind) in [
+        (301, "linkedFolderRedirected"),
+        (307, "linkedFolderRedirected"),
+        (404, "linkedFolderMissing"),
+        (409, "linkedFolderMissing"),
+        (403, "linkedFolderForbidden"),
+        (405, "linkedFolderForbidden"),
+        (500, "linkedRefused"),
+    ] {
+        let server = MockServer::start().await;
+        Mock::given(wiremock::matchers::any())
+            .respond_with(ResponseTemplate::new(status))
+            .mount(&server)
+            .await;
+        let store = store_for(&format!("{}/flow-sync/", server.uri()), &random_bytes()).await;
+
+        let error = EngineError::from(store.probe().await.unwrap_err());
+        assert_eq!(error.kind(), kind, "{status}");
+    }
+    let server_refusal = StoreError::Refused {
+        status: 404,
+        code: "not_found".to_owned(),
+    };
+    assert_eq!(EngineError::from(server_refusal).kind(), "linkedRefused");
+}

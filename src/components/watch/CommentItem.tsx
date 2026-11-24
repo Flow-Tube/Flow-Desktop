@@ -9,6 +9,9 @@ import { upgradeAvatarUrl } from "../../lib/thumbnails";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 import type { Comment } from "../../types/video";
 import { isRtlText } from "../../lib/direction";
+import { useBoolPref } from "../../lib/usePreference";
+import { SETTINGS } from "../../lib/settings/schema";
+import type { CommentImage as CommentImageValue } from "../../types/video";
 
 /** Comment avatars arrive from YouTube at 88px; every other avatar in the app is
  * upgraded and proxied the same way, so they match instead of looking soft. */
@@ -94,6 +97,26 @@ function CreatorHeart({ avatar, label }: { avatar: string | null | undefined; la
   );
 }
 
+/** Tallest a GIF is drawn; wider ones keep their shape below this. */
+const GIF_MAX_HEIGHT = 240;
+
+/** A GIF attached to a comment, at its own aspect ratio, loaded once it scrolls near. */
+function CommentGif({ image }: { image: CommentImageValue }) {
+  const [shown] = useBoolPref(SETTINGS.COMMENT_GIFS_ENABLED, true);
+  const src = useProxiedImageUrl(shown ? image.url : null);
+  if (!shown) return null;
+  const height = Math.min(image.height, GIF_MAX_HEIGHT);
+  const width = Math.round((image.width * height) / image.height);
+  return (
+    <div
+      className="mt-2 max-w-full overflow-hidden rounded-lg bg-surface-container-high"
+      style={{ width, aspectRatio: `${image.width} / ${image.height}` }}
+    >
+      {src && <img src={src} alt={getString("comment_gif")} loading="lazy" className="h-full w-full object-cover" />}
+    </div>
+  );
+}
+
 interface CommentItemProps {
   comment: Comment;
   reply?: boolean;
@@ -150,6 +173,7 @@ export function CommentItem({ comment, reply = false, creatorAvatar, textExpande
           expanded={textExpanded}
           onExpand={onExpandText}
         />
+        {comment.image && <CommentGif image={comment.image} />}
         {(likes || comment.isHearted) && (
           <div className={`mt-2 flex items-center gap-3 text-chrome-neutral-400 ${reply ? "text-[10px]" : "text-xs"}`}>
             {likes && (

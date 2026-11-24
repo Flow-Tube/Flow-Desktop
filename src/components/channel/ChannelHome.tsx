@@ -1,10 +1,10 @@
 import React from "react";
-import { ChevronRight } from "lucide-react";
 import { VideoShelf } from "../shelf/VideoShelf";
 import { ShortsShelf } from "../shelf/ShortsShelf";
 import { PlaylistShelf } from "../shelf/PlaylistShelf";
 import { PostShelf } from "../shelf/PostShelf";
 import { ChannelShelf } from "../shelf/ChannelShelf";
+import { ShelfActionButton } from "../ui/ShelfActionButton";
 import { getString } from "../../lib/i18n/index";
 import { itemsOfLayout, sectionLayout } from "../../lib/channelPage";
 import type {
@@ -119,14 +119,7 @@ export const ChannelHome: React.FC<ChannelHomeProps> = ({
             onAddToQueue={onAddToQueue}
             action={
               canSeeAll(section) ? (
-                <button
-                  type="button"
-                  onClick={() => onSeeAll(section)}
-                  className="flex items-center gap-1 rounded-full px-3 py-1.5 text-sm font-semibold text-chrome-neutral-300 transition-colors hover:bg-surface-container-high hover:text-chrome-neutral-100"
-                >
-                  {getString("explore_see_all")}
-                  <ChevronRight className="rtl:-scale-x-100" size={16} />
-                </button>
+                <ShelfActionButton label={getString("explore_see_all")} onClick={() => onSeeAll(section)} />
               ) : undefined
             }
           />

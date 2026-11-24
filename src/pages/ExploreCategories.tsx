@@ -5,6 +5,7 @@ import { Button } from '../components/ui/Button';
 import { Chip } from '../components/ui/Chip';
 import { IconButton } from '../components/ui/IconButton';
 import { Select } from '../components/ui/Select';
+import { ShelfActionButton } from '../components/ui/ShelfActionButton';
 import { VideoGrid } from '../components/video/VideoGrid';
 import { getString } from '../lib/i18n/index';
 import { EXPLORE_DESTINATIONS, exploreDestinationFrom, shelvesWithShorts, useExplore } from '../lib/useExplore';
@@ -144,13 +145,7 @@ export default function ExploreCategories({ onPlay, onAddToQueue }: ExploreCateg
                 <div className="mb-3 flex items-center justify-between px-1">
                   <h2 dir="auto" className="text-xl font-bold tracking-tight text-chrome-neutral-100">{shelf.title}</h2>
                   {shelf.more && (
-                    <button
-                      type="button"
-                      onClick={() => explore.openSeeAll(shelf)}
-                      className="text-sm font-medium text-chrome-neutral-400 transition-colors duration-200 ease-out hover:text-chrome-neutral-100"
-                    >
-                      {getString('explore_see_all')}
-                    </button>
+                    <ShelfActionButton label={getString('explore_see_all')} onClick={() => explore.openSeeAll(shelf)} />
                   )}
                 </div>
                 <VideoGrid

@@ -27,12 +27,7 @@ export const ShortsShelf: React.FC<ShortsShelfProps> = ({
     <div className="relative flex flex-col gap-4 py-4 border-b border-chrome-zinc-900 last:border-0">
       {/* Shelf Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold text-chrome-zinc-100 tracking-tight flex items-center gap-2">
-          <span dir="auto">{title}</span>
-          <span className="text-xs text-chrome-zinc-500 font-semibold bg-chrome-zinc-900 border border-chrome-zinc-800/80 px-2 py-0.5 rounded-full">
-            {shorts.length}
-          </span>
-        </h2>
+        <h2 dir="auto" className="text-lg font-bold tracking-tight text-chrome-zinc-100">{title}</h2>
         {action}
       </div>
 

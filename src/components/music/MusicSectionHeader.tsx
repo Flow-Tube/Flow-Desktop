@@ -1,6 +1,7 @@
 import { ChevronRight, Play } from 'lucide-react';
 
 import { getString } from '../../lib/i18n/index';
+import { ShelfActionButton } from '../ui/ShelfActionButton';
 import { useProxyImageSrc } from '../../lib/useImageProxy';
 import type { MusicSeedArt } from '../../types/music';
 
@@ -67,14 +68,7 @@ export function MusicSectionHeader({
           {getString('music_play_all')}
         </button>
       ) : onSeeAll ? (
-        <button
-          type="button"
-          onClick={onSeeAll}
-          className="group flex shrink-0 items-center gap-0.5 text-sm font-medium text-chrome-neutral-400 transition-colors duration-200 ease-out hover:text-chrome-neutral-100"
-        >
-          {getString('music_show_all')}
-          <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5 rtl:group-hover:-translate-x-0.5 rtl:-scale-x-100" />
-        </button>
+        <ShelfActionButton label={getString('music_show_all')} onClick={onSeeAll} />
       ) : null}
     </div>
   );

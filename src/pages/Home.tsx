@@ -31,6 +31,7 @@ import type { VideoSummary } from "../types/video";
 import { VideoGrid } from "../components/video/VideoGrid";
 import { VideoShelf } from "../components/shelf/VideoShelf";
 import { ShortsShelf } from "../components/shelf/ShortsShelf";
+import { ShelfActionButton } from "../components/ui/ShelfActionButton";
 import { useHomeShortsShelf } from "../lib/useHomeShortsShelf";
 import { useShortsEnabled } from "../lib/useShortsContent";
 import { HomeFeedFooter } from "../components/home/HomeFeedFooter";
@@ -162,6 +163,7 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
         {shelfVideos.length > 0 && (
           <VideoShelf
             title={getString("continue_watching_shelf_title")}
+            action={<ShelfActionButton label={getString("library_view_all")} onClick={() => navigate("/history")} />}
             videos={shelfVideos}
             onPlay={onPlay}
             onAddToQueue={onAddToQueue}
@@ -172,7 +174,7 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
         <ShortsShelf title={getString("search_section_shorts")} shorts={homeShorts} onPlay={onPlay} />
       </>
     ),
-    [shelfVideos, homeShorts, onPlay, onAddToQueue, continueWatching.hide],
+    [shelfVideos, homeShorts, onPlay, onAddToQueue, continueWatching.hide, navigate],
   );
 
   const refreshButton = (

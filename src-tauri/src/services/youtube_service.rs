@@ -4,7 +4,7 @@ use crate::api::innertube::InnertubeClient;
 use crate::api::innertube::extractors::resolve::ResolvedEndpoint;
 use crate::errors::AppResult;
 use crate::models::channel::{ChannelAbout, ChannelDetails, ChannelPage, ChannelTabResponse};
-use crate::models::comment::CommentsResponse;
+use crate::models::comment::{Comment, CommentsResponse};
 use crate::models::explore::{ExploreGrid, ExplorePage, ExploreTarget};
 use crate::models::live_chat::LiveChatResponse;
 use crate::models::playlist::PlaylistDetailsResponse;
@@ -124,6 +124,16 @@ impl YoutubeService {
         page_token: Option<String>,
     ) -> AppResult<CommentsResponse> {
         self.extractor.get_comments(video_id, page_token).await
+    }
+
+    pub async fn get_timed_comments(
+        &self,
+        video_id: &str,
+        section_token: &str,
+    ) -> AppResult<Vec<Comment>> {
+        self.extractor
+            .get_timed_comments(video_id, section_token)
+            .await
     }
 
     pub async fn get_post_comments(

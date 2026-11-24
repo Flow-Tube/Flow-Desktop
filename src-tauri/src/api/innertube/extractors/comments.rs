@@ -12,8 +12,15 @@ use crate::api::innertube::json::text::text_of;
 use crate::api::innertube::json::thumbnail::{
     normalize_youtube_image_url, thumbnail_url_from_array,
 };
+use crate::api::innertube::transport::request::Host;
 use crate::errors::{AppError, AppResult};
 use crate::models::comment::{Comment, CommentImage, CommentSort, CommentsResponse};
+
+/// The Timed list's opening line, which is no comment.
+const TIMED_WELCOME_ID: &str = "timed_comments_welcome_sync_id";
+/// Only the entities: the rest of the Timed answer is server-drawn rows, 600 KB of
+/// them, that take seconds to arrive.
+const TIMED_FIELDS: &str = "&fields=frameworkUpdates.entityBatchUpdate.mutations";
 
 /// What a thread renders with when its comment is pinned to the top.
 const PINNED_PRIORITY: &str = "RENDERING_PRIORITY_PINNED_COMMENT";
@@ -563,7 +570,47 @@ fn build_comment_from_view_model(
         creator_reply_thumbnail,
         creator_reply_name,
         image,
+        timed_at_ms: None,
     })
+}
+
+/// YouTube's Timed list, in playback order, each comment with the time YouTube
+/// shows it at. The order and the times come from the list's sync entity; the
+/// comments are ordinary comment entities, found by their id.
+fn parse_timed_comments(response: &Value, own_video_id: Option<&str>) -> Vec<Comment> {
+    let mutations = build_comment_mutation_map(response);
+    let key_by_id: HashMap<&str, &str> = mutations
+        .iter()
+        .filter_map(|(key, payload)| {
+            let id = payload["commentEntityPayload"]["properties"]["commentId"].as_str()?;
+            Some((id, key.as_str()))
+        })
+        .collect();
+    let entries = mutations
+        .values()
+        .find_map(|payload| payload.get("timedMarkersListSyncEntity"))
+        .and_then(|sync| sync["timedListData"]["sections"].as_array())
+        .into_iter()
+        .flatten()
+        .filter_map(|section| section["timedSyncDataList"].as_array())
+        .flatten();
+    let comments = entries
+        .filter_map(|entry| {
+            let id = entry["syncItemId"]
+                .as_str()
+                .filter(|id| *id != TIMED_WELCOME_ID)?;
+            let at_ms = entry["videoTimeMs"]
+                .as_str()
+                .and_then(|ms| ms.parse().ok())
+                .or_else(|| entry["videoTimeMs"].as_u64())?;
+            let view_model = serde_json::json!({ "commentKey": key_by_id.get(id)? });
+            let mut comment =
+                build_comment_from_view_model(&view_model, None, &mutations, own_video_id, false)?;
+            comment.timed_at_ms = Some(at_ms);
+            Some(comment)
+        })
+        .collect();
+    dedupe_comments(comments)
 }
 
 fn dedupe_comments(comments: Vec<Comment>) -> Vec<Comment> {
@@ -649,6 +696,34 @@ impl InnertubeClient {
         Ok(comments_res)
     }
 
+    /// YouTube's Timed list for the comment section `section_token` opens (its
+    /// Newest order), in one IOS request. Only IOS serves it: ANDROID answers 400
+    /// and WEB has no Timed filter. IOS never gets a BotGuard token.
+    pub async fn get_timed_comments(
+        &self,
+        video_id: &str,
+        section_token: &str,
+    ) -> AppResult<Vec<Comment>> {
+        let mut payload = serde_json::json!({
+            "continuation": section_token,
+            "formData": { "commentsFilterFormData": { "commentsFilter": { "sortBy": "SORT_BY_TIMED" } } },
+        });
+        let response = self
+            .post_via(
+                &self.client,
+                Host::Www,
+                "next",
+                &clients::IOS,
+                &mut payload,
+                None,
+                Some(TIMED_FIELDS),
+            )
+            .await?;
+        let comments = parse_timed_comments(&response, Some(video_id.trim()));
+        debug!(video_id = %video_id.trim(), count = comments.len(), "[get_timed_comments] YouTube's Timed list");
+        Ok(comments)
+    }
+
     pub async fn get_post_comments(
         &self,
         post_id: &str,
@@ -713,7 +788,9 @@ impl InnertubeClient {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_comment_from_view_model, comment_image, parse_comments_json};
+    use super::{
+        build_comment_from_view_model, comment_image, parse_comments_json, parse_timed_comments,
+    };
     use std::collections::HashMap;
 
     fn view_model() -> serde_json::Value {
@@ -897,6 +974,35 @@ mod tests {
                 .len(),
             1
         );
+    }
+
+    #[test]
+    fn the_timed_list_gives_comments_in_its_order_with_their_times() {
+        let entity = |id: &str, text: &str| {
+            serde_json::json!({ "commentEntityPayload": {
+                "properties": { "commentId": id, "content": { "content": text } },
+                "author": { "displayName": "@someone" }
+            } })
+        };
+        let response = serde_json::json!({ "frameworkUpdates": { "entityBatchUpdate": { "mutations": [
+            { "entityKey": "k-late", "payload": entity("late", "the drop") },
+            { "entityKey": "k-early", "payload": entity("early", "intro") },
+            { "entityKey": "list", "payload": { "timedMarkersListSyncEntity": { "timedListData": { "sections": [
+                { "timedSyncDataList": [
+                    { "syncItemId": "timed_comments_welcome_sync_id", "videoTimeMs": "0" },
+                    { "syncItemId": "early", "videoTimeMs": "12000" },
+                    { "syncItemId": "late", "videoTimeMs": "95000" },
+                    { "syncItemId": "missing", "videoTimeMs": "99000" }
+                ] }
+            ] } } } }
+        ] } } });
+        let comments = parse_timed_comments(&response, Some("own00000000"));
+        let order: Vec<(&str, Option<u64>)> = comments
+            .iter()
+            .map(|c| (c.id.as_str(), c.timed_at_ms))
+            .collect();
+        assert_eq!(order, [("early", Some(12_000)), ("late", Some(95_000))]);
+        assert!(comments.iter().all(|c| c.continuation_token.is_none()));
     }
 
     #[test]

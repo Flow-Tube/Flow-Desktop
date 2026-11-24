@@ -8,7 +8,7 @@ use crate::api::innertube::core::clients;
 use crate::api::innertube::extractors::resolve::ResolvedEndpoint;
 use crate::errors::ErrorResponse;
 use crate::models::channel::{ChannelAbout, ChannelDetails, ChannelPage, ChannelTabResponse};
-use crate::models::comment::CommentsResponse;
+use crate::models::comment::{Comment, CommentsResponse};
 use crate::models::explore::{ExploreGrid, ExplorePage, ExploreTarget};
 use crate::models::playlist::PlaylistDetailsResponse;
 use crate::models::search::{SearchSuggestion, SearchVideosRequest, SearchVideosResponse};
@@ -811,6 +811,21 @@ pub async fn get_comments(
 
     youtube_service
         .get_comments(&video_id, page_token)
+        .await
+        .map_err(ErrorResponse::from)
+}
+
+/// YouTube's Timed list for a video, from the token of its comment section's Newest order.
+#[tauri::command]
+pub async fn get_timed_comments(
+    video_id: String,
+    section_token: String,
+    youtube_service: State<'_, YoutubeService>,
+) -> Result<Vec<Comment>, ErrorResponse> {
+    validate_video_id(&video_id).map_err(ErrorResponse::from)?;
+    validate_page_token(&section_token).map_err(ErrorResponse::from)?;
+    youtube_service
+        .get_timed_comments(&video_id, &section_token)
         .await
         .map_err(ErrorResponse::from)
 }

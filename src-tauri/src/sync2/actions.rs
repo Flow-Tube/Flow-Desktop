@@ -12,8 +12,8 @@ use super::held::HeldStore;
 use super::hybrid::HybridStore;
 use super::join_requests::JoinRequest;
 use super::keys::MemberSecrets;
-use super::lan_peers::{met, nearby};
-use super::lan_runtime::spread_leave;
+use super::lan_peers::{addresses, met, nearby, removal_targets};
+use super::lan_runtime::{notice_removal, spread_leave};
 use super::linking::DeviceMeta;
 use super::membership::{leave_group, remove_devices, rename_device};
 use super::names::device_names;
@@ -594,7 +594,9 @@ pub async fn remove(app: &AppHandle, id: &str, also: &[String]) -> Result<Option
     let session = open_session(&local, &record).await?;
     let mut removed = also.to_vec();
     removed.push(id.to_owned());
+    let targets = removal_targets(&addresses(app), &removed);
     let words = remove_devices(&local.pool, &session, &local.device, &removed).await?;
+    notice_removal(app, &local, targets);
     if words.is_some() {
         set_recovery_saved(&local.pool, false).await?;
     }

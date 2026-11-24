@@ -1,8 +1,9 @@
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Monitor, Pencil, Smartphone, Trash2 } from "lucide-react";
 
 import { devicesAddedBy, type LinkedDevice } from "../../../lib/api/linked";
 import { getString } from "../../../lib/i18n/index";
+import { deviceLabels } from "../../../lib/linked/deviceNames";
 import { useConsents, type Consent } from "../../../lib/live/useConsents";
 import { formatYouTubeRelativeTime } from "../../../lib/publishedDate";
 import { useLinkedDevicesStore } from "../../../store/useLinkedDevicesStore";
@@ -12,8 +13,8 @@ import { Checkbox } from "../../ui/Checkbox";
 import { Select } from "../../ui/Select";
 import { TextInput } from "../../ui/TextInput";
 
-function displayName(device: LinkedDevice): string {
-  return device.name.trim() || getString("linked_device_unnamed");
+function syncedText(device: LinkedDevice): string | null {
+  return device.lastSyncMs == null ? null : getString("linked_device_synced", formatYouTubeRelativeTime(device.lastSyncMs));
 }
 
 const CONSENTS: Consent[] = ["ask", "allow", "decline"];
@@ -28,9 +29,11 @@ interface RowProps {
   consent: Consent;
   onConsent: (consent: Consent) => void;
   devices: LinkedDevice[];
+  /** Each device's name, with the start of its id where another device has the same name. */
+  labels: Map<string, string>;
 }
 
-function DeviceRow({ device, consent, onConsent, devices }: RowProps) {
+function DeviceRow({ device, consent, onConsent, devices, labels }: RowProps) {
   const { rename, remove, busy } = useLinkedDevicesStore();
   const [mode, setMode] = useState<"view" | "rename" | "remove">("view");
   const [name, setName] = useState(device.name);
@@ -42,6 +45,8 @@ function DeviceRow({ device, consent, onConsent, devices }: RowProps) {
     setMode("remove");
   };
   const Icon = device.platform === "android" ? Smartphone : Monitor;
+  const label = labels.get(device.id) ?? device.name;
+  const synced = syncedText(device);
 
   if (mode === "rename") {
     const save = async () => {
@@ -66,31 +71,35 @@ function DeviceRow({ device, consent, onConsent, devices }: RowProps) {
     <div className="flex items-center gap-3 px-5 py-4 transition-colors duration-200 ease-out hover:bg-surface-row-hover">
       <Icon className="h-5 w-5 shrink-0 text-chrome-neutral-400" />
       <div className="min-w-0 flex-1">
-        <p dir="auto" className="truncate text-sm font-medium text-chrome-neutral-200">{displayName(device)}</p>
-        {device.lastSyncMs != null && mode !== "remove" && (
-          <p className="text-xs text-chrome-neutral-400">
-            {getString("linked_device_synced", formatYouTubeRelativeTime(device.lastSyncMs))}
-          </p>
-        )}
+        <p dir="auto" className="truncate text-sm font-medium text-chrome-neutral-200">{label}</p>
+        {synced != null && mode !== "remove" && <p className="text-xs text-chrome-neutral-400">{synced}</p>}
         {mode === "remove" && (
-          <p className="text-xs text-chrome-neutral-400">{getString("linked_remove_confirm", displayName(device))}</p>
+          <p className="text-xs text-chrome-neutral-400">{getString("linked_remove_confirm", label)}</p>
         )}
         {mode === "remove" && added.length > 0 && (
           <div className="mt-2 flex flex-col gap-1">
-            <p className="text-xs text-chrome-neutral-400">{getString("linked_remove_also", displayName(device))}</p>
+            <p className="text-xs text-chrome-neutral-400">{getString("linked_remove_also", label)}</p>
             {devices
               .filter((other) => added.includes(other.id) && !other.thisDevice)
-              .map((other) => (
-                <Checkbox
-                  key={other.id}
-                  checked={also.includes(other.id)}
-                  onChange={(checked) =>
-                    setAlso(checked ? [...also, other.id] : also.filter((id) => id !== other.id))
-                  }
-                >
-                  <span className="text-xs text-chrome-neutral-200">{displayName(other)}</span>
-                </Checkbox>
-              ))}
+              .map((other) => {
+                const status = syncedText(other) ?? (other.nearby ? getString("linked_nearby") : null);
+                return (
+                  <Checkbox
+                    key={other.id}
+                    checked={also.includes(other.id)}
+                    onChange={(checked) =>
+                      setAlso(checked ? [...also, other.id] : also.filter((id) => id !== other.id))
+                    }
+                  >
+                    <span className="flex flex-col">
+                      <span dir="auto" className="text-xs text-chrome-neutral-200">
+                        {labels.get(other.id) ?? other.name}
+                      </span>
+                      {status != null && <span className="text-xs text-chrome-neutral-400">{status}</span>}
+                    </span>
+                  </Checkbox>
+                );
+              })}
           </div>
         )}
       </div>
@@ -135,6 +144,7 @@ function DeviceRow({ device, consent, onConsent, devices }: RowProps) {
 /** The group's devices as rows of one settings group; `children` adds rows after them. */
 export function DeviceList({ devices, title, children }: { devices: LinkedDevice[]; title: string; children?: ReactNode }) {
   const [consents, setConsent] = useConsents();
+  const labels = useMemo(() => deviceLabels(devices), [devices]);
   return (
     <SettingsGroup title={title}>
       {devices.map((device) => (
@@ -144,6 +154,7 @@ export function DeviceList({ devices, title, children }: { devices: LinkedDevice
           consent={consents[device.id] ?? "ask"}
           onConsent={(consent) => setConsent(device.id, consent)}
           devices={devices}
+          labels={labels}
         />
       ))}
       {children}

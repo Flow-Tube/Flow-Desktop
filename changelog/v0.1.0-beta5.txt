@@ -98,6 +98,8 @@ SYNC
 - New installs name themselves after the computer, such as Flow Desktop (MY-PC - Windows), so two installs in one group are easy to tell apart. Development builds add Dev.
 - When a sync server or WebDAV folder can't be reached, Flow now says why: nothing answered, the port refused the connection, the name wasn't found, the server stopped answering, or the address isn't a web server (Flow for Android #2233).
 - A WebDAV folder address that the server redirects, doesn't have, or doesn't allow writing to now gets its own message, and each failed request is written to the log.
+- When two linked devices share a name, the device list and the remove confirmation add the start of each device id, and each device offered for removal shows when it last synced, so removing one no longer risks removing its twin (#2184).
+- A device removed on the local network now finds out straight away when it is reachable, instead of staying Linked until it next reaches a member. The devices left in the group get the removal at once too.
 
 DESKTOP
 - Flow starts with a smaller first script: Settings, Sync, Recap, your Persona, Extensions, Diagnostics, Import, Support and the welcome screens now load when they are first opened.

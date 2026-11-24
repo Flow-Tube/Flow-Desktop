@@ -152,16 +152,45 @@ pub async fn meet(
 ) -> Result<Met> {
     let held = HeldStore::new(pool.clone());
     let mut session = Session::open_for_lan(pool, held.clone(), device).await?;
+    let (framed, peer) =
+        hello_newest_epoch(&mut session, device, address, listening, Standing::Member).await?;
+    pull_after_hello(framed, peer, &session, held, address, live, sink).await
+}
+
+/// Brings the device at `address`, which this device just removed, the roster that removes it
+/// (spec/live.md, LAN groups, Removing). It lacks the new epoch's key, so the hello steps back to
+/// the newest epoch it holds. It is served the roster only, and nothing is pulled from it.
+pub async fn deliver_removal(
+    pool: &SqlitePool,
+    device: &MemberSecrets,
+    address: (&str, u16),
+) -> Result<()> {
+    let held = HeldStore::new(pool.clone());
+    let mut session = Session::open_for_lan(pool, held.clone(), device).await?;
+    let (framed, _) =
+        hello_newest_epoch(&mut session, device, address, None, Standing::Removed).await?;
+    // Served until it stops asking, like a removed device that dials this one.
+    drop(Link::spawn(framed, Holder::roster_only(held, &session)));
+    Ok(())
+}
+
+/// Says hello to the peer at `address` under this device's epoch, then one lower each time the
+/// peer closes without answering (spec/live.md, Session).
+async fn hello_newest_epoch(
+    session: &mut Session<'_, HeldStore>,
+    device: &MemberSecrets,
+    address: (&str, u16),
+    listening: Option<u16>,
+    standing: Standing,
+) -> Result<(Framed<ClientStream>, String)> {
     let mut epoch = session.roster().epoch;
     for attempt in 1.. {
         let socket = dial(address).await?;
         let key = session.epoch_key(epoch).await?;
-        match hello_as_client(socket, &session, device, (epoch, &key), listening).await {
+        let current = (epoch, key.as_slice());
+        match hello_as_client(socket, session, device, current, listening, standing).await {
             Err(EngineError::LanUnreachable) if attempt < DIAL_ATTEMPTS && epoch > 0 => epoch -= 1,
-            hello => {
-                let (framed, peer) = hello?;
-                return pull_after_hello(framed, peer, &session, held, address, live, sink).await;
-            }
+            hello => return hello,
         }
     }
     Err(EngineError::LanUnreachable)
@@ -179,7 +208,15 @@ pub async fn meet_as<T: Store>(
 ) -> Result<Met> {
     let socket = dial((address, port)).await?;
     let current = (session.roster().epoch, session.current_key());
-    let (framed, peer) = hello_as_client(socket, session, device, current, listening).await?;
+    let (framed, peer) = hello_as_client(
+        socket,
+        session,
+        device,
+        current,
+        listening,
+        Standing::Member,
+    )
+    .await?;
     pull_after_hello(framed, peer, session, held, (address, port), live, sink).await
 }
 

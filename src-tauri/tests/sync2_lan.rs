@@ -21,7 +21,7 @@ use flow_desktop_lib::sync2::keys::MemberSecrets;
 use flow_desktop_lib::sync2::keys::member_secrets;
 use flow_desktop_lib::sync2::lan_link::LiveSink;
 use flow_desktop_lib::sync2::lan_peers::listen;
-use flow_desktop_lib::sync2::lan_sync::{Met, meet, meet_as, serve};
+use flow_desktop_lib::sync2::lan_sync::{Met, deliver_removal, meet, meet_as, serve};
 use flow_desktop_lib::sync2::linking::{
     DeviceMeta, WelcomeStore, add_device, add_scanned, answer_shown, finish_lan_join, join_on_lan,
 };
@@ -412,6 +412,45 @@ async fn a_member_opens_no_session_with_a_device_it_removed() {
         meet(&pool_a, &g.a, ("127.0.0.1", port), None, &[], no_live()).await,
         Err(EngineError::Removed)
     ));
+}
+
+#[tokio::test]
+async fn removing_a_device_delivers_the_removal_to_it_while_reachable() {
+    let g = group().await;
+    let (pool_a, pool_b) = b_removed(&g).await;
+    watch(&pool_b, "bbbbbbbbbbb").await;
+    push(&pool_b, &g.b).await;
+    let port = listening(&pool_b, &g.b).await;
+
+    // B lacks the epoch the removal started, so A steps back to the one B still holds.
+    deliver_removal(&pool_a, &g.a, ("127.0.0.1", port))
+        .await
+        .unwrap();
+
+    for _ in 0..50 {
+        let opened = Session::open(&pool_b, HeldStore::new(pool_b.clone()), &g.b).await;
+        if matches!(opened, Err(EngineError::Removed)) {
+            let written = log_path(&hex::encode(g.b.did), 1);
+            let held_a = HeldStore::new(pool_a.clone());
+            assert!(held_a.get_object(&written).await.unwrap().is_none());
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    panic!("the removed device never read its removal");
+}
+
+#[tokio::test]
+async fn a_removal_is_not_delivered_to_a_device_still_in_the_group() {
+    let g = group().await;
+    let (pool_a, pool_b) = (holding(&g).await, holding(&g).await);
+    let port = listening(&pool_b, &g.b).await;
+
+    assert!(
+        deliver_removal(&pool_a, &g.a, ("127.0.0.1", port))
+            .await
+            .is_err()
+    );
 }
 
 fn loopback() -> Vec<String> {

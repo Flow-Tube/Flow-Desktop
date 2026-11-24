@@ -3204,6 +3204,7 @@
   "linked_never_synced": "Not synced yet",
   "linked_syncing": "Syncing…",
   "linked_device_synced": "Synced %s",
+  "linked_device_name_with_id": "%1$s · %2$s",
   "linked_received_one": "Received 1 change from %s",
   "linked_received_many": "Received %s changes from %s",
   "linked_another_device": "another device",

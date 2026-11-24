@@ -26,6 +26,7 @@ export function ContentTab() {
   const [homeSubscriptions, setHomeSubscriptions] = useBoolPref(SETTINGS.HOME_SUBSCRIPTIONS_ENABLED, true);
   const [refreshOnReselect, setRefreshOnReselect] = useBoolPref(SETTINGS.REFRESH_HOME_ON_RESELECT, true);
   const [comments, setComments] = useBoolPref(SETTINGS.COMMENTS_ENABLED, true);
+  const [commentGifs, setCommentGifs] = useBoolPref(SETTINGS.COMMENT_GIFS_ENABLED, true);
   const [notes, setNotes] = useBoolPref(SETTINGS.NOTES_ENABLED, true);
   const [channelNotes, setChannelNotes] = useBoolPref(SETTINGS.CHANNEL_NOTES_ENABLED, true);
   const [videoNotes, setVideoNotes] = useBoolPref(SETTINGS.VIDEO_NOTES_ENABLED, true);
@@ -117,6 +118,7 @@ export function ContentTab() {
 
       <SettingsGroup title={getString('settings_group_watch_page')}>
         <SettingItem title={getString('settings_comments')} description={getString('settings_comments_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.COMMENTS_ENABLED)}><ToggleSwitch checked={comments} onChange={setComments} disabled={isSettingDisabledUntilWired(SETTINGS.COMMENTS_ENABLED)} /></SettingItem>
+        <SettingItem title={getString('settings_comment_gifs')} description={getString('settings_comment_gifs_desc')} disabled={!comments}><ToggleSwitch checked={commentGifs} onChange={setCommentGifs} disabled={!comments} /></SettingItem>
         <SettingItem title={getString('settings_notes')} description={getString('settings_notes_desc')}><ToggleSwitch checked={notes} onChange={setNotes} /></SettingItem>
         <SettingItem title={getString('settings_channel_notes')} description={getString('settings_channel_notes_desc')} disabled={!notes}><ToggleSwitch checked={channelNotes} onChange={setChannelNotes} disabled={!notes} /></SettingItem>
         <SettingItem title={getString('settings_video_notes')} description={getString('settings_video_notes_desc')} disabled={!notes}><ToggleSwitch checked={videoNotes} onChange={setVideoNotes} disabled={!notes} /></SettingItem>

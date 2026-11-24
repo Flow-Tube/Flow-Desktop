@@ -55,6 +55,7 @@ const SHARED: &[Shared] = &[
     shared("trending_region", "trending_region", Kind::Text),
     shared("hide_watched_videos", "hide_watched_videos", Kind::Bool),
     shared("comments_enabled", "comments_enabled", Kind::Bool),
+    shared("comment_gifs_enabled", "comment_gifs_enabled", Kind::Bool),
     shared("return_youtube_dislikes", "rytd_enabled", Kind::Bool),
     shared("video_loop", "video_loop_enabled", Kind::Bool),
     shared("stable_volume", "stable_volume_enabled", Kind::Bool),

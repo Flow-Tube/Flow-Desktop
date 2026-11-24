@@ -209,6 +209,7 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     { title: "settings_home_refresh_on_reselect", summary: "settings_home_refresh_on_reselect_desc" },
     { title: "settings_home_max_age", summary: "settings_home_max_age_desc" },
     { title: "settings_comments", summary: "settings_comments_desc" },
+    { title: "settings_comment_gifs", summary: "settings_comment_gifs_desc", keywords: ["gif", "animated", "image"] },
     { title: "settings_notes", summary: "settings_notes_desc" },
     { title: "settings_channel_notes", summary: "settings_channel_notes_desc" },
     { title: "settings_video_notes", summary: "settings_video_notes_desc" },

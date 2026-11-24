@@ -1,7 +1,8 @@
 import { useState, type ComponentType } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, Clock, Gamepad2, GraduationCap, Music2, Newspaper, Radio, Shirt, Trophy, X } from 'lucide-react';
+import { Clock, Gamepad2, GraduationCap, Music2, Newspaper, Radio, Shirt, Trophy, X } from 'lucide-react';
 import { Chip } from '../ui/Chip';
+import { ShelfActionButton } from '../ui/ShelfActionButton';
 import { getString } from '../../lib/i18n/index';
 import { filterSummary } from '../../lib/searchFilterOptions';
 import { HISTORY_WHEN_EMPTY } from '../../lib/searchSuggestions';
@@ -107,10 +108,7 @@ function MoodChips() {
       <SectionTitle
         title={getString('search_home_moods')}
         action={
-          <button type="button" onClick={() => navigate('/music/moods')} className={linkButton}>
-            {getString('search_home_moods_all')}
-            <ChevronRight className="h-4 w-4 rtl:-scale-x-100" aria-hidden="true" />
-          </button>
+          <ShelfActionButton label={getString('search_home_moods_all')} onClick={() => navigate('/music/moods')} />
         }
       />
       <div className="flex flex-wrap gap-2">

@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { AlertTriangle, Check, ChevronRight, ExternalLink, Music2, Play, Plus, Share2 } from 'lucide-react';
+import { AlertTriangle, Check, ExternalLink, Music2, Play, Plus, Share2 } from 'lucide-react';
 
 import { Button, type ButtonProps } from '../../components/ui/Button';
+import { ShelfActionButton } from '../../components/ui/ShelfActionButton';
 import { SoftBackdrop } from '../../components/ui/SoftBackdrop';
 import { AlbumTrackRow } from '../../components/music/AlbumTrackRow';
 import { ArtistAiNotice } from '../../components/music/ArtistAiNotice';
@@ -38,14 +39,7 @@ function SectionTitle({ title, onSeeAll }: { title: string; onSeeAll?: () => voi
     <div className="mb-3 flex items-center justify-between px-1">
       <h2 className="text-xl font-bold tracking-tight text-chrome-neutral-100">{title}</h2>
       {onSeeAll ? (
-        <button
-          type="button"
-          onClick={onSeeAll}
-          className="group flex items-center gap-0.5 text-sm font-medium text-chrome-neutral-400 transition-colors duration-200 ease-out hover:text-chrome-neutral-100"
-        >
-          {getString('music_show_all')}
-          <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5 rtl:group-hover:-translate-x-0.5 rtl:-scale-x-100" />
-        </button>
+        <ShelfActionButton label={getString('music_show_all')} onClick={onSeeAll} />
       ) : null}
     </div>
   );

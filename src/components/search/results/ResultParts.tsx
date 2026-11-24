@@ -4,6 +4,7 @@ import { ChannelCard } from '../../channel/ChannelCard';
 import { VideoGrid } from '../../video/VideoGrid';
 import { getString } from '../../../lib/i18n/index';
 import { Button } from '../../ui/Button';
+import { ShelfActionButton } from '../../ui/ShelfActionButton';
 import type { PlaylistItem } from '../../../types/music';
 import type { PlaylistSummary, SearchChannel, SearchShelf, VideoSummary } from '../../../types/video';
 
@@ -49,13 +50,7 @@ export function ShelfHeader({
     <div className="mb-3 flex items-center justify-between px-1">
       <h2 className="text-xl font-bold tracking-tight text-chrome-neutral-100">{title}</h2>
       {onSeeAll && (
-        <button
-          type="button"
-          onClick={onSeeAll}
-          className="text-sm font-medium text-chrome-neutral-400 transition-colors duration-200 ease-out hover:text-chrome-neutral-100"
-        >
-          {seeAllLabel ?? getString('music_show_all')}
-        </button>
+        <ShelfActionButton label={seeAllLabel ?? getString('music_show_all')} onClick={onSeeAll} />
       )}
     </div>
   );

@@ -11,14 +11,13 @@ import { useBoolPref } from "../../lib/usePreference";
 import {
   COMMENT_FILTERS,
   commentSortFor,
-  oldestCommentsFirst,
+  oldestFirst,
   timedCommentsInOrder,
   type CommentFilter,
 } from "../../lib/commentFilters";
 import { SETTINGS } from "../../lib/settings/schema";
 import { usePlayerStore } from "../../store/usePlayerStore";
-import { getString } from "../../lib/i18n/index";
-import type { CommentSort } from "../../types/video";
+import { getPlural, getString } from "../../lib/i18n/index";
 import type { CommentsSectionProps } from "./types";
 
 const FILTER_LABELS = {
@@ -27,10 +26,6 @@ const FILTER_LABELS = {
   oldest: "comments_sort_oldest",
   timed: "comments_sort_timed",
 } as const satisfies Record<CommentFilter, string>;
-
-// YouTube names the orders in English; ours are named by their place in its list.
-const sortLabel = (option: CommentSort, index: number) =>
-  index === 0 ? getString("comments_sort_top") : index === 1 ? getString("comments_sort_newest") : option.title;
 
 export function CommentsSection({
   videoId,
@@ -42,10 +37,11 @@ export function CommentsSection({
 }: CommentsSectionProps) {
   const thread = useVideoComments(videoId, { postId, postCommentParams });
   const [filter, setFilter] = useState<CommentFilter>("top");
-  useEffect(() => setFilter("top"), [videoId]);
-  // Community posts have no playback to follow and keep YouTube's own orders.
-  const filtersShown = !postId && thread.sortOptions.length >= 2;
-  const isTimed = filtersShown && filter === "timed";
+  useEffect(() => setFilter("top"), [videoId, postId]);
+  const filtersShown = thread.sortOptions.length >= 2;
+  // Community posts have no playback for Timed to follow.
+  const filters = postId ? COMMENT_FILTERS.filter((option) => option !== "timed") : COMMENT_FILTERS;
+  const isTimed = filtersShown && !postId && filter === "timed";
 
   const timed = useTimedComments(videoId, thread.sortOptions, isTimed);
   const duration = usePlayerStore((s) => s.duration);
@@ -54,7 +50,7 @@ export function CommentsSection({
 
   const comments = useMemo(() => {
     if (isTimed) return timedCommentsInOrder(timed.comments, duration);
-    return filtersShown && filter === "oldest" ? oldestCommentsFirst(thread.comments) : thread.comments;
+    return filtersShown && filter === "oldest" ? oldestFirst(thread.comments) : thread.comments;
   }, [duration, filter, filtersShown, isTimed, thread.comments, timed.comments]);
   const { anchorId, pauseForReading, pauseForReplies } = useTimedFollow(listRef, comments, isTimed && follow);
 
@@ -62,8 +58,14 @@ export function CommentsSection({
     setFilter(next);
     if (next === "timed") return;
     const order = commentSortFor(thread.sortOptions, next);
-    if (order && !order.selected) thread.selectSort(order.token);
+    if (!order) return;
+    if (next === "oldest") thread.selectSort(order.token, true);
+    else if (!order.selected || thread.oldest) thread.selectSort(order.token);
   };
+  const oldestNote =
+    filtersShown && filter === "oldest" && thread.oldestCapped && !thread.loading
+      ? getPlural("comments_oldest_capped", thread.comments.length)
+      : null;
 
   const loading = isTimed ? timed.loading && comments.length === 0 : thread.loading;
   const hasMore = isTimed ? timed.hasMore : Boolean(thread.nextPageToken);
@@ -92,31 +94,19 @@ export function CommentsSection({
               <X size={18} />
             </button>
           )}
-          {filtersShown ? (
+          {filtersShown && (
             <div className="flex flex-wrap gap-2">
-              {COMMENT_FILTERS.map((option) => (
+              {filters.map((option) => (
                 <Chip key={option} active={filter === option} onClick={() => chooseFilter(option)}>
                   {getString(FILTER_LABELS[option])}
                 </Chip>
               ))}
             </div>
-          ) : (
-            thread.sortOptions.length > 1 && (
-              <div className="flex gap-2">
-                {thread.sortOptions.map((option, index) => (
-                  <Chip
-                    key={option.token}
-                    active={option.selected}
-                    onClick={() => !option.selected && thread.selectSort(option.token)}
-                  >
-                    {sortLabel(option, index)}
-                  </Chip>
-                ))}
-              </div>
-            )
           )}
         </div>
       )}
+
+      {oldestNote && <p className="-mt-2 text-xs text-chrome-neutral-400">{oldestNote}</p>}
 
       {isTimed && (
         <div className="flex items-center justify-between gap-3">

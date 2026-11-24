@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   commentSortFor,
   firstTimestampSeconds,
-  oldestCommentsFirst,
+  oldestFirst,
   timedAnchorIndex,
   timedCommentOrders,
   timedCommentsInOrder,
@@ -58,13 +58,13 @@ describe("comment filters", () => {
     expect(timedAnchorIndex([], 5)).toBe(-1);
   });
 
-  it("puts the oldest first and keeps pinned on top", () => {
+  it("turns the newest-first list around and keeps pinned on top", () => {
     const list = [
-      comment("new", { publishedText: "2 hours ago" }),
       comment("pin", { publishedText: "1 minute ago", isPinned: true }),
+      comment("new", { publishedText: "vor 2 Stunden" }),
+      comment("mid", { publishedText: "il y a 4 semaines" }),
       comment("old", { publishedText: "3 years ago (edited)" }),
-      comment("mid", { publishedText: "4 weeks ago" }),
     ];
-    expect(oldestCommentsFirst(list).map((c) => c.id)).toEqual(["pin", "old", "mid", "new"]);
+    expect(oldestFirst(list).map((c) => c.id)).toEqual(["pin", "old", "mid", "new"]);
   });
 });

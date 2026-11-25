@@ -88,9 +88,14 @@ impl RequestSpec<'_> {
 
     /// Whether a failed attempt of this request may be repeated. Player and
     /// visitor requests have their own budgets in the ladder that sends them.
+    /// A suggestion is stale by the time a retry lands, and the next keystroke
+    /// asks again anyway.
     #[must_use]
     pub fn is_retryable(&self) -> bool {
-        !matches!(self.endpoint, "player" | "visitor_id")
+        !matches!(
+            self.endpoint,
+            "player" | "visitor_id" | "music/get_search_suggestions"
+        )
     }
 }
 
@@ -184,6 +189,23 @@ mod tests {
         assert!(header(&headers, "X-Goog-Visitor-Id").is_none());
         assert_eq!(header(&headers, "Referer"), Some("https://youtu.be/abc"));
         assert!(!spec.is_retryable());
+    }
+
+    #[test]
+    fn suggestions_are_never_retried() {
+        let spec = RequestSpec {
+            host: Host::Music,
+            endpoint: "music/get_search_suggestions",
+            client: &WEB_REMIX,
+            referer: None,
+            extra_query: None,
+        };
+        assert!(!spec.is_retryable());
+        let browse = RequestSpec {
+            endpoint: "browse",
+            ..spec
+        };
+        assert!(browse.is_retryable());
     }
 
     #[test]

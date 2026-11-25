@@ -10,7 +10,8 @@ use super::parse::runs::runs_text;
 use super::parse::{continuation, shelves};
 use crate::api::innertube::InnertubeClient;
 use crate::api::innertube::core::http::custom_url_encode;
-use crate::errors::AppResult;
+use crate::api::innertube::extractors::search::SUGGESTION_TIMEOUT;
+use crate::errors::{AppError, AppResult};
 use crate::models::music::{Artist, YTItem};
 use crate::models::music_pages::{
     MusicSearchResponse, MusicSearchSection, MusicSearchSuggestions, SearchSummaryPage,
@@ -79,14 +80,17 @@ impl InnertubeClient {
         query: &str,
     ) -> AppResult<MusicSearchSuggestions> {
         let mut payload = json!({ "input": query });
-        let res = self
-            .post_music(
+        let res = tokio::time::timeout(
+            SUGGESTION_TIMEOUT,
+            self.post_music(
                 "music/get_search_suggestions",
                 &clients::WEB_REMIX,
                 &mut payload,
                 None,
-            )
-            .await?;
+            ),
+        )
+        .await
+        .map_err(|_| AppError::Network("music suggestions timed out".into()))??;
 
         let mut queries = Vec::new();
         let mut recommended_items = Vec::new();

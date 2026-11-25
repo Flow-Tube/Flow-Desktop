@@ -18,6 +18,7 @@ use crate::models::video::VideoSummary;
 use base64::Engine;
 use serde_json::Value;
 use std::collections::HashSet;
+use std::time::Duration;
 
 fn custom_url_encode(s: &str) -> String {
     let mut encoded = String::new();
@@ -408,6 +409,10 @@ pub fn parse_innertube_search(val: &Value) -> SearchVideosResponse {
     reader.page
 }
 
+/// How long a suggestion request may take. Past this the user has typed on, and
+/// the rows already on screen are better than a late answer.
+pub(crate) const SUGGESTION_TIMEOUT: Duration = Duration::from_secs(2);
+
 impl InnertubeClient {
     pub async fn search_videos(
         &self,
@@ -461,9 +466,10 @@ impl InnertubeClient {
             .get(&url)
             .header("Origin", "https://www.youtube.com")
             .header("Referer", "https://www.youtube.com")
+            .timeout(SUGGESTION_TIMEOUT)
             .send()
             .await
-            .map_err(|e| AppError::Extractor(format!("Network error suggestions: {}", e)))?;
+            .map_err(|e| AppError::Network(format!("suggestions: {e}")))?;
 
         // Decoded through `text()` rather than `json()` on purpose: it honours the
         // charset the response declares, so a legacy encoding still decodes instead
@@ -471,7 +477,7 @@ impl InnertubeClient {
         let body = res
             .text()
             .await
-            .map_err(|e| AppError::Extractor(format!("Read error suggestions: {}", e)))?;
+            .map_err(|e| AppError::Network(format!("suggestions body: {e}")))?;
 
         let val: Value = serde_json::from_str(&body)
             .map_err(|e| AppError::Extractor(format!("JSON error suggestions: {}", e)))?;

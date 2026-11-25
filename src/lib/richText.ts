@@ -6,6 +6,8 @@ export interface RichSegment {
   emoji?: RichEmoji;
   /** Bold, italic or struck through, when a style run covers the piece. */
   style?: Pick<RichStyle, "bold" | "italic" | "strikethrough">;
+  /** The index of the highlight chip the piece sits on; pieces of one chip are drawn as one. */
+  highlight?: number;
 }
 
 // Each pattern's first group is what may precede the match and the second the match itself.
@@ -44,12 +46,15 @@ export function linkifyPlain(text: string): RichText {
   return { text, spans, emojis: [] };
 }
 
-/** `rich` cut into plain, linked and emoji pieces, in order. A run overlapping an earlier one is dropped. */
+/**
+ * `rich` cut into plain, linked and emoji pieces, in order. A run overlapping an earlier one is
+ * dropped. An icon inserted where a link starts comes before the link.
+ */
 export function richSegments(rich: RichText): RichSegment[] {
   const marks = [
     ...rich.spans.map((span) => ({ start: span.start, end: span.start + span.length, target: span.target })),
     ...rich.emojis.map((emoji) => ({ start: emoji.start, end: emoji.start + emoji.length, emoji })),
-  ].sort((a, b) => a.start - b.start);
+  ].sort((a, b) => a.start - b.start || (a.end - a.start) - (b.end - b.start));
   const segments: RichSegment[] = [];
   let cursor = 0;
   for (const mark of marks) {
@@ -60,7 +65,52 @@ export function richSegments(rich: RichText): RichSegment[] {
     cursor = mark.end;
   }
   if (cursor < rich.text.length) segments.push({ text: rich.text.slice(cursor) });
-  return rich.styles?.length ? splitAtStyles(segments, rich.styles) : segments;
+  const styled = rich.styles?.length ? splitAtStyles(segments, rich.styles) : segments;
+  return rich.highlights?.length ? markHighlights(styled, rich.highlights) : styled;
+}
+
+/** Cuts pieces where a highlight starts or ends and marks the ones on it. An inserted icon at its start belongs to it. */
+function markHighlights(segments: RichSegment[], highlights: NonNullable<RichText["highlights"]>): RichSegment[] {
+  const ranges = highlights.map((highlight) => ({ start: highlight.start, end: highlight.start + highlight.length }));
+  const pieces: RichSegment[] = [];
+  let offset = 0;
+  for (const segment of segments) {
+    const start = offset;
+    const end = offset + segment.text.length;
+    offset = end;
+    if (segment.emoji) {
+      const index = ranges.findIndex((range) => start >= range.start && start < range.end);
+      pieces.push(index >= 0 ? { ...segment, highlight: index } : segment);
+      continue;
+    }
+    const edges = new Set([start, end]);
+    for (const range of ranges) for (const edge of [range.start, range.end]) if (edge > start && edge < end) edges.add(edge);
+    const points = [...edges].sort((a, b) => a - b);
+    for (let index = 0; index < points.length - 1; index++) {
+      const from = points[index]!;
+      const to = points[index + 1]!;
+      const piece: RichSegment = { ...segment, text: segment.text.slice(from - start, to - start) };
+      const on = ranges.findIndex((range) => range.start <= from && range.end >= to);
+      if (on >= 0) piece.highlight = on;
+      pieces.push(piece);
+    }
+  }
+  return pieces;
+}
+
+/** The part of `rich` from `start` to `end`, with every run moved to match. */
+export function sliceRich(rich: RichText, start: number, end: number): RichText {
+  const within = <T extends { start: number; length: number }>(runs: T[] | undefined) =>
+    (runs ?? [])
+      .filter((run) => run.start >= start && run.start + run.length <= end)
+      .map((run) => ({ ...run, start: run.start - start }));
+  return {
+    text: rich.text.slice(start, end),
+    spans: within(rich.spans),
+    emojis: within(rich.emojis),
+    styles: within(rich.styles),
+    highlights: within(rich.highlights),
+  };
 }
 
 /** Cuts text and link pieces where a style run starts or ends; an emoji stays whole. */

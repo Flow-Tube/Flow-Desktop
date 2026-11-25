@@ -95,11 +95,18 @@ export interface RichSpan {
   target: RichTarget;
 }
 
+/** A custom emoji drawn over its range, or, with no length, a site icon or avatar inserted before a link. */
 export interface RichEmoji {
   start: number;
   length: number;
   imageUrl: string;
   label: string;
+}
+
+/** A stretch YouTube draws on a rounded chip, such as a channel or site link. */
+export interface RichHighlight {
+  start: number;
+  length: number;
 }
 
 /** A stretch of the text drawn in a different face. */
@@ -117,6 +124,7 @@ export interface RichText {
   spans: RichSpan[];
   emojis: RichEmoji[];
   styles?: RichStyle[];
+  highlights?: RichHighlight[];
 }
 
 export interface DescriptionExtras {
@@ -125,7 +133,11 @@ export interface DescriptionExtras {
   /** Songs credited in the video. */
   music: { title: string; artist?: string | null; album?: string | null; thumbnailUrl?: string | null }[];
   /** The creator's own links. */
-  links: { title: string; url: string }[];
+  links: { title: string; url: string; iconUrl?: string | null }[];
+  /** The channel card the panel ends with. */
+  channel?: { name: string; subtitle?: string | null; avatarUrl?: string | null; channelId?: string | null } | null;
+  /** "How this was made": YouTube's note on altered or synthetic content. */
+  disclosure?: { title?: string | null; header?: string | null; body?: RichText | null } | null;
 }
 
 /** One slice of the "most replayed" graph, with how often it is replayed from 0 to 1. */

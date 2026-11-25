@@ -26,6 +26,8 @@ LINUX
 HOME AND RECOMMENDATIONS
 - Home no longer redraws every card each time the feed loads more or changes state. Loading a page sends only its new videos, where it used to resend the whole feed at least three times.
 - Hiding a video on Home no longer reloads every card after it.
+- When Home can't load and has nothing saved, it now lists your downloaded videos and songs under the error, so there is still something to play offline.
+- When the connection comes back, Home offers Back online · Refresh above the cards instead of swapping them while you read. A Home that failed with nothing on screen loads by itself.
 
 SEARCH
 - Search suggestions keep up with typing. A space after a word no longer asks YouTube again, and a request that fails or takes longer than 2 seconds leaves the rows you had instead of an empty list.

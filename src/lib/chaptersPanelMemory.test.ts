@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { cachedTranscript, rememberTranscript, rememberView, rememberedView } from "./chaptersPanelMemory";
+import {
+  cachedTranscript,
+  clearRequestedTab,
+  onTabRequest,
+  rememberTranscript,
+  rememberView,
+  rememberedView,
+  requestTab,
+  requestedTabFor,
+} from "./chaptersPanelMemory";
 
 describe("chaptersPanelMemory", () => {
   it("returns the view only for the video it was saved for", () => {
@@ -21,5 +30,27 @@ describe("chaptersPanelMemory", () => {
     rememberTranscript("keep", []);
     rememberTranscript("push", []);
     expect(cachedTranscript("keep")).not.toBeNull();
+  });
+});
+
+describe("tab requests", () => {
+  it("hands a requested tab to an open panel, or keeps it for the next one to mount", () => {
+    requestTab("v1", "transcript");
+    expect(requestedTabFor("v1")).toBe("transcript");
+    expect(requestedTabFor("v2")).toBeNull();
+    clearRequestedTab("v1");
+    expect(requestedTabFor("v1")).toBeNull();
+
+    const seen: string[] = [];
+    const stop = onTabRequest((id, tab) => {
+      seen.push(`${id}:${tab}`);
+      return id === "v1";
+    });
+    requestTab("v1", "chapters");
+    expect(seen).toEqual(["v1:chapters"]);
+    expect(requestedTabFor("v1")).toBeNull();
+    requestTab("v2", "transcript");
+    expect(requestedTabFor("v2")).toBe("transcript");
+    stop();
   });
 });

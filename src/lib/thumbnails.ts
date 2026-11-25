@@ -55,7 +55,7 @@ export function upgradeThumbnailUrl(
  * Exists for every video, unlike `hq720` and `maxresdefault`. It is 480×360 with
  * the 16:9 frame letterboxed inside, so `object-cover` crops it to 480×270.
  */
-function youtubeHqDefaultUrl(videoId: string): string {
+export function youtubeHqDefaultUrl(videoId: string): string {
   return `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
 }
 

@@ -244,10 +244,9 @@ fn the_description_carries_its_links_songs_and_numbers() {
     let Some(next) = fixture("next_related") else {
         return;
     };
-    let rich =
-        watch_next::description_rich(&next, None, "dQw4w9WgXcQ").expect("linked description");
+    let rich = watch_next::description_rich(&next, "dQw4w9WgXcQ").expect("linked description");
     assert!(!rich.spans.is_empty());
-    let extras = watch_next::description_extras(&next);
+    let extras = watch_next::description_extras(&next, "dQw4w9WgXcQ");
     assert!(!extras.factoids.is_empty());
     assert!(!extras.music.is_empty());
     assert!(

@@ -8,9 +8,12 @@ import { activeCuePositions, filterCues } from "../../lib/subtitleStyleCss";
 import { lastCueLine, parseCaptionCues, type CaptionCue } from "./SubtitleOverlay";
 import {
   cachedTranscript,
+  clearRequestedTab,
+  onTabRequest,
   rememberTranscript,
   rememberView,
   rememberedView,
+  requestedTabFor,
   type ChaptersTab,
 } from "../../lib/chaptersPanelMemory";
 import { Select } from "../ui/Select";
@@ -61,7 +64,9 @@ export const Chapters: React.FC<ChaptersProps> = ({
 
   // Tabs state, carried over when the panel moves into or out of the fullscreen side panel.
   const remembered = rememberedView(videoId);
-  const [activeTab, setActiveTab] = useState<ChaptersTab>(remembered?.tab ?? "chapters");
+  const [requested] = useState(() => requestedTabFor(videoId));
+  const [activeTab, setActiveTab] = useState<ChaptersTab>(requested ?? remembered?.tab ?? "chapters");
+  const tabChosenRef = useRef(requested !== null);
   const [selectedCaptionId, setSelectedCaptionId] = useState<string>(remembered?.captionId ?? "off");
   const restoredRef = useRef(remembered !== null);
   const [transcriptCues, setTranscriptCues] = useState<CaptionCue[]>([]);
@@ -82,7 +87,17 @@ export const Chapters: React.FC<ChaptersProps> = ({
 
   // Set default tab based on whether there are chapters
   useEffect(() => {
-    if (restoredRef.current) return;
+    clearRequestedTab(videoId);
+    return onTabRequest((id, tab) => {
+      if (id !== videoId) return false;
+      tabChosenRef.current = true;
+      setActiveTab(tab);
+      return true;
+    });
+  }, [videoId]);
+
+  useEffect(() => {
+    if (restoredRef.current || tabChosenRef.current) return;
     if (chapters && chapters.length > 0) {
       setActiveTab("chapters");
     } else {

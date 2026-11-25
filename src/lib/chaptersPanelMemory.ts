@@ -38,3 +38,30 @@ export function rememberTranscript(url: string, cues: CaptionCue[]) {
     transcripts.delete(oldest);
   }
 }
+
+/*
+  A tab asked for from outside the panel, such as the description's Transcript row: taken by
+  the panel when it mounts, or passed straight to it when it is already open.
+*/
+let requestedTab: { videoId: string; tab: ChaptersTab } | null = null;
+const tabListeners = new Set<(videoId: string, tab: ChaptersTab) => boolean>();
+
+export function requestTab(videoId: string, tab: ChaptersTab) {
+  requestedTab = { videoId, tab };
+  for (const listener of tabListeners) if (listener(videoId, tab)) requestedTab = null;
+}
+
+/** The tab asked for `videoId`, left in place: rendering may read it twice. */
+export function requestedTabFor(videoId: string | undefined): ChaptersTab | null {
+  return videoId && requestedTab?.videoId === videoId ? requestedTab.tab : null;
+}
+
+export function clearRequestedTab(videoId: string | undefined) {
+  if (requestedTab?.videoId === videoId) requestedTab = null;
+}
+
+/** `listener` returns true when it took the tab. Returns the unsubscribe. */
+export function onTabRequest(listener: (videoId: string, tab: ChaptersTab) => boolean): () => void {
+  tabListeners.add(listener);
+  return () => tabListeners.delete(listener);
+}

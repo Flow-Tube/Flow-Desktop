@@ -4,7 +4,9 @@
 // Usage: node scripts/nightly-updater-manifest.mjs plan <folder>
 //          prints "<version>\t<file>" for each package to sign
 //        node scripts/nightly-updater-manifest.mjs write <folder>
-// Env: GITHUB_REPOSITORY (write), GITHUB_RUN_NUMBER, NIGHTLY_NOTES (plain text).
+// Env: GITHUB_REPOSITORY (write), GITHUB_RUN_NUMBER, NIGHTLY_NOTES (plain text),
+//      NIGHTLY_PREVIOUS (write, optional: the last nightly latest.json, whose
+//      history this run's notes are added to).
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -47,17 +49,34 @@ export function nightlyPackages({ files, repository, runNumber, baseVersion }) {
 }
 
 /** Returns `{ [fileName]: manifest }`. Every package must be signed. */
-export function buildNightlyManifests({ files, signatures, repository, runNumber, baseVersion, notes, pubDate }) {
+export function buildNightlyManifests({ files, signatures, repository, runNumber, baseVersion, notes, history, pubDate }) {
   return buildManifests({
     packages: nightlyPackages({ files, repository, runNumber, baseVersion }),
     signatures,
     notes,
+    history,
     pubDate,
     expected: EXPECTED,
   });
 }
 
-function main(mode, folder) {
+/**
+ * Only the publish job carries history: the signing jobs check out no changelog,
+ * and their manifests exist to check signatures.
+ */
+async function publishedHistory(baseVersion, run) {
+  const previous = process.env.NIGHTLY_PREVIOUS;
+  if (previous === undefined) return undefined;
+  const { nightlyHistory, pendingSections, readChangelogs, readManifestHistory } = await import("./update-history.mjs");
+  return nightlyHistory({
+    previous: readManifestHistory(previous),
+    pending: pendingSections(readChangelogs("changelog"), baseVersion),
+    run,
+    date: new Date().toISOString().slice(0, 10),
+  });
+}
+
+async function main(mode, folder) {
   const repository = process.env.GITHUB_REPOSITORY;
   const runNumber = process.env.GITHUB_RUN_NUMBER;
   if (!["plan", "write"].includes(mode) || !folder || !runNumber || (mode === "write" && !repository)) {
@@ -80,6 +99,7 @@ function main(mode, folder) {
     runNumber,
     baseVersion,
     notes: process.env.NIGHTLY_NOTES ?? "",
+    history: await publishedHistory(baseVersion, Number(runNumber)),
     pubDate: new Date().toISOString(),
   });
   for (const [file, manifest] of Object.entries(manifests)) {
@@ -89,5 +109,5 @@ function main(mode, folder) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main(process.argv[2], process.argv[3]);
+  await main(process.argv[2], process.argv[3]);
 }

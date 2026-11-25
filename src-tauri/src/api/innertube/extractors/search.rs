@@ -1,6 +1,7 @@
 use crate::api::http::shared_client;
 use crate::api::innertube::InnertubeClient;
 use crate::api::innertube::core::clients;
+use crate::api::innertube::core::locale::content_language;
 use crate::api::innertube::core::utils::short_video_summary_from_item;
 use crate::api::innertube::extractors::channel::posts::{post, post_renderer};
 use crate::api::innertube::json::continuation::continuation_token;
@@ -409,6 +410,25 @@ pub fn parse_innertube_search(val: &Value) -> SearchVideosResponse {
     reader.page
 }
 
+/// The suggest endpoint's URL for `query`, asked in `language` (`hl`, so the
+/// completions follow the language results come back in) and for `region`
+/// (`gl`) when it is a two-letter code.
+fn suggest_url(query: &str, region: Option<&str>, language: &str) -> String {
+    let encoded_query = custom_url_encode(query);
+    let region = region
+        .map(str::trim)
+        .filter(|region| region.len() == 2 && region.chars().all(|c| c.is_ascii_alphabetic()))
+        .map(|region| format!("&gl={}", region.to_ascii_uppercase()))
+        .unwrap_or_default();
+    let language = custom_url_encode(language);
+    // `oe=utf-8` is load-bearing: without it this endpoint answers in
+    // ISO-8859-1, and every suggestion carrying an accent, a curly quote or
+    // any non-Latin script comes back as mojibake.
+    format!(
+        "https://suggestqueries-clients6.youtube.com/complete/search?client=youtube&ds=yt&xhr=t&ie=utf-8&oe=utf-8&hl={language}{region}&q={encoded_query}"
+    )
+}
+
 /// How long a suggestion request may take. Past this the user has typed on, and
 /// the rows already on screen are better than a late answer.
 pub(crate) const SUGGESTION_TIMEOUT: Duration = Duration::from_secs(2);
@@ -443,24 +463,14 @@ impl InnertubeClient {
         Ok(parse_innertube_search(&res))
     }
 
-    /// Suggestions for `query`, for the viewer's region (`gl`) when one is set.
+    /// Suggestions for `query`, in the content language and for the viewer's
+    /// region (`gl`) when one is set.
     pub async fn get_search_suggestions(
         &self,
         query: &str,
         region: Option<&str>,
     ) -> AppResult<Vec<SearchSuggestion>> {
-        let encoded_query = custom_url_encode(query);
-        let region = region
-            .map(str::trim)
-            .filter(|region| region.len() == 2 && region.chars().all(|c| c.is_ascii_alphabetic()))
-            .map(|region| format!("&gl={}", region.to_ascii_uppercase()))
-            .unwrap_or_default();
-        // `oe=utf-8` is load-bearing: without it this endpoint answers in
-        // ISO-8859-1, and every suggestion carrying an accent, a curly quote or
-        // any non-Latin script comes back as mojibake.
-        let url = format!(
-            "https://suggestqueries-clients6.youtube.com/complete/search?client=youtube&ds=yt&xhr=t&ie=utf-8&oe=utf-8&hl=en{region}&q={encoded_query}"
-        );
+        let url = suggest_url(query, region, &content_language());
 
         let res = shared_client()
             .get(&url)
@@ -535,7 +545,7 @@ fn suggestion_entity(card: &Value) -> Option<SuggestionEntity> {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_search_params, parse_innertube_search, parse_suggestions};
+    use super::{build_search_params, parse_innertube_search, parse_suggestions, suggest_url};
     use crate::models::search::SearchVideosRequest;
 
     fn params(request: &SearchVideosRequest) -> Option<String> {
@@ -862,6 +872,20 @@ mod tests {
     #[test]
     fn exact_searches_turn_correction_off() {
         assert_eq!(with(|r| r.exact = true).as_deref(), Some("QgIIAQ%3D%3D"));
+    }
+
+    #[test]
+    fn suggestions_are_asked_in_the_content_language() {
+        let url = suggest_url("como hacer", Some("mx"), "es");
+        assert!(url.contains("&oe=utf-8&hl=es&gl=MX&q=como+hacer"), "{url}");
+        let url = suggest_url("lofi", None, "pt-BR");
+        assert!(url.ends_with("&hl=pt-BR&q=lofi"), "{url}");
+    }
+
+    #[test]
+    fn suggestions_skip_a_region_that_is_not_a_country_code() {
+        let url = suggest_url("lofi", Some("USA&x=1"), "en");
+        assert!(url.ends_with("&hl=en&q=lofi"), "{url}");
     }
 
     #[test]

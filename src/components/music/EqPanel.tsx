@@ -44,7 +44,7 @@ export function EqPanel({
           exit={{ opacity: 0, y: fromY, scale: 0.97 }}
           transition={{ type: "spring", stiffness: 420, damping: 34, mass: 0.8 }}
           style={{ transformOrigin: placement === "top" ? "bottom right" : "top right" }}
-          className="w-80 rounded-2xl border border-chrome-neutral-800 bg-surface-container p-4"
+          className="w-80 rounded-2xl border border-outline-soft bg-surface-container p-4"
         >
           <div className="mb-3 flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-widest text-chrome-neutral-500">
@@ -128,7 +128,7 @@ export function EqPanel({
             {getString("eq_edit")}
           </button>
 
-          <div className="mt-4 border-t border-chrome-neutral-800 pt-3">
+          <div className="mt-4 border-t border-outline-soft pt-3">
             <MusicAudioOptions />
           </div>
         </motion.div>

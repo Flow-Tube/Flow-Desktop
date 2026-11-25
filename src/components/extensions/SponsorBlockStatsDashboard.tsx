@@ -56,7 +56,7 @@ function StatTile({
   label: string;
 }) {
   return (
-    <div className="flex flex-col justify-between rounded-2xl border border-chrome-neutral-800 bg-surface-container p-4">
+    <div className="flex flex-col justify-between rounded-2xl surface-panel p-4">
       <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-container-high text-[var(--color-primary)]">
         {icon}
       </div>
@@ -98,7 +98,7 @@ function ChartCard({
   hasData: boolean;
 }) {
   return (
-    <div className="flex flex-col rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5">
+    <div className="flex flex-col rounded-2xl surface-panel p-5">
       <h3 className="text-xs font-semibold uppercase tracking-widest text-chrome-neutral-500">{title}</h3>
       <div className="mt-4 h-[240px] w-full">
         {hasData ? (

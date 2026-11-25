@@ -111,7 +111,7 @@ export function ScrobblingSection() {
           const ready = service !== "LASTFM" || !!status?.lastFmReady;
           const signedIn = !!serviceStatus?.signedIn;
           return (
-            <div key={service} className="flex flex-col divide-y divide-chrome-neutral-800/50">
+            <div key={service} className="flex flex-col divide-y divide-outline-soft">
               <SettingItem title={getString(SERVICE_NAME[service])} description={status ? accountLabel(serviceStatus, ready) : undefined}>
                 {signedIn ? (
                   <Button variant="secondary" size="sm" onClick={() => void confirmSignOut(service)}>{getString("scrobbling_sign_out")}</Button>

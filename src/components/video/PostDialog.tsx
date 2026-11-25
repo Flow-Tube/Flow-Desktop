@@ -34,7 +34,7 @@ export function PostDialog({ post, initialCommentsOpen, onClose }: PostDialogPro
         className="mt-3"
       />
       {commentsOpen && (
-        <div className="mt-6 border-t border-chrome-neutral-800">
+        <div className="mt-6 border-t border-outline-soft">
           <CommentsSection videoId="" postId={post.id} postCommentParams={post.commentEndpointParams} />
         </div>
       )}

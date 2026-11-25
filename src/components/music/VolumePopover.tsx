@@ -41,7 +41,7 @@ function VolumePanel({ onClose }: { onClose?: () => void }) {
       animate={{ opacity: 1, scale: 1, transition: MENU_ENTER_TRANSITION }}
       exit={{ opacity: 0, scale: 0.98, transition: MENU_EXIT_TRANSITION }}
       style={{ transformOrigin: "bottom center" }}
-      className="flex w-60 items-center gap-3 rounded-2xl border border-chrome-neutral-800 bg-surface-container p-3"
+      className="flex w-60 items-center gap-3 rounded-2xl border border-outline-soft bg-surface-container p-3"
       onPointerEnter={() => setHovered(true)}
       onPointerLeave={() => setHovered(false)}
       // Focus a click left behind on the slider doesn't hold it open; keyboard focus does.

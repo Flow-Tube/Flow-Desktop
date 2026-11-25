@@ -182,8 +182,8 @@ export function SearchSuggestionsPanel({
       ref={panelRef}
       id="search-suggestions"
       role="listbox"
-      className={`animate-menu-in absolute inset-x-0 top-[calc(100%+6px)] z-50 max-h-[70vh] overflow-y-auto overscroll-contain rounded-2xl border border-chrome-neutral-800 bg-surface-container-high p-1.5 ${
-        hasSide ? "md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:gap-1.5" : ""
+      className={`animate-menu-in absolute inset-x-0 top-[calc(100%+6px)] z-50 max-h-[70vh] overflow-y-auto overscroll-contain rounded-2xl border border-outline-soft bg-surface-container-high p-1.5 ${
+        hasSide ? "md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:gap-1.5": ""
       }`}
     >
       <div className="min-w-0">
@@ -209,7 +209,7 @@ export function SearchSuggestionsPanel({
         {columns.main.map(renderMain)}
       </div>
       {hasSide ? (
-        <div className="min-w-0 border-t border-chrome-neutral-800 pt-1.5 md:border-s md:border-t-0 md:ps-1.5 md:pt-0">
+        <div className="min-w-0 border-t border-outline-soft pt-1.5 md:border-s md:border-t-0 md:ps-1.5 md:pt-0">
           <p className="px-3 pb-1 pt-1.5 text-xs font-medium text-chrome-neutral-400">{getString("search_music_section")}</p>
           {columns.side.map(renderSide)}
         </div>
@@ -232,7 +232,7 @@ function KeyHints({ canRemove }: { canRemove: boolean }) {
   return (
     <div
       aria-hidden="true"
-      className="col-span-full mt-1 hidden items-center gap-4 border-t border-chrome-neutral-800 px-3 pb-1 pt-2 text-[11px] text-chrome-neutral-500 md:flex"
+      className="col-span-full mt-1 hidden items-center gap-4 border-t border-outline-soft px-3 pb-1 pt-2 text-[11px] text-chrome-neutral-500 md:flex"
     >
       <span><Key>↑</Key><Key>↓</Key>{getString("search_keys_move")}</span>
       <span><Key>↵</Key>{getString("search_keys_search")}</span>

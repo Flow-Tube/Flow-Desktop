@@ -262,7 +262,7 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
   return (
     <div className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto w-full pb-20">
-        <header className="flex flex-col gap-5 border-b border-chrome-neutral-800 pb-6 lg:flex-row lg:items-end lg:justify-between">
+        <header className="flex flex-col gap-5 border-b border-outline-soft pb-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="min-w-0">
             <h1 className="text-3xl font-bold tracking-tight text-chrome-neutral-100 lg:text-4xl">
               {getString("downloads_page_title")}
@@ -364,7 +364,7 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
             </Button>
           </div>
         ) : !hasResults ? (
-          <div className="mt-8 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-8 text-center">
+          <div className="mt-8 rounded-2xl surface-panel p-8 text-center">
             <p className="text-sm font-medium text-chrome-neutral-300">{getString("downloads_no_results")}</p>
           </div>
         ) : (
@@ -465,7 +465,7 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
 
       {showClearConfirm ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-chrome-black/75 p-4">
-          <div className="w-full max-w-sm space-y-4 rounded-2xl border border-chrome-neutral-800 bg-surface-container p-6">
+          <div className="w-full max-w-sm space-y-4 rounded-2xl border border-outline-soft bg-surface-container p-6">
             <h3 className="text-lg font-bold text-chrome-neutral-100">
               {getString("downloads_clear_confirm_title")}
             </h3>

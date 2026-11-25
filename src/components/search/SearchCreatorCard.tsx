@@ -26,7 +26,7 @@ export function SearchCreatorCard({ creator, onPlay, onAddToQueue }: SearchCreat
   const subtitle = joinIsolated([channel.handle, channel.subscriberCountText, channel.videoCountText]);
 
   return (
-    <section className="flex flex-col gap-4 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5">
+    <section className="flex flex-col gap-4 rounded-2xl surface-panel p-5">
       <div className="flex items-center gap-4">
         <button
           type="button"

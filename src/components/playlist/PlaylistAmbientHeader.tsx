@@ -162,7 +162,7 @@ export function PlaylistAmbientHeader({
         )}
 
         <div className="relative z-10 flex h-full min-h-0 flex-col gap-6">
-          <div className="relative aspect-video w-full shrink-0 overflow-hidden rounded-2xl border border-chrome-neutral-800/50 bg-chrome-neutral-950">
+          <div className="relative aspect-video w-full shrink-0 overflow-hidden rounded-2xl bg-chrome-neutral-950">
             {ambientSrc ? (
               <img
                 src={ambientSrc}
@@ -238,7 +238,7 @@ export function PlaylistAmbientHeader({
             <AnchoredPortalMenu
               anchor={menuAnchor}
               onClose={() => setMenuAnchor(null)}
-              className="z-50 w-56 rounded-xl border border-chrome-neutral-800 bg-surface-container-high py-1.5"
+              className="z-50 w-56 rounded-xl border border-outline-soft bg-surface-container-high py-1.5"
             >
               {canEdit && (
                 <PlaylistMenuItem

@@ -190,7 +190,7 @@ export function MusicQueuePane() {
       </div>
 
       {/* Autoplay footer */}
-      <div className="mt-2 flex items-center gap-3 rounded-xl border border-chrome-neutral-800 bg-surface-container-low px-3 py-2.5">
+      <div className="mt-2 flex items-center gap-3 rounded-xl surface-panel px-3 py-2.5">
         <Radio
           className={cx("h-5 w-5 shrink-0", radioOn ? "text-[var(--color-primary)]" : "text-chrome-neutral-500")}
         />

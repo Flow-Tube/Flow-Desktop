@@ -12,7 +12,7 @@ export function CrashReportText({ report }: { report: string }) {
   ];
   return (
     <div className="space-y-4">
-      <dl className="space-y-1.5 rounded-xl border border-chrome-neutral-800 bg-surface-container-low p-4">
+      <dl className="space-y-1.5 rounded-xl bg-surface-container-high p-4">
         {rows.map(
           (row) =>
             row.value && (
@@ -25,7 +25,7 @@ export function CrashReportText({ report }: { report: string }) {
       </dl>
       <div className="space-y-1">
         <h3 className="text-xs font-semibold text-chrome-neutral-500">{getString("crash_full_report")}</h3>
-        <pre className="max-h-64 select-text overflow-auto rounded-xl border border-chrome-neutral-800 bg-surface-container-low p-3 font-mono text-xs leading-relaxed text-chrome-neutral-300">
+        <pre className="max-h-64 select-text overflow-auto rounded-xl bg-surface-container-high p-3 font-mono text-xs leading-relaxed text-chrome-neutral-300">
           {report}
         </pre>
       </div>

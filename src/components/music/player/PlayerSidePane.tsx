@@ -34,7 +34,7 @@ export function PlayerSidePane({ tab, onTabChange, onExpandLyrics, onHide, surfa
   return (
     <aside
       style={surfaceStyle}
-      className="relative isolate flex h-full min-h-0 w-full flex-col overflow-hidden rounded-2xl border border-chrome-neutral-800 bg-surface-container-low transition-colors duration-500 ease-out"
+      className="relative isolate flex h-full min-h-0 w-full flex-col overflow-hidden rounded-2xl surface-panel transition-colors duration-500 ease-out"
     >
       {background}
       <div className="relative flex items-center justify-between gap-2 px-4 pt-4">

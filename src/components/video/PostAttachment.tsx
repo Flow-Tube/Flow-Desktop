@@ -25,7 +25,7 @@ function Gallery({ urls }: { urls: string[] }) {
   const many = urls.length > 1;
   const step = (by: number) => setIndex((current) => (current + by + urls.length) % urls.length);
   return (
-    <div ref={frame} className="relative mb-4 flex max-h-[720px] w-full items-center justify-center overflow-hidden rounded-xl border border-chrome-neutral-800 bg-surface-container-low">
+    <div ref={frame} className="relative mb-4 flex max-h-[720px] w-full items-center justify-center overflow-hidden rounded-xl bg-surface-container-low">
       {src && (
         <img
           src={src}
@@ -144,7 +144,7 @@ function SharedVideo({ video }: { video: VideoSummary }) {
       ref={cardRef}
       type="button"
       onClick={() => open({ kind: "video", videoId: video.id })}
-      className="mb-4 flex w-full items-center gap-3 rounded-xl border border-chrome-neutral-800 p-2 text-start transition-colors hover:bg-surface-container-high"
+      className="mb-4 flex w-full items-center gap-3 rounded-xl border border-outline-soft p-2 text-start transition-colors hover:bg-surface-container-high"
     >
       <div className="aspect-video w-40 shrink-0 overflow-hidden rounded-lg bg-surface-container-high">
         {thumbnail && <img src={thumbnail} alt="" className="h-full w-full object-cover" loading="lazy" />}

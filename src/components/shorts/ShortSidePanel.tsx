@@ -31,7 +31,7 @@ export function ShortSidePanel({
 
   return (
     <div className="flex h-full w-full min-w-0 flex-col">
-      <div className="flex items-center justify-between border-b border-chrome-neutral-800 p-4">
+      <div className="flex items-center justify-between border-b border-outline-soft p-4">
         <div className="flex min-w-0 items-baseline gap-2">
           <h3 className="text-base font-medium text-chrome-neutral-200">
             {getString(isComments ? "shorts_comments_title" : "shorts_description_title")}

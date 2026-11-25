@@ -192,7 +192,7 @@ export function ShortCard({ short, queue, variant = "grid", finiteQueue = false 
       ].join(" ")}
     >
       <button type="button" onClick={playShort} {...backgroundTabClickProps(shortRoute)} className="flex w-full flex-col gap-2 text-start">
-        <span className="relative block aspect-[9/16] w-full overflow-hidden rounded-xl border border-chrome-neutral-800 bg-surface-container">
+        <span className="relative block aspect-[9/16] w-full overflow-hidden rounded-xl bg-surface-container">
           {short.thumbnailUrl && (
             <img
               src={toSrc(short.thumbnailUrl)}

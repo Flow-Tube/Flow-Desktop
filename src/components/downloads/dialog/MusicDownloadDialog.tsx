@@ -56,10 +56,10 @@ function TagRow({
   const [editing, setEditing] = useState(false);
   return (
     <>
-      <dt className="border-t border-chrome-neutral-800 bg-surface-container-low px-3 py-2 text-xs text-chrome-neutral-500 first-of-type:border-t-0">
+      <dt className="border-t border-outline-soft bg-surface-container-low px-3 py-2 text-xs text-chrome-neutral-500 first-of-type:border-t-0">
         {label}
       </dt>
-      <dd className="flex min-w-0 items-center justify-between gap-2 border-t border-chrome-neutral-800 px-3 py-1.5 text-sm text-chrome-neutral-200 first-of-type:border-t-0">
+      <dd className="flex min-w-0 items-center justify-between gap-2 border-t border-outline-soft px-3 py-1.5 text-sm text-chrome-neutral-200 first-of-type:border-t-0">
         {onChange && editing ? (
           <TextInput
             value={value ?? ""}
@@ -154,7 +154,7 @@ export function MusicDownloadDialog({ track, onClose }: { track: SongItem; onClo
           <SectionLabel>{getString("download_saved_in_file")}</SectionLabel>
           <span className="text-xs text-chrome-neutral-500">{getString("download_tags_hint")}</span>
         </div>
-        <dl className="grid grid-cols-[96px_minmax(0,1fr)] overflow-hidden rounded-xl border border-chrome-neutral-800">
+        <dl className="grid grid-cols-[96px_minmax(0,1fr)] overflow-hidden rounded-xl border border-outline-soft">
           <TagRow label={getString("download_tag_title")} value={state.tags.title} onChange={setTag("title")} />
           <TagRow label={getString("download_tag_artist")} value={state.tags.artist} onChange={setTag("artist")} />
           <TagRow label={getString("download_tag_album")} value={state.tags.album} onChange={setTag("album")} />

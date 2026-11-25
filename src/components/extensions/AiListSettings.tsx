@@ -60,7 +60,7 @@ function SourceEditor({ onDone }: { onDone: () => void }) {
     else setInvalid(true);
   };
   return (
-    <div className="space-y-3 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low px-5 py-4">
+    <div className="space-y-3 rounded-2xl surface-panel px-5 py-4">
       <p className="text-xs text-chrome-neutral-400">{getString("ai_list_source_dialog_body")}</p>
       <TextInput
         value={url}

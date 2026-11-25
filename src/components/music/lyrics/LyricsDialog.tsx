@@ -43,9 +43,9 @@ export function LyricsDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className={`animate-fade-in flex max-h-[min(640px,calc(100vh-4rem))] w-full ${widthClass} flex-col rounded-2xl border border-chrome-neutral-800 bg-surface-container`}
+        className={`animate-fade-in flex max-h-[min(640px,calc(100vh-4rem))] w-full ${widthClass} flex-col rounded-2xl border border-outline-soft bg-surface-container`}
       >
-        <div className="flex items-center justify-between border-b border-chrome-neutral-800 px-6 py-4">
+        <div className="flex items-center justify-between border-b border-outline-soft px-6 py-4">
           <h2 id={titleId} className="text-base font-medium text-chrome-neutral-100">
             {title}
           </h2>
@@ -59,7 +59,7 @@ export function LyricsDialog({
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">{children}</div>
-        {footer && <div className="flex justify-end gap-2 border-t border-chrome-neutral-800 px-6 py-3">{footer}</div>}
+        {footer && <div className="flex justify-end gap-2 border-t border-outline-soft px-6 py-3">{footer}</div>}
       </div>
     </div>,
     document.body,

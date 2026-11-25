@@ -69,7 +69,7 @@ export default function LocalMedia() {
   return (
     <div className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto flex w-full flex-col gap-5 pb-20">
-        <header className="flex flex-col gap-4 border-b border-chrome-neutral-800 pb-5 lg:flex-row lg:items-end lg:justify-between">
+        <header className="flex flex-col gap-4 border-b border-outline-soft pb-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="min-w-0">
             <h1 className="text-3xl font-bold tracking-tight text-chrome-neutral-100 lg:text-4xl">
               {getString("library_local_media_label")}

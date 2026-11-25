@@ -43,7 +43,7 @@ export function NowPlayingCard({ device, nowMs }: { device: PlayOnDevice; nowMs:
   };
 
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-3">
+    <div className="flex flex-col gap-3 rounded-2xl surface-panel p-3">
       <div className="flex items-center gap-3">
         {art && (
           <img

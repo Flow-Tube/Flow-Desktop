@@ -76,7 +76,7 @@ export function SearchControlBar({
 
   return (
     <div className="sticky top-0 z-20 -mx-8 mb-6 flex flex-col bg-background px-8">
-      <div className="-mx-8 border-b border-outline-variant px-8">
+      <div className="-mx-8 border-b border-outline-soft px-8">
         <UnderlineTabs label={getString('search_tabs_label')} groups={groups} active={filterType} onChange={onFilterChange} />
       </div>
 

@@ -18,7 +18,7 @@ export function FeedFailedNotice({ names, onRetry, retrying = false }: FeedFaile
   const list =
     names.length > NAMES_SHOWN ? getString("subscriptions_failed_more", shown, names.length - NAMES_SHOWN) : shown;
   return (
-    <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="mb-4 flex flex-col gap-3 rounded-2xl surface-panel p-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex min-w-0 items-start gap-3">
         <AlertTriangle size={18} className="mt-0.5 shrink-0 text-chrome-neutral-400" />
         <div className="min-w-0">

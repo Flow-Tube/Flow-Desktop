@@ -35,7 +35,7 @@ export function CameraScanner({ onResult, onClose }: { onResult: (text: string) 
 
   return (
     <div className="mt-6 space-y-3">
-      <div className="relative aspect-square w-full overflow-hidden rounded-xl border border-chrome-neutral-800 bg-chrome-black">
+      <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-chrome-black">
         <video ref={videoRef} className="h-full w-full object-cover" muted playsInline />
         <div className="pointer-events-none absolute inset-6 rounded-lg border-2 border-chrome-white/70" />
       </div>

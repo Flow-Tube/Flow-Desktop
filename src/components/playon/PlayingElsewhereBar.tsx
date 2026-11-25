@@ -43,7 +43,7 @@ export function PlayingElsewhereBar() {
 
   return (
     <div className="fixed bottom-6 left-1/2 z-50 h-[72px] w-[90%] max-w-5xl -translate-x-1/2">
-      <div className="relative flex h-full items-center gap-3 overflow-hidden rounded-2xl border border-chrome-neutral-800 bg-surface-container-high ps-3 pe-4">
+      <div className="relative flex h-full items-center gap-3 overflow-hidden rounded-2xl border border-outline-soft bg-surface-container-high ps-3 pe-4">
         <button
           type="button"
           onClick={() => control(device.did)}

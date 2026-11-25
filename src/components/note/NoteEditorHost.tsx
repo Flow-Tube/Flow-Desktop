@@ -69,7 +69,7 @@ function NoteEditor({ target }: { target: NoteEditorTarget }) {
         aria-modal="true"
         aria-labelledby="note-editor-title"
         onClick={(event) => event.stopPropagation()}
-        className="flex w-full max-w-lg flex-col gap-3 rounded-2xl border border-chrome-neutral-800 bg-surface-container p-6"
+        className="flex w-full max-w-lg flex-col gap-3 rounded-2xl border border-outline-soft bg-surface-container p-6"
       >
         <h2 id="note-editor-title" className="flex items-center gap-2 text-lg font-bold tracking-tight text-chrome-neutral-100">
           <StickyNote size={20} className="shrink-0 text-primary" />

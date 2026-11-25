@@ -93,7 +93,7 @@ export function WatchOwner({ channelId, channelName, avatarUrl, subscriberText, 
         <AnchoredPortalMenu
           anchor={anchor}
           onClose={() => setAnchor(null)}
-          className="z-[70] w-80 overflow-hidden rounded-xl border border-chrome-neutral-800 bg-surface-container-high py-1.5"
+          className="z-[70] w-80 overflow-hidden rounded-xl border border-outline-soft bg-surface-container-high py-1.5"
         >
           <div className="px-3.5 py-1.5 text-xs font-semibold uppercase tracking-widest text-chrome-neutral-500">
             {getString("watch_collaborators")}

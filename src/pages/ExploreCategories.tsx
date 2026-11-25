@@ -51,7 +51,7 @@ export default function ExploreCategories({ onPlay, onAddToQueue }: ExploreCateg
   return (
     <main className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-[1800px] flex-col gap-5">
-        <div className="flex flex-col gap-4 border-b border-chrome-neutral-800/50 pb-4">
+        <div className="flex flex-col gap-4 border-b border-outline-soft pb-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-widest text-chrome-neutral-500">

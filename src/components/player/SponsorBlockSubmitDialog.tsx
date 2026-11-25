@@ -119,7 +119,7 @@ export function SponsorBlockSubmitDialog({
     >
       <div
         dir={interfaceDir()}
-        className="w-full max-w-md rounded-2xl border border-chrome-neutral-800 bg-surface-container p-6 text-start"
+        className="w-full max-w-md rounded-2xl border border-outline-soft bg-surface-container p-6 text-start"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="mb-5 flex items-center gap-2.5">

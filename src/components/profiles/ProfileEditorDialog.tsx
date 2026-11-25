@@ -133,7 +133,7 @@ export function ProfileEditorDialog({ profile, onClose }: ProfileEditorDialogPro
         aria-modal="true"
         aria-labelledby="profile-editor-title"
         onClick={(event) => event.stopPropagation()}
-        className="animate-fade-in flex max-h-[90vh] w-full max-w-lg flex-col gap-5 overflow-y-auto rounded-2xl border border-chrome-neutral-800 bg-surface-container p-6"
+        className="animate-fade-in flex max-h-[90vh] w-full max-w-lg flex-col gap-5 overflow-y-auto rounded-2xl border border-outline-soft bg-surface-container p-6"
       >
         <div className="flex items-center gap-4">
           <ProfileAvatar

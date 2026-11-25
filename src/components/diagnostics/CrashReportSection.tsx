@@ -22,7 +22,7 @@ export function CrashReportSection() {
   };
 
   return (
-    <div className="max-w-2xl space-y-3 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5">
+    <div className="max-w-2xl space-y-3 rounded-2xl surface-panel p-5">
       <h3 className="text-xs font-semibold uppercase tracking-widest text-chrome-neutral-500">{getString("crash_last_heading")}</h3>
       <CrashReportText report={file.report} />
       <div className="flex flex-wrap items-center gap-2">

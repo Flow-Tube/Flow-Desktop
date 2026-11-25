@@ -19,7 +19,7 @@ export function ConsentDialog() {
         role="dialog"
         aria-modal="true"
         aria-labelledby="play-on-consent-title"
-        className="animate-fade-in w-full max-w-md rounded-2xl border border-chrome-neutral-800 bg-surface-container p-6"
+        className="animate-fade-in w-full max-w-md rounded-2xl border border-outline-soft bg-surface-container p-6"
       >
         <div className="flex items-start gap-4">
           <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-surface-container-high">

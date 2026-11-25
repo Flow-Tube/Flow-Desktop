@@ -159,7 +159,7 @@ export function WatchMetadata({
         />
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex h-10 items-center divide-x divide-chrome-neutral-800 overflow-hidden rounded-full bg-surface-container-low">
+          <div className="flex h-10 items-center divide-x divide-outline-soft overflow-hidden rounded-full bg-surface-container-low">
             <button
               onClick={reactions.like}
               aria-pressed={reactions.state === "liked"}

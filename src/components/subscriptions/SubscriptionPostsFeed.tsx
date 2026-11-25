@@ -24,7 +24,7 @@ export function SubscriptionPostsFeed({ channels, feed }: SubscriptionPostsFeedP
     onLoadMore: posts.loadMore,
   });
   const failed = (
-    <div className="flex flex-col items-center gap-3 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-6 text-center text-sm text-chrome-neutral-300">
+    <div className="flex flex-col items-center gap-3 rounded-2xl surface-panel p-6 text-center text-sm text-chrome-neutral-300">
       {getString("subscription_posts_load_failed")}
       <Button variant="secondary" size="sm" onClick={posts.retry}>
         <RotateCcw size={15} />

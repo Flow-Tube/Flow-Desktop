@@ -27,10 +27,10 @@ export function ScrobbleDialog({ title, submitLabel, submitDisabled, onSubmit, o
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-chrome-black/70 p-6" role="dialog" aria-modal="true" aria-labelledby="scrobble-dialog-title">
-      <form onSubmit={submit} className="w-full max-w-md rounded-2xl border border-chrome-neutral-800 bg-background">
+      <form onSubmit={submit} className="w-full max-w-md rounded-2xl border border-outline-soft bg-background">
         <h2 id="scrobble-dialog-title" className="px-6 pt-5 text-lg font-semibold text-chrome-neutral-100">{title}</h2>
         <div className="space-y-3 px-6 py-4">{children}</div>
-        <footer className="flex justify-end gap-2 border-t border-chrome-neutral-800 px-6 py-4">
+        <footer className="flex justify-end gap-2 border-t border-outline-soft px-6 py-4">
           <Button type="button" variant="secondary" onClick={onCancel}>{getString("cancel")}</Button>
           <Button type="submit" disabled={submitDisabled}>{submitLabel}</Button>
         </footer>

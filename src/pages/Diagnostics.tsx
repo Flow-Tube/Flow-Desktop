@@ -104,7 +104,7 @@ export const Diagnostics: React.FC = () => {
 
   return (
     <div className="flex-1 overflow-y-auto px-8 py-6 space-y-6 pb-20 bg-[var(--color-background)]">
-      <div className="border-b border-[var(--color-outline-variant)] pb-4">
+      <div className="border-b border-outline-soft pb-4">
         <div className="flex items-center gap-3">
           <div>
             <h1 className="text-3xl font-extrabold tracking-tight text-[var(--color-on-surface)]">
@@ -148,7 +148,7 @@ export const Diagnostics: React.FC = () => {
 
       <CrashReportSection />
 
-      <div className="max-w-2xl space-y-3 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5">
+      <div className="max-w-2xl space-y-3 rounded-2xl surface-panel p-5">
         <h3 className="text-xs font-semibold uppercase tracking-widest text-chrome-neutral-500">
           {getString("diagnostics_identity_heading")}
         </h3>
@@ -168,8 +168,8 @@ export const Diagnostics: React.FC = () => {
         </p>
       )}
 
-      <div className="rounded-2xl border border-chrome-neutral-800 bg-surface-container-low overflow-hidden">
-        <div className="px-5 py-3 border-b border-chrome-neutral-800/50 flex items-center justify-between">
+      <div className="rounded-2xl surface-panel overflow-hidden">
+        <div className="px-5 py-3 border-b border-outline-soft flex items-center justify-between">
           <h3 className="text-xs uppercase tracking-widest text-chrome-neutral-500 font-semibold">
             {getString("diagnostics_logs_heading")}
           </h3>

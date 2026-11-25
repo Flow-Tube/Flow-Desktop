@@ -42,7 +42,7 @@ export function EqBandList({ bands, selected, canAdd, onSelect, onChange, onRemo
           {getString("eq_no_bands")}
         </p>
       ) : (
-        <ul className="divide-y divide-chrome-neutral-800 rounded-lg border border-chrome-neutral-800">
+        <ul className="divide-y divide-outline-soft rounded-lg border border-chrome-neutral-800">
           {bands.map((band, index) => (
             <li
               key={index}

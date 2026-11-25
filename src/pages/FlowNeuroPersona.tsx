@@ -157,7 +157,7 @@ export function FlowNeuroPersona() {
     <div className="flex-grow h-full overflow-y-auto">
       <div className="grid grid-cols-12 gap-6 mx-auto p-8 animate-pane-in">
         {/* Page Header */}
-        <div className="col-span-12 flex items-center justify-between gap-4 border-b border-[var(--color-outline-variant)] pb-4">
+        <div className="col-span-12 flex items-center justify-between gap-4 border-b border-outline-soft pb-4">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight text-[var(--color-on-surface)] flex items-center gap-3">
               {getString("persona_title")}

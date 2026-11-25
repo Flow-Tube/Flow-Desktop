@@ -83,7 +83,7 @@ export function AddToAlbumModal() {
       onClick={close}
     >
       <div
-        className="w-full max-w-sm rounded-2xl border border-chrome-neutral-800 bg-surface-container p-5"
+        className="w-full max-w-sm rounded-2xl border border-outline-soft bg-surface-container p-5"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3">

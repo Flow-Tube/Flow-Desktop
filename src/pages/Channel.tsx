@@ -223,7 +223,7 @@ export const Channel: React.FC<ChannelProps> = ({ onPlay, onAddToQueue }) => {
 
       <div className="mx-auto px-4 py-8 sm:px-6 lg:px-8">
         {activeSearch && (
-          <div className="mb-6 flex items-center justify-between border-b border-chrome-neutral-800 pb-3">
+          <div className="mb-6 flex items-center justify-between border-b border-outline-soft pb-3">
             <h2 className="text-base font-semibold text-chrome-neutral-200">
               {getString("channel_search_results", activeSearch)}
             </h2>

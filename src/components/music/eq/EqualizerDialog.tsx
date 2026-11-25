@@ -102,7 +102,7 @@ function EqualizerEditor({ onClose }: { onClose: () => void }) {
       role="dialog"
       aria-modal="true"
       aria-label={getString("music_equalizer")}
-      className="flex max-h-[90vh] w-full max-w-3xl flex-col gap-5 overflow-y-auto rounded-2xl border border-chrome-neutral-800 bg-surface-container p-5"
+      className="flex max-h-[90vh] w-full max-w-3xl flex-col gap-5 overflow-y-auto rounded-2xl border border-outline-soft bg-surface-container p-5"
     >
       <header className="flex items-center justify-between gap-3">
         <h2 className="text-lg font-bold text-chrome-neutral-100">{getString("music_equalizer")}</h2>
@@ -142,7 +142,7 @@ function EqualizerEditor({ onClose }: { onClose: () => void }) {
           <EqPresetBar />
         </section>
 
-        <div className="rounded-xl border border-chrome-neutral-800 bg-surface-container-low px-2 py-2">
+        <div className="rounded-xl surface-panel px-2 py-2">
           <EqResponseGraph
             bands={eq.drawnBands}
             handles={editedBands.map((b) => ({ band: b, verticalOnly: graphic }))}
@@ -180,7 +180,7 @@ function EqualizerEditor({ onClose }: { onClose: () => void }) {
         )}
 
         <section className="grid gap-4 sm:grid-cols-2">
-          <div className="flex flex-col gap-2 rounded-xl border border-chrome-neutral-800 p-3">
+          <div className="flex flex-col gap-2 rounded-xl border border-outline-soft p-3">
             <div className="flex items-center justify-between gap-3">
               <span className="flex min-w-0 flex-col">
                 <span className="text-sm text-chrome-neutral-200">{getString("eq_auto_preamp")}</span>
@@ -213,7 +213,7 @@ function EqualizerEditor({ onClose }: { onClose: () => void }) {
             )}
           </div>
 
-          <div className="flex flex-col gap-2 rounded-xl border border-chrome-neutral-800 p-3">
+          <div className="flex flex-col gap-2 rounded-xl border border-outline-soft p-3">
             <span className="text-sm text-chrome-neutral-200">{getString("eq_bass_boost")}</span>
             <div className="flex items-center gap-3">
               <Slider

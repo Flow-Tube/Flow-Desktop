@@ -226,7 +226,7 @@ export function ShortPlayer({
             animate={{ width: panelOpen ? SIDE_PANEL_WIDTH : 0, opacity: 1 }}
             transition={{ type: "spring", bounce: 0, duration: 0.4 }}
             className={`flex h-full flex-col overflow-hidden bg-surface-container-high ${
-              panelOpen ? "border-s border-chrome-neutral-800" : ""
+              panelOpen ? "border-s border-outline-soft" : ""
             }`}
           >
             {panelOpen && (

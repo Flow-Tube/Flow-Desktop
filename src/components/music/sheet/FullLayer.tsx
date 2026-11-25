@@ -391,7 +391,7 @@ export function FullLayer({ offsetX, offsetY }: { offsetX: MotionValue<number>; 
                     exit={{ opacity: 0, x: 48 }}
                     transition={LAYOUT_SPRING}
                     style={paneSurface}
-                    className="flex min-h-0 w-1/2 flex-col rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-4 transition-colors duration-500 ease-out"
+                    className="flex min-h-0 w-1/2 flex-col rounded-2xl surface-panel p-4 transition-colors duration-500 ease-out"
                   >
                     <MusicQueuePane />
                   </motion.div>

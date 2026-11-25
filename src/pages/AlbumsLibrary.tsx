@@ -169,7 +169,7 @@ export const AlbumsLibrary: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-chrome-neutral-950/80 p-4">
           <form
             onSubmit={handleCreate}
-            className="w-full max-w-sm space-y-4 rounded-2xl border border-chrome-neutral-800 bg-surface-container p-6"
+            className="w-full max-w-sm space-y-4 rounded-2xl border border-outline-soft bg-surface-container p-6"
           >
             <h3 className="text-lg font-medium text-chrome-neutral-100">
               {getString("albums_create_title")}

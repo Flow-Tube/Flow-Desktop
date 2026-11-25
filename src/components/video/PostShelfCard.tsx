@@ -40,7 +40,7 @@ function PreviewThumb({ preview }: { preview: Preview }) {
   const src = useProxiedImageUrl(preview.url);
   const Icon = preview.icon;
   return (
-    <div className="relative h-28 w-28 shrink-0 overflow-hidden rounded-xl border border-chrome-neutral-800 bg-surface-container-low">
+    <div className="relative h-28 w-28 shrink-0 overflow-hidden rounded-xl bg-surface-container-low">
       {src && <img src={src} alt="" className="h-full w-full object-cover" loading="lazy" />}
       <span className="absolute bottom-1.5 end-1.5 flex items-center gap-1 rounded-full bg-chrome-black/70 px-1.5 py-0.5 text-xs font-semibold tabular-nums text-chrome-white">
         <Icon size={12} />

@@ -2,7 +2,6 @@ import React, { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Clock, Disc3, Download, FolderOpen, History, ListVideo, Music2, ThumbsUp } from "lucide-react";
 import type { VideoSummary } from "../types/video";
-import type { SongItem } from "../types/music";
 import { getString } from "../lib/i18n/index";
 import { hiddenOnLibraryPage, useHiddenLibrarySections } from "../lib/librarySections";
 import { useMusicEnabled, withMusic } from "../lib/useMusicContent";
@@ -15,7 +14,8 @@ import {
   storedAlbumToItem,
   type StoredAlbum,
 } from "../store/useAlbumLibraryStore";
-import { LibraryShelf } from "../components/library/LibraryShelf";
+import { LIBRARY_CARD_WIDTH, LibraryShelf } from "../components/library/LibraryShelf";
+import { DownloadVideoShelfRow, MusicDownloadShelfRow } from "../components/library/DownloadShelfRows";
 import { RecapEntryCard } from "../components/recap/RecapEntryCard";
 import { Button } from "../components/ui/Button";
 import { VideoCard } from "../components/video/VideoCard";
@@ -28,8 +28,6 @@ import type { ShortVideoSummary } from "../types/video";
 
 const videoIdOf = (item: { videoId?: string | null; id: string }) => item.videoId ?? item.id;
 
-// The `md:w-[320px]` of a library video card, the widest it is drawn.
-const LIBRARY_CARD_WIDTH = 320;
 
 function HistoryShelfRow({
   items,
@@ -154,24 +152,6 @@ function AlbumShelfRow({
   );
 }
 
-function DownloadVideoShelfRow({
-  videos,
-  onPlay,
-}: {
-  videos: VideoSummary[];
-  onPlay: (video: VideoSummary) => void;
-}) {
-  return (
-    <>
-      {videos.map((video, index) => (
-        <div key={`${video.id}-${index}`} className="w-[280px] md:w-[320px] shrink-0">
-          <VideoCard video={video} onPlay={onPlay} hideChannelAvatar thumbnailWidth={LIBRARY_CARD_WIDTH} />
-        </div>
-      ))}
-    </>
-  );
-}
-
 function libraryStats(playlists: number, albums: number, shorts: number, shortsEnabled: boolean, musicEnabled: boolean) {
   if (musicEnabled) {
     return shortsEnabled
@@ -181,19 +161,6 @@ function libraryStats(playlists: number, albums: number, shorts: number, shortsE
   return shortsEnabled
     ? getString("library_stats_summary_no_albums", playlists, shorts)
     : getString("library_stats_summary_playlists_only", playlists);
-}
-
-function MusicDownloadShelfRow({ songs }: { songs: SongItem[] }) {
-  const playQueue = useMusicPlayerStore((s) => s.playQueue);
-  return (
-    <>
-      {songs.map((song, index) => (
-        <div key={`${song.id}-${index}`} className="w-[160px] md:w-[200px] shrink-0">
-          <MusicItemCard variant="song" item={song} fill onPlay={() => void playQueue(songs, index)} />
-        </div>
-      ))}
-    </>
-  );
 }
 
 function ShortsShelfRow({ shorts }: { shorts: ShortVideoSummary[] }) {

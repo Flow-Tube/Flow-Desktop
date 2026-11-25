@@ -4,6 +4,9 @@ import { getString } from "../../lib/i18n/index";
 import { ShelfActionButton } from "../ui/ShelfActionButton";
 import { ShelfScroller } from "../ui/ShelfScroller";
 
+/** The `md:w-[320px]` of a library video card, the widest it is drawn. */
+export const LIBRARY_CARD_WIDTH = 320;
+
 interface LibraryShelfProps {
   /** Section heading, e.g. "History". */
   title: string;

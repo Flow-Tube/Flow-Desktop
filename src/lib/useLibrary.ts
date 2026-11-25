@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { getWatchHistory } from "./api/db";
 import { listDownloads } from "./api/downloads";
-import { downloadRecordToSong, downloadRecordToVideo } from "./useDownloads";
+import { downloadShelves } from "./downloadShelves";
 import { mapHistoryRecordToVideo, type HistoryVideo } from "./useHistory";
 import type { SongItem } from "../types/music";
 import {
@@ -77,6 +77,7 @@ export function useLibrary() {
         }),
       ]);
 
+      const downloads = downloadShelves(downloadRecords, SHELF_PREVIEW_LIMIT);
       const watchLaterPlaylist = storedPlaylists.find((playlist) => (
         playlist.id === WATCH_LATER_PLAYLIST_ID
       ));
@@ -91,14 +92,8 @@ export function useLibrary() {
         watchLater: watchLaterPlaylist?.tracks.slice(0, SHELF_PREVIEW_LIMIT) ?? [],
         liked,
         savedShorts: savedShorts.slice(0, SHELF_PREVIEW_LIMIT),
-        videoDownloads: downloadRecords
-          .filter((record) => record.mediaKind === "video" && record.collectionDbId == null)
-          .slice(0, SHELF_PREVIEW_LIMIT)
-          .map(downloadRecordToVideo),
-        musicDownloads: downloadRecords
-          .filter((record) => record.mediaKind !== "video" && record.collectionDbId == null)
-          .slice(0, SHELF_PREVIEW_LIMIT)
-          .map(downloadRecordToSong),
+        videoDownloads: downloads.videos,
+        musicDownloads: downloads.songs,
       });
     } finally {
       setLoading(false);

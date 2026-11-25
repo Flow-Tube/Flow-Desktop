@@ -13,16 +13,18 @@ use crate::models::video::{
     CreatorLink, DescriptionChannel, DescriptionExtras, Disclosure, Factoid, MusicCard,
 };
 
-/// The description with its links. The watch answer's text can be a machine
-/// translation of the player's, so its offsets only apply when both read the
-/// same; otherwise the page links the plain text itself.
+/// The description as the watch page formats it: its links, the site icons
+/// before them, chips and styles. The server words it its own way (short link
+/// text, a channel's name for its link), and it can be a machine translation,
+/// so it can read differently from the player's plain text; the page shows the
+/// plain text instead only when the user asks for original titles.
 #[must_use]
-pub fn description_rich(next: &Value, shown: Option<&str>, video_id: &str) -> Option<RichText> {
-    let rich = rich_text(
+pub fn description_rich(next: &Value, video_id: &str) -> Option<RichText> {
+    rich_text(
         &info_renderers(next).1["attributedDescription"],
         Some(video_id),
-    )?;
-    (shown.is_none_or(|shown| shown == rich.text) && !rich.spans.is_empty()).then_some(rich)
+    )
+    .filter(|rich| !rich.text.trim().is_empty())
 }
 
 #[must_use]
@@ -236,15 +238,17 @@ mod tests {
     }
 
     #[test]
-    fn a_translated_description_keeps_no_offsets() {
+    fn the_formatted_description_is_kept_even_when_it_reads_differently() {
         let next = json!({ "contents": { "twoColumnWatchNextResults": { "results": { "results": {
             "contents": [{ "videoSecondaryInfoRenderer": { "attributedDescription": {
-                "content": "Hola https://a.b",
-                "commandRuns": [{ "startIndex": 5, "length": 11, "onTap": { "innertubeCommand": {
-                    "urlEndpoint": { "url": "https://a.b" } } } }]
+                "content": "Hola instagram.com/rick",
+                "commandRuns": [{ "startIndex": 5, "length": 18, "onTap": { "innertubeCommand": {
+                    "urlEndpoint": { "url": "https://www.instagram.com/rick/" } } } }]
             } } }]
         } } } } });
-        assert!(description_rich(&next, Some("Hello https://a.b"), "v").is_none());
-        assert!(description_rich(&next, Some("Hola https://a.b"), "v").is_some());
+        let rich = description_rich(&next, "v").expect("formatted description");
+        assert_eq!(rich.text, "Hola instagram.com/rick");
+        assert_eq!(rich.spans.len(), 1);
+        assert!(description_rich(&json!({}), "v").is_none());
     }
 }

@@ -1966,7 +1966,7 @@ impl InnertubeClient {
             chapters = watch_next::description_chapters(description, duration_seconds.unwrap_or(0));
         }
 
-        let description_rich = watch_next::description_rich(next, description.as_deref(), &id);
+        let description_rich = watch_next::description_rich(next, &id);
         Ok(VideoDetails {
             title: details["title"]
                 .as_str()

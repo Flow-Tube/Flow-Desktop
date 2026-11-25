@@ -136,7 +136,7 @@ pub struct DescriptionExtras {
     pub links: Vec<CreatorLink>,
     /// The channel card at the end of the panel.
     pub channel: Option<DescriptionChannel>,
-    /// "How this was made": YouTube's note on altered or synthetic content.
+    /// "How this was made": the note on altered or synthetic content.
     pub disclosure: Option<Disclosure>,
 }
 

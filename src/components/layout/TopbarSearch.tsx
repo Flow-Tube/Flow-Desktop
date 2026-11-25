@@ -9,7 +9,7 @@ import { useAiListMatcher } from '../../lib/aiList/useAiList';
 import { withoutAiMusic } from '../../lib/aiList/music';
 import { SETTINGS } from '../../lib/settings/schema';
 import { prefetchStreamInfo } from '../../lib/streamResolution';
-import { useSearchSuggestions } from '../../lib/useSearchSuggestions';
+import { useSearchSuggestions, warmSuggestionsOnFocus } from '../../lib/useSearchSuggestions';
 import { FOCUS_SEARCH_EVENT } from '../../lib/windowEvents';
 import { channelRoute, parseYoutubeUrl, routeForYoutubeUrl, type ParsedYoutubeUrl } from '../../lib/youtubeUrl';
 import { useAppSettingsStore } from '../../store/useAppSettingsStore';
@@ -288,7 +288,9 @@ export function TopbarSearch() {
           autoComplete="off"
           spellCheck={false}
           onFocus={() => {
-            if (!isSettingsPage) setOpen(true);
+            if (isSettingsPage) return;
+            setOpen(true);
+            if (suggestionsEnabled && !text.trim()) warmSuggestionsOnFocus();
           }}
           onKeyDown={onKeyDown}
           onChange={(event) => onInputChange(event.target.value)}

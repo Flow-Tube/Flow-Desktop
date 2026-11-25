@@ -1,11 +1,25 @@
 import { useEffect, useState } from "react";
-import { getSearchSuggestions } from "./api/youtube";
+import { getSearchSuggestions, warmSearchSuggestions } from "./api/youtube";
 import { getMusicSearchSuggestions } from "./api/music";
 import type { SearchSuggestion } from "../types/video";
 import type { YTItem } from "../types/music";
 
 const DEBOUNCE_MS = 250;
 const MIN_QUERY_LENGTH = 2;
+/** Under the shared client's 90 s idle limit, so a warmed connection is still open. */
+const WARM_EVERY_MS = 60_000;
+
+let lastWarmAt = Number.NEGATIVE_INFINITY;
+
+/**
+ * Opens the suggest connection when an empty search box gets focus, at most once a
+ * minute. A new connection doubled the first suggestion's wait in testing.
+ */
+export function warmSuggestionsOnFocus(now = Date.now()) {
+  if (now - lastWarmAt < WARM_EVERY_MS) return;
+  lastWarmAt = now;
+  void warmSearchSuggestions().catch(() => undefined);
+}
 
 /**
  * Text suggestions from YouTube and tappable entities from YouTube Music for `query`.

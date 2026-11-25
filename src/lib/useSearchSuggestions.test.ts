@@ -5,11 +5,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const api = vi.hoisted(() => ({
   getSearchSuggestions: vi.fn(),
   getMusicSearchSuggestions: vi.fn(),
+  warmSearchSuggestions: vi.fn(),
 }));
-vi.mock("./api/youtube", () => ({ getSearchSuggestions: api.getSearchSuggestions }));
+vi.mock("./api/youtube", () => ({
+  getSearchSuggestions: api.getSearchSuggestions,
+  warmSearchSuggestions: api.warmSearchSuggestions,
+}));
 vi.mock("./api/music", () => ({ getMusicSearchSuggestions: api.getMusicSearchSuggestions }));
 
-import { useSearchSuggestions } from "./useSearchSuggestions";
+import { useSearchSuggestions, warmSuggestionsOnFocus } from "./useSearchSuggestions";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -83,5 +87,16 @@ describe("useSearchSuggestions", () => {
     expect(api.getSearchSuggestions).toHaveBeenLastCalledWith("linux k", "US");
     expect(latest?.suggestions).toEqual([{ text: "linux kernel", entity: null }]);
     expect(latest?.musicItems).toHaveLength(1);
+  });
+});
+
+describe("warmSuggestionsOnFocus", () => {
+  it("opens the connection at most once a minute", () => {
+    api.warmSearchSuggestions.mockReset().mockResolvedValue(undefined);
+    warmSuggestionsOnFocus(1_000_000);
+    warmSuggestionsOnFocus(1_030_000);
+    expect(api.warmSearchSuggestions).toHaveBeenCalledTimes(1);
+    warmSuggestionsOnFocus(1_061_000);
+    expect(api.warmSearchSuggestions).toHaveBeenCalledTimes(2);
   });
 });

@@ -504,6 +504,12 @@ export async function getExploreGrid(
 }
 
 /** Suggestions for `query`; `region` is the viewer's two-letter country code. */
+/** Opens the suggest host's connection so the first keystroke doesn't wait for one. */
+export async function warmSearchSuggestions(): Promise<void> {
+  if (!(await isTauriEnv())) return;
+  await invokeBackend<void>("warm_search_suggestions");
+}
+
 export async function getSearchSuggestions(query: string, region?: string | null): Promise<SearchSuggestion[]> {
   if (!(await isTauriEnv())) {
     console.warn("Tauri not detected. Returning mock suggestions.");

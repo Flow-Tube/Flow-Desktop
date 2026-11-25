@@ -45,6 +45,7 @@ SUBSCRIPTIONS AND CHANNELS
 - Channel pictures on cards, in the side menu and in lists are loaded at the size they are shown, not at 512 pixels each.
 - Cards look up their DeArrow title and channel picture only once they come near the screen, and no longer ask the backend for an image they never show.
 - A post that shares a playlist now shows the playlist as a card you can open, as on Flow for Android. Such posts used to show only their text.
+- The channels in the side rail follow the order chosen in Subscriptions > Manage (by name or by latest upload) instead of the order you followed them in.
 
 CARDS
 - Upload dates on cards, such as "3 days ago", now follow the app's language instead of the computer's, and "Streamed" and "Premiered" can be translated.

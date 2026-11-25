@@ -27,6 +27,11 @@ HOME AND RECOMMENDATIONS
 - Home no longer redraws every card each time the feed loads more or changes state. Loading a page sends only its new videos, where it used to resend the whole feed at least three times.
 - Hiding a video on Home no longer reloads every card after it.
 
+SEARCH
+- Search suggestions keep up with typing. A space after a word no longer asks YouTube again, and a request that fails or takes longer than 2 seconds leaves the rows you had instead of an empty list.
+- YouTube Music suggestions are no longer retried after a failure. A retry arrived after you had typed on, and a slow one could hold a connection for up to 30 seconds.
+- A past search now shows once in suggestions, even when it was typed with extra spaces.
+
 SUBSCRIPTIONS AND CHANNELS
 - Subscriptions opens on its first 120 videos and adds more as you scroll, instead of drawing up to 1500 cards at once. Coming back to the page returns to where you were.
 - While a first check of your channels runs, videos already listed are no longer redrawn with every batch.

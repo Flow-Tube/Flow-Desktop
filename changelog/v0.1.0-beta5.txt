@@ -86,6 +86,7 @@ PLAYER
 - Space and Enter on a button you reached with Tab now press that button instead of pausing the video, and the arrow keys on a focused slider or seek bar no longer also seek or change the volume. A button clicked with the mouse still leaves Space to the player, and the same now holds in Shorts and the music player.
 - The buffering circle waits a fifth of a second before it shows, so a short refill after a seek or speed change no longer flashes it.
 - The backings behind the player's buttons, time and chapter pills are darker, so they stay readable over a bright video. Standard goes to 35%, Light to 45% and Off to 55%.
+- Loop in the player (right click, the R key, and a new switch in the gear menu) now repeats the video until you turn it off or close the player, as in Flow for Android. It used to turn on the saved Loop every video setting, which then looped every later video and reached your phone through sync. Loop every video stays in Settings > Player.
 
 COMMENTS
 - Oldest now starts from the oldest comment. YouTube has no oldest-first order, so Flow reads the Newest order to its end, up to about 500 comments on big videos, and turns it around. Past that it says how far it reached.

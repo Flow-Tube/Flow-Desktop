@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Clock, Gamepad2, GraduationCap, Music2, Newspaper, Radio, Shirt, Trophy, X } from 'lucide-react';
 import { Chip } from '../ui/Chip';
 import { ShelfActionButton } from '../ui/ShelfActionButton';
+import { clearSearchHistoryAfterAsking } from '../../lib/clearSearchHistory';
 import { getString } from '../../lib/i18n/index';
 import { filterSummary } from '../../lib/searchFilterOptions';
 import { HISTORY_WHEN_EMPTY } from '../../lib/searchSuggestions';
@@ -42,7 +43,6 @@ const linkButton =
 function RecentSearches() {
   const history = useVisibleSearchHistory();
   const remove = useSearchHistoryStore((s) => s.remove);
-  const clear = useSearchHistoryStore((s) => s.clear);
   const runSearch = useRunSearch();
   const [showAll, setShowAll] = useState(false);
   if (history.length === 0) return null;
@@ -53,7 +53,7 @@ function RecentSearches() {
     <section className="min-w-0">
       <SectionTitle
         title={getString('search_home_recent')}
-        action={<button type="button" onClick={clear} className={linkButton}>{getString('search_clear_history')}</button>}
+        action={<button type="button" onClick={() => void clearSearchHistoryAfterAsking()} className={linkButton}>{getString('search_clear_history')}</button>}
       />
       <ul className="flex flex-col rounded-2xl border border-outline-variant bg-surface-container-low p-1.5">
         {shown.map((entry) => {

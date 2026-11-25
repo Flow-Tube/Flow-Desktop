@@ -1,4 +1,4 @@
-import { confirmAction } from '../../lib/dialogs';
+import { clearSearchHistoryAfterAsking } from '../../lib/clearSearchHistory';
 import { getString, type StringKey } from '../../lib/i18n/index';
 import { recapQueriesCleared } from '../../lib/recap/recapQueue';
 import { SETTINGS } from '../../lib/settings/schema';
@@ -28,7 +28,6 @@ export function SearchHistoryGroup() {
   const [autoDelete, setAutoDelete] = useBoolPref(SETTINGS.AUTO_DELETE_SEARCH_HISTORY, false);
   const [retention, setRetention] = useNumberPref(SETTINGS.SEARCH_HISTORY_RETENTION_DAYS, 90);
   const trimTo = useSearchHistoryStore((state) => state.trimTo);
-  const clear = useSearchHistoryStore((state) => state.clear);
 
   const handleMaxSize = (value: string) => {
     setMaxSize(Number(value));
@@ -38,16 +37,6 @@ export function SearchHistoryGroup() {
   const handleSaveSearches = (next: boolean) => {
     setSaveSearches(next);
     if (!next) recapQueriesCleared();
-  };
-
-  const handleClear = async () => {
-    const confirmed = await confirmAction({
-      title: getString('settings_clear_search_history'),
-      message: getString('settings_clear_search_history_confirm'),
-      confirmLabel: getString('clear'),
-      destructive: true,
-    });
-    if (confirmed) clear();
   };
 
   return (
@@ -85,7 +74,7 @@ export function SearchHistoryGroup() {
         />
       </SettingItem>
       <SettingItem title={getString('settings_clear_search_history')} description={getString('settings_clear_search_history_desc')}>
-        <Button type="button" variant="secondary" size="sm" onClick={() => void handleClear()}>
+        <Button type="button" variant="secondary" size="sm" onClick={() => void clearSearchHistoryAfterAsking()}>
           {getString('clear')}
         </Button>
       </SettingItem>

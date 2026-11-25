@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Loader2, Search, X } from 'lucide-react';
 import { SearchSuggestionsPanel, suggestionOptionId } from '../search/SearchSuggestionsPanel';
 import { resolveChannelId } from '../../lib/api/youtube';
+import { clearSearchHistoryAfterAsking } from '../../lib/clearSearchHistory';
 import { getString } from '../../lib/i18n/index';
 import { buildSuggestionColumns, isUnsupportedLink, type SuggestionRow } from '../../lib/searchSuggestions';
 import { useAiListMatcher } from '../../lib/aiList/useAiList';
@@ -39,7 +40,6 @@ export function TopbarSearch() {
   const recordSearch = useSearchHistoryStore((s) => s.record);
   const runSearch = useRunSearch();
   const removeSearch = useSearchHistoryStore((s) => s.remove);
-  const clearHistory = useSearchHistoryStore((s) => s.clear);
   const playQueue = useMusicPlayerStore((s) => s.playQueue);
   const isHiddenSong = useMusicHiddenFilter();
   const ai = useAiListMatcher();
@@ -323,7 +323,7 @@ export function TopbarSearch() {
           onPick={pick}
           onFill={fill}
           onRemoveHistory={removeSearch}
-          onClearHistory={clearHistory}
+          onClearHistory={() => void clearSearchHistoryAfterAsking()}
           unsupportedLink={isUnsupportedLink(text)}
         />
       ) : null}

@@ -33,6 +33,7 @@ SEARCH
 - A past search now shows once in suggestions, even when it was typed with extra spaces.
 - Search suggestions now follow your content language in Settings. They were always asked for in English, while the results came back in your language.
 - The first suggestion after a pause comes faster. Clicking into an empty search box opens the connection to YouTube's suggestion server, which cut the first answer from about 365 to 157 milliseconds in a test.
+- Clear all beside your recent searches, in the search box and on the search page, now asks first, as Settings already did. One click used to remove every saved search with its filters.
 
 SUBSCRIPTIONS AND CHANNELS
 - Subscriptions opens on its first 120 videos and adds more as you scroll, instead of drawing up to 1500 cards at once. Coming back to the page returns to where you were.

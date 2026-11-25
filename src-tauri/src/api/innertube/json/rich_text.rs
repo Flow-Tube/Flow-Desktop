@@ -1,11 +1,14 @@
-//! Attributed text (`content` plus `commandRuns`, `attachmentRuns` and
-//! `styleRuns`), as descriptions and comments carry it, read into [`RichText`].
+//! Attributed text (`content` plus `commandRuns`, `attachmentRuns`,
+//! `decorationRuns` and `styleRuns`), as descriptions and comments carry it,
+//! read into [`RichText`].
 //! Ported from Flow for Android's `toRichText`.
 
 use serde_json::Value;
 
 use crate::api::innertube::json::thumbnail::largest_url;
-use crate::models::rich_text::{RichEmoji, RichSpan, RichStyle, RichTarget, RichText};
+use crate::models::rich_text::{
+    RichEmoji, RichHighlight, RichSpan, RichStyle, RichTarget, RichText,
+};
 
 /// `attributed`'s text and spans. `own_video_id` tells a timestamp in this
 /// video from a link to another one.
@@ -47,9 +50,10 @@ pub fn rich_text(attributed: &Value, own_video_id: Option<&str>) -> Option<RichT
                 .unwrap_or_default()
                 .to_string();
             // A standard emoji is drawn over its own character, which the text
-            // already shows; only custom emoji need their picture.
+            // already shows; only custom emoji need their picture. A run with
+            // no length inserts a site icon or avatar before a link.
             let covered: Vec<u16> = text.encode_utf16().skip(start).take(length).collect();
-            if String::from_utf16_lossy(&covered) == label {
+            if length > 0 && String::from_utf16_lossy(&covered) == label {
                 return None;
             }
             Some(RichEmoji {
@@ -66,11 +70,23 @@ pub fn rich_text(attributed: &Value, own_video_id: Option<&str>) -> Option<RichT
         .flatten()
         .filter_map(|run| style(run, units))
         .collect();
+    let highlights = attributed["decorationRuns"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|run| {
+            let decorator = &run["textDecorator"]["highlightTextDecorator"];
+            let start = usize::try_from(decorator["startIndex"].as_u64()?).ok()?;
+            let length = usize::try_from(decorator["length"].as_u64()?).ok()?;
+            (length > 0 && fits(start, length)).then_some(RichHighlight { start, length })
+        })
+        .collect();
     Some(RichText {
         text: text.to_string(),
         spans,
         emojis,
         styles,
+        highlights,
     })
 }
 
@@ -263,6 +279,41 @@ mod tests {
         assert_eq!(rich.emojis.len(), 1);
         assert_eq!(rich.emojis[0].image_url, "https://e/yt.png");
         assert_eq!((rich.emojis[0].start, rich.emojis[0].length), (6, 4));
+    }
+
+    #[test]
+    fn an_icon_inserted_before_a_link_is_kept() {
+        let attributed = json!({
+            "content": "Instagram: @rick",
+            "attachmentRuns": [
+                { "startIndex": 11, "length": 0, "element": { "type": { "imageType": { "image": {
+                    "sources": [{ "url": "https://e/ig.png" }] } } } } }
+            ]
+        });
+        let rich = rich_text(&attributed, None).expect("content");
+        assert_eq!(rich.emojis.len(), 1);
+        assert_eq!((rich.emojis[0].start, rich.emojis[0].length), (11, 0));
+        assert_eq!(rich.emojis[0].image_url, "https://e/ig.png");
+    }
+
+    #[test]
+    fn highlight_decorations_become_chips() {
+        let attributed = json!({
+            "content": "by @Rick and @Astley",
+            "decorationRuns": [
+                { "textDecorator": { "highlightTextDecorator": { "startIndex": 3, "length": 5 } } },
+                { "textDecorator": { "highlightTextDecorator": { "startIndex": 13, "length": 30 } } },
+                { "textDecorator": { "otherDecorator": { "startIndex": 0, "length": 2 } } }
+            ]
+        });
+        let highlights = rich_text(&attributed, None).expect("content").highlights;
+        assert_eq!(
+            highlights,
+            [RichHighlight {
+                start: 3,
+                length: 5
+            }]
+        );
     }
 
     #[test]

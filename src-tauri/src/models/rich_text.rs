@@ -11,6 +11,17 @@ pub struct RichText {
     /// Bold, italic and struck-through stretches.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub styles: Vec<RichStyle>,
+    /// Stretches YouTube draws on a rounded chip, such as a channel or site link.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub highlights: Vec<RichHighlight>,
+}
+
+/// A stretch drawn on a rounded chip.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RichHighlight {
+    pub start: usize,
+    pub length: usize,
 }
 
 /// A stretch of the text drawn in a different face.
@@ -53,6 +64,8 @@ pub enum RichTarget {
     Url { url: String },
 }
 
+/// A custom emoji drawn over its range, or, with no length, a site icon or
+/// channel avatar inserted before a link.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RichEmoji {

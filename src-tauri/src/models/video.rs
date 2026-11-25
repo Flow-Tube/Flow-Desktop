@@ -134,6 +134,29 @@ pub struct DescriptionExtras {
     pub factoids: Vec<Factoid>,
     pub music: Vec<MusicCard>,
     pub links: Vec<CreatorLink>,
+    /// The channel card at the end of the panel.
+    pub channel: Option<DescriptionChannel>,
+    /// "How this was made": YouTube's note on altered or synthetic content.
+    pub disclosure: Option<Disclosure>,
+}
+
+/// The channel card the description panel ends with.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DescriptionChannel {
+    pub name: String,
+    /// "1.2M subscribers".
+    pub subtitle: Option<String>,
+    pub avatar_url: Option<String>,
+    pub channel_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Disclosure {
+    pub title: Option<String>,
+    pub header: Option<String>,
+    pub body: Option<crate::models::rich_text::RichText>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -161,6 +184,8 @@ pub struct MusicCard {
 pub struct CreatorLink {
     pub title: String,
     pub url: String,
+    /// The site's icon, drawn on the link's chip.
+    pub icon_url: Option<String>,
 }
 
 /// One page of the watch page's related lane, and the token for the next.

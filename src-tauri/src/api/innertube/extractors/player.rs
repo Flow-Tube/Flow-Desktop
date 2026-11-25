@@ -2002,7 +2002,7 @@ impl InnertubeClient {
             autoplay_video_id: watch_next::autoplay_video_id(next),
             has_chat_replay: watch_next::chat_seed(next).is_some_and(|(_, replay)| replay),
             description_rich,
-            description_extras: watch_next::description_extras(next),
+            description_extras: watch_next::description_extras(next, &id),
             id,
         })
     }

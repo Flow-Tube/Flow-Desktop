@@ -113,6 +113,8 @@
   "home_feed_end_title": "You've seen everything for now",
   "home_feed_error_title": "Couldn't load your feed",
   "home_feed_error_body": "Check your connection and try again.",
+  "home_offline_downloads_hint": "Your downloads still play.",
+  "home_back_online_refresh": "Back online · Refresh",
   "home_load_more_failed": "Couldn't load more videos",
   "home_load_more_failed_body": "Check your connection",
   "home_feed_why": "Why you see this",

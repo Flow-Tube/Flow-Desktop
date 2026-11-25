@@ -96,7 +96,7 @@ export function ProfileData({ brain, onImport, onReset }: ProfileDataProps) {
   };
 
   return (
-    <section className="w-full rounded-2xl bg-[var(--color-surface-container-low)] border border-[var(--color-outline-variant)] p-6">
+    <section className="w-full rounded-2xl surface-panel p-6">
       <div className="flex flex-col gap-1">
         <h3 className="text-lg font-semibold text-[var(--color-on-surface)]">{getString("persona_data_title")}</h3>
         <p className="text-sm text-[var(--color-on-surface-variant)]">
@@ -120,7 +120,7 @@ export function ProfileData({ brain, onImport, onReset }: ProfileDataProps) {
       <div className="mt-5 flex flex-col gap-3">
         <button
           onClick={handleExport}
-          className="flex items-center gap-3 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-high)] px-4 py-3 text-start text-[var(--color-on-surface)] transition-colors hover:bg-[var(--color-surface-container-highest)]"
+          className="flex items-center gap-3 rounded-xl border border-outline-soft bg-[var(--color-surface-container-high)] px-4 py-3 text-start text-[var(--color-on-surface)] transition-colors hover:bg-[var(--color-surface-container-highest)]"
         >
           <Download className="h-4 w-4 text-[var(--color-on-surface-variant)]" />
           <span className="flex min-w-0 flex-col">
@@ -132,7 +132,7 @@ export function ProfileData({ brain, onImport, onReset }: ProfileDataProps) {
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={isImporting}
-          className="flex items-center gap-3 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-high)] px-4 py-3 text-start text-[var(--color-on-surface)] transition-colors hover:bg-[var(--color-surface-container-highest)] disabled:opacity-50"
+          className="flex items-center gap-3 rounded-xl border border-outline-soft bg-[var(--color-surface-container-high)] px-4 py-3 text-start text-[var(--color-on-surface)] transition-colors hover:bg-[var(--color-surface-container-highest)] disabled:opacity-50"
         >
           {isImporting ? (
             <Loader2 className="h-4 w-4 animate-spin text-[var(--color-on-surface-variant)]" />
@@ -160,7 +160,7 @@ export function ProfileData({ brain, onImport, onReset }: ProfileDataProps) {
 
       {showConfirmReset && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--color-background)]/80 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-6">
+          <div className="w-full max-w-md rounded-2xl surface-panel p-6">
             <div className="flex items-start gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-chrome-red-900/50 bg-chrome-red-950/30 text-chrome-red-400">
                 <AlertTriangle className="h-5 w-5" />

@@ -221,7 +221,7 @@ export function PlaylistSortableList({
 
   return (
     <section className="flex h-full min-h-0 min-w-0 flex-col">
-      <div className="flex shrink-0 items-center gap-2 border-b border-chrome-neutral-800/50 bg-background pb-4">
+      <div className="flex shrink-0 items-center gap-2 border-b border-outline-soft bg-background pb-4">
         {selecting ? selectionBar : (
           <>
           <Select

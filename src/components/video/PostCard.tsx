@@ -57,12 +57,12 @@ export function PostCard({ post }: PostCardProps) {
         animate={{ width: commentsOpen ? SIDE_PANEL_WIDTH : 0, opacity: commentsOpen ? 1 : 0 }}
         transition={{ type: "spring", bounce: 0, duration: 0.4 }}
         className={`min-h-0 overflow-hidden bg-surface-container-high ${
-          commentsOpen ? "ms-4 rounded-2xl border border-chrome-neutral-800" : ""
+          commentsOpen ? "ms-4 rounded-2xl border border-outline-soft": ""
         }`}
       >
         {commentsOpen && (
           <div className="flex h-[min(720px,calc(100vh-120px))] w-full flex-col">
-            <div className="flex items-center justify-between border-b border-chrome-neutral-800 p-4">
+            <div className="flex items-center justify-between border-b border-outline-soft p-4">
               <div className="flex min-w-0 items-baseline gap-2">
                 <h3 className="text-base font-medium text-chrome-neutral-200">{getString("shorts_comments_title")}</h3>
                 {commentCount && <span className="text-sm font-semibold text-chrome-neutral-400">{commentCount}</span>}

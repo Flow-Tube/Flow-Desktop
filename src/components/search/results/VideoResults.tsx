@@ -46,7 +46,7 @@ function VideoShelf({ shelf, ...run }: { shelf: PlacedShelf } & Pick<VideoResult
   const folds = shelf.collapsedCount != null && shelf.collapsedCount < shelf.videos.length;
   const videos = folds && !expanded ? shelf.videos.slice(0, shelf.collapsedCount ?? undefined) : shelf.videos;
   return (
-    <section className="flex flex-col border-y border-outline-variant py-4">
+    <section className="flex flex-col border-y border-outline-soft py-4">
       <ShelfHeader title={shelf.title} />
       <VideoRun videos={videos} {...run} />
       {folds && (

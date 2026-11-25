@@ -84,7 +84,7 @@ export function LoadMore({ sentinelRef, loading, failed, onRetry }: { sentinelRe
     <>
       <div ref={sentinelRef} className="h-10" />
       {failed && !loading && (
-        <div className="flex items-center justify-center gap-3 border-t border-outline-variant py-4 text-sm text-chrome-neutral-400">
+        <div className="flex items-center justify-center gap-3 border-t border-outline-soft py-4 text-sm text-chrome-neutral-400">
           {getString('search_more_failed')}
           <Button variant="tonal" size="sm" onClick={onRetry}>
             {getString('player_error_retry')}

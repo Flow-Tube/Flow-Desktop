@@ -29,7 +29,7 @@ export function ContinueWatchingMini() {
   };
 
   return (
-    <div className="fixed bottom-6 end-6 z-40 flex w-[min(360px,calc(100vw-32px))] items-center gap-3 rounded-xl border border-outline-variant bg-surface-container p-2">
+    <div className="fixed bottom-6 end-6 z-40 flex w-[min(360px,calc(100vw-32px))] items-center gap-3 rounded-xl border border-outline-soft bg-surface-container p-2">
       <button type="button" onClick={playInMiniPlayer} className="relative aspect-video w-24 shrink-0 overflow-hidden rounded-lg bg-chrome-black">
         {thumbnail && <img src={thumbnail} alt="" className="h-full w-full object-cover" />}
         <span className="absolute inset-0 grid place-items-center bg-chrome-black/30 text-chrome-white">

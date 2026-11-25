@@ -183,7 +183,7 @@ export const ExtensionsPage: React.FC = () => {
 
         <section className="col-span-12 lg:col-span-6">
           <SectionLabel>{getString('extensions_server_section')}</SectionLabel>
-          <div className="overflow-hidden rounded-2xl border border-chrome-neutral-800 bg-surface-container-low">
+          <div className="overflow-hidden rounded-2xl surface-panel">
             <div className="space-y-2 px-5 py-4">
               <div>
                 <div className="text-sm font-medium text-chrome-neutral-200">{getString('extensions_api_server')}</div>
@@ -206,7 +206,7 @@ export const ExtensionsPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="border-t border-chrome-neutral-800/50">
+            <div className="border-t border-outline-soft">
               <SettingItem
                 title={getString('extensions_submit_segments')}
                 description={getString('extensions_submit_segments_description')}
@@ -221,7 +221,7 @@ export const ExtensionsPage: React.FC = () => {
             </div>
 
             {sbSubmitEnabled && !submissionsDisabled && (
-              <div className="space-y-3 border-t border-chrome-neutral-800/50 px-5 py-4">
+              <div className="space-y-3 border-t border-outline-soft px-5 py-4">
                 <div className="flex items-center justify-between gap-3">
                   <div className="text-sm font-medium text-chrome-neutral-200">{getString('extensions_submission_id')}</div>
                   <div className="flex items-center gap-2">

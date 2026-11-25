@@ -34,7 +34,7 @@ export function MusicTasteOverview({ profile }: MusicTasteOverviewProps) {
   ];
 
   return (
-    <section className="flex h-full w-full flex-col rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-6">
+    <section className="flex h-full w-full flex-col rounded-2xl surface-panel p-6">
       <div className="flex items-start justify-between gap-4">
         <div className="flex flex-col gap-1">
           <h3 className="text-lg font-semibold text-[var(--color-on-surface)]">
@@ -55,7 +55,7 @@ export function MusicTasteOverview({ profile }: MusicTasteOverviewProps) {
           return (
             <div
               key={`${cell.label}-${index}`}
-              className="relative min-h-24 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container)] p-4"
+              className="relative min-h-24 rounded-xl bg-surface-container-high p-4"
             >
               <Icon className="absolute end-3 top-3 h-4 w-4 text-[var(--color-on-surface-variant)] opacity-70" />
               <p className="pe-6 text-xs font-semibold uppercase tracking-widest text-[var(--color-on-surface-variant)]">

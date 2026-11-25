@@ -35,7 +35,7 @@ export function DialogFrame({
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.98, y: 6 }}
         transition={DOWNLOAD_SURFACE_SPRING}
-        className={`pointer-events-auto flex max-h-[calc(100vh-40px)] w-full ${width} flex-col overflow-hidden rounded-2xl border border-chrome-neutral-800 bg-surface`}
+        className={`pointer-events-auto flex max-h-[calc(100vh-40px)] w-full ${width} flex-col overflow-hidden rounded-2xl border border-outline-soft bg-surface`}
       >
         {children}
       </motion.div>
@@ -137,7 +137,7 @@ export function DialogFooter({
 }) {
   const [editing, setEditing] = useState(false);
   return (
-    <div className="flex flex-wrap items-center gap-3 border-t border-chrome-neutral-800 bg-surface-container-low px-5 py-3">
+    <div className="flex flex-wrap items-center gap-3 border-t border-outline-soft bg-surface-container-low px-5 py-3">
       <div className="min-w-0 flex-1">
         {editing && onRename ? (
           <TextInput
@@ -191,9 +191,9 @@ export function DialogFooter({
 /** Rows standing in for a list that is still loading. */
 export function SkeletonRows({ count = 5 }: { count?: number }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-chrome-neutral-800">
+    <div className="overflow-hidden rounded-xl border border-outline-soft">
       {Array.from({ length: count }, (_, index) => (
-        <div key={index} className="flex items-center gap-3 border-t border-chrome-neutral-800 px-3 py-3 first:border-t-0">
+        <div key={index} className="flex items-center gap-3 border-t border-outline-soft px-3 py-3 first:border-t-0">
           <div className="h-4 w-4 rounded-full bg-surface-container-high" />
           <div className="h-3 w-14 rounded bg-surface-container-high" />
           <div className="h-3 flex-1 rounded bg-surface-container" />

@@ -55,7 +55,7 @@ function RecentSearches() {
         title={getString('search_home_recent')}
         action={<button type="button" onClick={() => void clearSearchHistoryAfterAsking()} className={linkButton}>{getString('search_clear_history')}</button>}
       />
-      <ul className="flex flex-col rounded-2xl border border-outline-variant bg-surface-container-low p-1.5">
+      <ul className="flex flex-col rounded-2xl surface-panel p-1.5">
         {shown.map((entry) => {
           const summary = entry.filters ? filterSummary(entry.filters) : '';
           return (
@@ -143,7 +143,7 @@ export function SearchHome() {
                     key={destination.id}
                     type="button"
                     onClick={() => navigate(`/explore?d=${destination.id}`)}
-                    className="flex h-16 items-center gap-3 rounded-2xl border border-outline-variant bg-surface-container-low px-4 text-start text-sm font-semibold text-chrome-neutral-100 transition-colors duration-200 ease-out hover:bg-surface-container-high focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    className="flex h-16 items-center gap-3 rounded-2xl surface-panel px-4 text-start text-sm font-semibold text-chrome-neutral-100 transition-colors duration-200 ease-out hover:bg-surface-container-high focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   >
                     <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-surface-container-high text-chrome-neutral-400">
                       <Icon className="h-4 w-4" />

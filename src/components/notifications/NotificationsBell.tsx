@@ -250,9 +250,9 @@ export function NotificationsBell() {
           anchor={anchor}
           onClose={closePanel}
           closeOnScroll={false}
-          className="z-[70] flex max-h-[70vh] w-[22rem] flex-col overflow-hidden rounded-2xl border border-chrome-neutral-800 bg-surface-container-high"
+          className="z-[70] flex max-h-[70vh] w-[22rem] flex-col overflow-hidden rounded-2xl border border-outline-soft bg-surface-container-high"
         >
-          <div className="flex items-center justify-between border-b border-chrome-neutral-800 px-4 py-3">
+          <div className="flex items-center justify-between border-b border-outline-soft px-4 py-3">
             <h2 className="text-base font-medium text-chrome-neutral-200">
               {getString("notifications_title")}
             </h2>

@@ -12,7 +12,7 @@ interface RememberedChannelsProps {
 /** Channels the viewer keeps watching without following, each one forgettable. */
 export function RememberedChannels({ channels, forgetting, onForget }: RememberedChannelsProps) {
   return (
-    <ul className="divide-y divide-chrome-neutral-800">
+    <ul className="divide-y divide-outline-soft">
       {channels.map((channel) => (
         <li key={channel.id} className="flex items-center justify-between gap-4 py-2">
           <span className="min-w-0 truncate text-sm text-chrome-neutral-200">

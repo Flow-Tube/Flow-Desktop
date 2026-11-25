@@ -27,7 +27,7 @@ export function InterestWeights({ brain }: InterestWeightsProps) {
   const totalSegmentWeight = segmentTopics.reduce((acc, [, weight]) => acc + weight, 0);
 
   return (
-    <section className="flex h-full w-full flex-col rounded-2xl bg-[var(--color-surface-container-low)] border border-[var(--color-outline-variant)] p-6">
+    <section className="flex h-full w-full flex-col rounded-2xl surface-panel p-6">
       <div className="flex flex-col gap-1">
         <h3 className="text-lg font-semibold text-[var(--color-on-surface)]">
           {getString("persona_interests_title")}
@@ -93,10 +93,10 @@ export function InterestWeights({ brain }: InterestWeightsProps) {
             </span>
           </div>
         ) : (
-          <div className="mt-3 max-h-[580px] overflow-y-auto rounded-xl border border-[var(--color-outline-variant)]">
+          <div className="mt-3 max-h-[580px] overflow-y-auto rounded-xl border border-outline-soft">
             <table className="w-full border-collapse text-sm">
               <thead className="sticky top-0 bg-[var(--color-surface-container-high)]">
-                <tr className="border-b border-[var(--color-outline-variant)]">
+                <tr className="border-b border-outline-soft">
                   <th className="px-4 py-3 text-start text-xs font-semibold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
                     {getString("persona_col_topic")}
                   </th>
@@ -108,7 +108,7 @@ export function InterestWeights({ brain }: InterestWeightsProps) {
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[var(--color-outline-variant)]">
+              <tbody className="divide-y divide-outline-soft">
                 {sortedTopics.map(([topic, weight]) => {
                   const evidence = findEvidence(brain, topic);
                   const confidence = evidence?.positive_score ?? weight;

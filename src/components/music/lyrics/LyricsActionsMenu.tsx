@@ -40,7 +40,7 @@ import { LyricsShareDialog } from "./LyricsShareDialog";
 const HOVER = "transition-colors duration-150 ease-out hover:bg-surface-container-highest focus-visible:bg-surface-container-highest focus-visible:outline-none";
 
 function Separator() {
-  return <div role="separator" className="mx-1.5 my-1.5 border-t border-chrome-neutral-800" />;
+  return <div role="separator" className="mx-1.5 my-1.5 border-t border-outline-soft" />;
 }
 
 /** An action as a tile in the top row, the way card menus show their quick actions. */
@@ -229,7 +229,7 @@ export function LyricsActionsMenu({ track, className }: { track: SongItem | null
               )}
             </div>
             {tiles.length > 0 && (
-              <div className="grid gap-1 border-t border-chrome-neutral-800 pt-1.5" style={{ gridTemplateColumns: `repeat(${tiles.length}, minmax(0, 1fr))` }}>
+              <div className="grid gap-1 border-t border-outline-soft pt-1.5" style={{ gridTemplateColumns: `repeat(${tiles.length}, minmax(0, 1fr))` }}>
                 {tiles}
               </div>
             )}

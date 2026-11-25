@@ -41,7 +41,7 @@ export const ChannelTabs: React.FC<ChannelTabsProps> = ({
   onSearchSubmit,
   onSearchClear,
 }) => (
-  <div className="sticky top-0 z-40 w-full border-b border-chrome-neutral-800 bg-background">
+  <div className="sticky top-0 z-40 w-full border-b border-outline-soft bg-background">
     <div className="mx-auto px-4 sm:px-6 lg:px-8">
       <div className="flex h-14 items-center justify-between gap-4 overflow-x-auto">
         <UnderlineTabs

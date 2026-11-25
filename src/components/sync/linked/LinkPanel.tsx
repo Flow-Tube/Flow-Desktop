@@ -38,7 +38,7 @@ export function LinkPanel({ link, joining }: { link: LinkPhase; joining: boolean
   const { answer, closeLink, busy } = useLinkedDevicesStore();
   const finished = link.phase === "done" || link.phase === "failed";
   return (
-    <div className="flex flex-col items-center gap-4 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-8 text-center">
+    <div className="flex flex-col items-center gap-4 rounded-2xl surface-panel p-8 text-center">
       {link.phase === "waiting" &&
         (link.code ? (
           <>

@@ -174,7 +174,7 @@ export function SubscribeButton({
         <AnchoredPortalMenu
           anchor={anchor}
           onClose={closeMenu}
-          className="z-[70] w-64 overflow-hidden rounded-xl border border-chrome-neutral-800 bg-surface-container-high py-1.5"
+          className="z-[70] w-64 overflow-hidden rounded-xl border border-outline-soft bg-surface-container-high py-1.5"
         >
           <div className="px-3.5 py-1.5 text-xs font-semibold uppercase tracking-widest text-chrome-neutral-500">
             {getString("subscription_notifications_label")}

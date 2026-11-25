@@ -50,7 +50,7 @@ function MorphFrame({ children, onClose, morphId }: { children: React.ReactNode;
         layoutId={morphId}
         layout
         transition={DOWNLOAD_SURFACE_SPRING}
-        className="pointer-events-auto w-full max-w-[560px] overflow-hidden rounded-2xl border border-chrome-neutral-800 bg-surface p-6"
+        className="pointer-events-auto w-full max-w-[560px] overflow-hidden rounded-2xl border border-outline-soft bg-surface p-6"
       >
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.18, delay: 0.05 }}>
           {children}
@@ -132,7 +132,7 @@ function DownloadProgressPanel({
                 : getString("download_downloading_tracks");
 
   return (
-    <div className="mt-6 rounded-xl border border-chrome-neutral-800 bg-surface-container-low p-4">
+    <div className="mt-6 rounded-xl surface-panel p-4">
       <div className="flex items-center gap-3">
         <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-surface-container-high text-chrome-neutral-300">
           {status === "completed" ? (

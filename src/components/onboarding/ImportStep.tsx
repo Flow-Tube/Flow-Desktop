@@ -127,7 +127,7 @@ export const ImportStep: React.FC = () => {
         )}
       </button>
 
-      <div className="flex flex-col space-y-4 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-6 select-none">
+      <div className="flex flex-col space-y-4 rounded-2xl surface-panel p-6 select-none">
         <h4 className="text-xs font-semibold text-chrome-neutral-500">{getString("import_supported_formats_title")}</h4>
         <ul className="list-disc space-y-2 ps-5 text-sm leading-normal text-chrome-neutral-400">
           <li><strong>Google Takeout:</strong> {getString("onboarding_import_format_takeout")}</li>

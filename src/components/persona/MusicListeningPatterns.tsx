@@ -29,7 +29,7 @@ export function MusicListeningPatterns({ profile }: MusicListeningPatternsProps)
   const active = currentBucket();
 
   return (
-    <section className="w-full rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-6">
+    <section className="w-full rounded-2xl surface-panel p-6">
       <div className="flex flex-col gap-1">
         <h3 className="text-lg font-semibold text-[var(--color-on-surface)]">
           {getString("music_listening_patterns")}

@@ -73,7 +73,7 @@ export function TasteMusicData() {
 
   return (
     <TasteSection title={getString("taste_music_data_title")} description={getString("taste_music_data_desc")}>
-      <div className="flex flex-col divide-y divide-chrome-neutral-800/50">
+      <div className="flex flex-col divide-y divide-outline-soft">
         <SettingItem title={getString("taste_export_music")} description={getString("taste_export_music_desc")}>
           <Button variant="secondary" size="sm" disabled={busy} onClick={() => void exportProfile()}>
             {getString("taste_export_music_action")}

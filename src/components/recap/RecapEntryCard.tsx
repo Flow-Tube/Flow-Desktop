@@ -17,7 +17,7 @@ export function RecapEntryCard() {
     navigate(recapPath(target));
   };
   return (
-    <section className="flex flex-wrap items-center gap-4 rounded-2xl border border-outline-variant bg-surface-container-low px-5 py-4">
+    <section className="flex flex-wrap items-center gap-4 rounded-2xl surface-panel px-5 py-4">
       <ChartNoAxesColumn className="h-6 w-6 shrink-0 text-chrome-neutral-400" />
       <div className="min-w-0 flex-1">
         <h2 className="text-base font-medium text-on-surface">

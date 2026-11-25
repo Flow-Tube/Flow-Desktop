@@ -27,7 +27,7 @@ const optionClass = (selected: boolean) =>
 function Column({ title, children, wide = false }: { title: string; children: ReactNode; wide?: boolean }) {
   return (
     <div role="group" aria-label={title} className={`min-w-0 ${wide ? 'sm:col-span-2' : ''}`}>
-      <h3 className="mb-2 border-b border-outline-variant pb-1.5 text-xs font-semibold text-chrome-neutral-400">{title}</h3>
+      <h3 className="mb-2 border-b border-outline-soft pb-1.5 text-xs font-semibold text-chrome-neutral-400">{title}</h3>
       <div className={wide ? 'grid grid-cols-2 gap-x-2' : 'flex flex-col'}>{children}</div>
     </div>
   );
@@ -92,7 +92,7 @@ export function SearchFilterPanel({ filters, onChange, onClose }: SearchFilterPa
           onClose();
         }
       }}
-      className="animate-menu-in flex flex-col gap-3 rounded-2xl border border-outline-variant bg-surface-container-low px-4 pb-3 pt-4"
+      className="animate-menu-in flex flex-col gap-3 rounded-2xl border border-outline-soft bg-surface-container-low px-4 pb-3 pt-4"
     >
       <div className="grid grid-cols-2 gap-x-5 gap-y-4 sm:grid-cols-5">
         <RadioColumn
@@ -139,7 +139,7 @@ export function SearchFilterPanel({ filters, onChange, onClose }: SearchFilterPa
           onPick={(watchState) => onChange({ ...filters, watchState })}
         />
       </div>
-      <div className="flex items-center gap-3 border-t border-outline-variant pt-3">
+      <div className="flex items-center gap-3 border-t border-outline-soft pt-3">
         <p className="min-w-0 flex-1 text-xs text-chrome-neutral-400">{getString('search_filters_hint')}</p>
         <Button variant="secondary" size="sm" onClick={onClose}>
           {getString('search_filters_done')}

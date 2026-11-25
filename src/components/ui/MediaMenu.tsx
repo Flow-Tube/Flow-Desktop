@@ -94,7 +94,7 @@ export function MediaMenu({ anchor, onClose, actions, header, note, className = 
         ) : null}
 
         {tiles.length > 0 ? (
-          <div className={`grid gap-1 ${tiles.length >= 4 ? "grid-cols-4" : tiles.length === 3 ? "grid-cols-3" : "grid-cols-2"} ${header ? "border-t border-chrome-neutral-800 pt-1.5" : ""}`}>
+          <div className={`grid gap-1 ${tiles.length >= 4 ? "grid-cols-4" : tiles.length === 3 ? "grid-cols-3" : "grid-cols-2"} ${header ? "border-t border-outline-soft pt-1.5" : ""}`}>
             {tiles.map((action) => (
               <button
                 key={action.id}
@@ -116,7 +116,7 @@ export function MediaMenu({ anchor, onClose, actions, header, note, className = 
         {groups.map((group, groupIndex) => (
           <Fragment key={group[0]?.group ?? groupIndex}>
             {groupIndex > 0 || tiles.length > 0 || header ? (
-              <div role="separator" className="mx-1.5 my-1.5 border-t border-chrome-neutral-800" />
+              <div role="separator" className="mx-1.5 my-1.5 border-t border-outline-soft" />
             ) : null}
             {group.map((action) => (
               <button

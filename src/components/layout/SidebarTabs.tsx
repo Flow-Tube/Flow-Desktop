@@ -148,7 +148,7 @@ export function SidebarTabs({ collapsed, onNavigate }: { collapsed: boolean; onN
         <AnchoredPortalMenu
           anchor={menu.anchor}
           onClose={closeMenu}
-          className="z-[70] w-56 overflow-hidden rounded-xl border border-chrome-neutral-800 bg-surface-container-high py-1.5"
+          className="z-[70] w-56 overflow-hidden rounded-xl border border-outline-soft bg-surface-container-high py-1.5"
         >
           <TabMenuRow icon={<Plus size={16} />} label={getString('tabs_new')} onSelect={() => { closeMenu(); newTab(); }} />
           <TabMenuRow icon={<Copy size={16} />} label={getString('tabs_duplicate')} onSelect={() => { closeMenu(); duplicateTab(menu.tabId); }} />

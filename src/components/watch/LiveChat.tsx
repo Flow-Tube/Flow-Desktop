@@ -221,11 +221,11 @@ function ChatPanel({
 
   return (
     <div
-      className={`flex w-full flex-col overflow-hidden rounded-2xl border border-chrome-neutral-800 bg-surface-container-low ${
-        fill ? "h-full" : "h-[min(560px,70vh)] shrink-0"
+      className={`flex w-full flex-col overflow-hidden rounded-2xl surface-panel ${
+        fill ? "h-full": "h-[min(560px,70vh)] shrink-0"
       }`}
     >
-      <div className="flex shrink-0 items-center gap-2 border-b border-chrome-neutral-800 px-4 py-3">
+      <div className="flex shrink-0 items-center gap-2 border-b border-outline-soft px-4 py-3">
         <Radio size={16} className="text-primary" />
         <h3 className="text-base font-medium text-chrome-neutral-200">
           {getString(isReplay ? "live_chat_replay_title" : "live_chat_title")}

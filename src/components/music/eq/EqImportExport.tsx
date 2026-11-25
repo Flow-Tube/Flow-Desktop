@@ -125,7 +125,7 @@ export function EqImportExport() {
       </div>
       {parsed && !nameFree && <span className="text-xs text-chrome-red-400">{getString("eq_name_taken")}</span>}
 
-      <div className="flex flex-wrap items-center gap-2 border-t border-chrome-neutral-800 pt-3">
+      <div className="flex flex-wrap items-center gap-2 border-t border-outline-soft pt-3">
         <span className="me-auto text-sm text-chrome-neutral-300">{getString("eq_export")}</span>
         <button type="button" className={BUTTON} onClick={() => void exportToFile()}>
           <FileDown className="h-4 w-4" />

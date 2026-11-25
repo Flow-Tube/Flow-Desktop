@@ -38,7 +38,7 @@ function ChannelGroup({ title, footer, children }: { title: string; footer?: str
   return (
     <section className="flex flex-col gap-2">
       <h2 className="text-sm font-semibold text-primary">{title}</h2>
-      <ul className="divide-y divide-chrome-neutral-800 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low">
+      <ul className="divide-y divide-outline-soft rounded-2xl surface-panel">
         {children}
       </ul>
       {footer && <p className="text-xs text-chrome-neutral-500">{footer}</p>}

@@ -29,7 +29,7 @@ export function CategoryChips({
 
   return (
     <div 
-      className={`${sticky ? 'sticky top-0 z-30 border-b border-chrome-neutral-800 bg-background px-4' : ''} flex items-center gap-3 overflow-x-auto py-3 ${className}`}
+      className={`${sticky ? 'sticky top-0 z-30 border-b border-outline-soft bg-background px-4' : ''} flex items-center gap-3 overflow-x-auto py-3 ${className}`}
     >
       <div className="flex gap-3">
         {leading}

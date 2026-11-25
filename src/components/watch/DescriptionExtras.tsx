@@ -40,7 +40,7 @@ export function DescriptionExtras({ extras }: { extras: Extras }) {
   if (extras.factoids.length === 0 && songs.length === 0 && extras.links.length === 0) return null;
 
   return (
-    <div className="mt-4 flex flex-col gap-4 border-t border-chrome-neutral-800 pt-4">
+    <div className="mt-4 flex flex-col gap-4 border-t border-outline-soft pt-4">
       {extras.factoids.length > 0 && (
         <div className="flex flex-wrap gap-6">
           {extras.factoids.map((factoid) => (

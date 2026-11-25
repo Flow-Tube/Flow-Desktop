@@ -173,7 +173,7 @@ export const History: React.FC<HistoryProps> = ({ onPlay }) => {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden py-6">
       <div className="mx-auto w-full shrink-0 px-4 sm:px-6 lg:px-8">
-        <header className="flex flex-col gap-5 border-b border-chrome-neutral-800 pb-6 lg:flex-row lg:items-end lg:justify-between">
+        <header className="flex flex-col gap-5 border-b border-outline-soft pb-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="min-w-0">
             <h1 className="text-3xl font-bold tracking-tight text-chrome-neutral-100 lg:text-4xl">
               {getString("watch_history_title")}
@@ -266,7 +266,7 @@ export const History: React.FC<HistoryProps> = ({ onPlay }) => {
         </div>
       ) : visibleGroups.length === 0 ? (
         <div className="px-4 sm:px-6 lg:px-8">
-          <div className="mx-auto mt-8 w-full rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-8 text-center">
+          <div className="mx-auto mt-8 w-full rounded-2xl surface-panel p-8 text-center">
             <p className="text-sm font-medium text-chrome-neutral-300">
               {hasMore ? getString("history_loading") : getString("history_no_results")}
             </p>
@@ -285,7 +285,7 @@ export const History: React.FC<HistoryProps> = ({ onPlay }) => {
       {/* Clear watch history confirmation overlay modal */}
       {showClearConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-chrome-black/75 p-4">
-          <div className="w-full max-w-sm space-y-4 rounded-2xl border border-chrome-neutral-800 bg-surface-container p-6">
+          <div className="w-full max-w-sm space-y-4 rounded-2xl border border-outline-soft bg-surface-container p-6">
             <h3 className="text-lg font-bold text-chrome-neutral-100">
               {getString("clear_watch_history_alert_title")}
             </h3>

@@ -35,7 +35,7 @@ export function Toast({ title, message, variant, image, imageShape = "landscape"
   const Icon = variantIcons[variant];
 
   return (
-    <div className="flex w-full items-center gap-3 rounded-2xl border border-chrome-neutral-800 bg-surface-container-high p-2.5 text-sm text-chrome-neutral-100">
+    <div className="flex w-full items-center gap-3 rounded-2xl border border-outline-soft bg-surface-container-high p-2.5 text-sm text-chrome-neutral-100">
       {image ? (
         <img
           src={image}

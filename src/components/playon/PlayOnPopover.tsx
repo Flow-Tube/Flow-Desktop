@@ -45,7 +45,7 @@ export function PlayOnPopover({ onClose }: { onClose: () => void }) {
     <div
       role="dialog"
       aria-labelledby="play-on-title"
-      className="flex max-h-[70vh] w-[360px] flex-col gap-4 overflow-y-auto rounded-2xl border border-chrome-neutral-800 bg-surface-container p-4"
+      className="flex max-h-[70vh] w-[360px] flex-col gap-4 overflow-y-auto rounded-2xl border border-outline-soft bg-surface-container p-4"
     >
       <div>
         <h2 id="play-on-title" className="text-base font-medium text-chrome-neutral-200">

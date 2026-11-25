@@ -38,7 +38,7 @@ export function NoteDetailPane({ note, onPlay, onCopy, onDelete }: NoteDetailPan
   };
 
   return (
-    <div className="flex flex-col gap-4 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5">
+    <div className="flex flex-col gap-4 rounded-2xl surface-panel p-5">
       <div className="flex items-start gap-4">
         <NoteImage note={note} className={isVideo ? "w-40 shrink-0" : "w-20 shrink-0"} />
         <div className="min-w-0 select-text">

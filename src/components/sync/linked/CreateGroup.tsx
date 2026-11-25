@@ -17,7 +17,7 @@ function ServerTaken({ url, token }: { url: string; token: string }) {
   const { create, askToJoin, busy } = useLinkedDevicesStore();
   const [confirmation, setConfirmation] = useState("");
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-chrome-neutral-800 p-4">
+    <div className="flex flex-col gap-3 rounded-xl border border-outline-soft p-4">
       <p className="text-sm font-medium text-chrome-neutral-200">{getString("linked_server_taken_title")}</p>
       <p className="text-sm text-chrome-neutral-400">{getString("linked_server_taken_body")}</p>
       <Button variant="tonal" className="self-start" disabled={busy} onClick={() => void askToJoin(url, token)}>

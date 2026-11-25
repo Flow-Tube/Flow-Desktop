@@ -128,7 +128,7 @@ export const Onboarding: React.FC = () => {
       </div>
 
       {/* Sticky Bottom Action Bar */}
-      <div className="w-full bg-surface border-t border-chrome-neutral-800/50 z-40">
+      <div className="w-full bg-surface border-t border-outline-soft z-40">
         <div className="max-w-5xl mx-auto px-8 lg:px-12 py-5 flex items-center justify-between">
           <div className="flex items-center gap-4">
             {currentStep > 0 && (

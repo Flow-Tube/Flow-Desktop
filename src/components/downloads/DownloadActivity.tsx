@@ -238,7 +238,7 @@ function DockCard({
       }}
       onPointerEnter={() => setHovered(true)}
       onPointerLeave={() => setHovered(false)}
-      className="relative grid cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 overflow-hidden rounded-2xl border border-chrome-neutral-800 bg-surface-container-high p-2.5 transition-colors duration-200 ease-out hover:bg-surface-container-highest"
+      className="relative grid cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 overflow-hidden rounded-2xl bg-surface-container-high p-2.5 transition-colors duration-200 ease-out hover:bg-surface-container-highest"
     >
       <DockArtwork item={item} size="card" />
       <div className="min-w-0">
@@ -298,7 +298,7 @@ function DockCard({
 function GroupRow({ item }: { item: DownloadProgress }) {
   const fraction = progressFraction(item);
   return (
-    <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 border-t border-chrome-neutral-800 px-3 py-2">
+    <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 border-t border-outline-soft px-3 py-2">
       <DockArtwork item={item} size="row" />
       <div className="min-w-0">
         <div dir="auto" className="truncate text-xs text-chrome-neutral-200">{item.title}</div>
@@ -365,7 +365,7 @@ function GroupDockCard({
       transition={DOWNLOAD_SURFACE_SPRING}
       onPointerEnter={() => setHovered(true)}
       onPointerLeave={() => setHovered(false)}
-      className="relative overflow-hidden rounded-2xl border border-chrome-neutral-800 bg-surface-container-high"
+      className="relative overflow-hidden rounded-2xl bg-surface-container-high"
     >
       <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2.5">
         {artwork ?? (
@@ -401,7 +401,7 @@ function GroupDockCard({
         <GroupRow key={item.id} item={item} />
       ))}
       {more > 0 ? (
-        <div className="border-t border-chrome-neutral-800 px-3 py-1.5 text-xs text-chrome-neutral-500">
+        <div className="border-t border-outline-soft px-3 py-1.5 text-xs text-chrome-neutral-500">
           {getString("download_more_items", more)}
         </div>
       ) : null}

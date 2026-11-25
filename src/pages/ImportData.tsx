@@ -91,7 +91,7 @@ export const ImportData: React.FC = () => {
           >
             {importState === "idle" && (
               <div className="space-y-3 p-8">
-                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-chrome-neutral-800 bg-surface-container-high">
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-surface-container-high">
                   <Upload className="h-5 w-5 text-chrome-neutral-400" />
                 </div>
                 <div className="space-y-1">
@@ -152,7 +152,7 @@ export const ImportData: React.FC = () => {
             ))}
           </SettingsGroup>
 
-          <div className="rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5">
+          <div className="rounded-2xl surface-panel p-5">
             <div className="mb-3 flex items-center gap-2">
               <Database size={14} className="text-chrome-neutral-400" />
               <h4 className="text-xs font-semibold uppercase tracking-widest text-chrome-neutral-500">{getString("import_flowneuro_card_title")}</h4>

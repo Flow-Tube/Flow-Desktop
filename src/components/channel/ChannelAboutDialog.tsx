@@ -72,9 +72,9 @@ export function ChannelAboutDialog({ channel, open, onClose }: ChannelAboutDialo
         aria-modal="true"
         aria-labelledby="channel-about-title"
         onClick={(event) => event.stopPropagation()}
-        className="animate-fade-in flex max-h-[min(720px,calc(100vh-4rem))] w-full max-w-lg flex-col rounded-2xl border border-chrome-neutral-800 bg-surface-container"
+        className="animate-fade-in flex max-h-[min(720px,calc(100vh-4rem))] w-full max-w-lg flex-col rounded-2xl border border-outline-soft bg-surface-container"
       >
-        <div className="flex items-center justify-between border-b border-chrome-neutral-800 px-6 py-4">
+        <div className="flex items-center justify-between border-b border-outline-soft px-6 py-4">
           <h2 id="channel-about-title" className="text-lg font-bold tracking-tight text-chrome-neutral-100">
             {getString("about")}
           </h2>

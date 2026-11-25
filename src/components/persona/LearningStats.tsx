@@ -99,7 +99,7 @@ export function LearningStats({ brain }: LearningStatsProps) {
         return (
           <div
             key={stat.label}
-            className="relative min-h-28 rounded-2xl bg-[var(--color-surface-container-low)] border border-[var(--color-outline-variant)] p-4"
+            className="relative min-h-28 rounded-2xl surface-panel p-4"
           >
             <Icon className="absolute end-4 top-4 h-5 w-5 text-[var(--color-on-surface-variant)] opacity-70" />
             <div className="pe-8">
@@ -114,7 +114,7 @@ export function LearningStats({ brain }: LearningStatsProps) {
         );
       })}
       {recentQueries.length > 0 ? (
-        <div className="col-span-2 flex flex-col gap-2 rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4 md:col-span-3">
+        <div className="col-span-2 flex flex-col gap-2 rounded-2xl surface-panel p-4 md:col-span-3">
           <p className="text-xs font-semibold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
             {getString("persona_recent_queries")}
           </p>

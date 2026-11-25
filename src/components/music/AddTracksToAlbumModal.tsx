@@ -140,7 +140,7 @@ export function AddTracksToAlbumModal() {
       onClick={close}
     >
       <div
-        className="flex max-h-[80vh] w-full max-w-lg flex-col rounded-2xl border border-chrome-neutral-800 bg-surface-container p-5"
+        className="flex max-h-[80vh] w-full max-w-lg flex-col rounded-2xl border border-outline-soft bg-surface-container p-5"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3">

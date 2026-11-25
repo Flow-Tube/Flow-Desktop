@@ -11,7 +11,7 @@ export function Card({
   children: React.ReactNode;
 }) {
   return (
-    <div className={`flex flex-col rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-6 ${className}`}>
+    <div className={`flex flex-col rounded-2xl surface-panel p-6 ${className}`}>
       {title && <h3 className="text-base font-medium text-chrome-neutral-200">{title}</h3>}
       {subtitle && <p className="mt-1 text-sm text-chrome-neutral-400">{subtitle}</p>}
       <div className={`flex flex-1 flex-col gap-4 ${title || subtitle ? "mt-5" : ""}`}>{children}</div>

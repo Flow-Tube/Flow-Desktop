@@ -88,7 +88,7 @@ export function ProfileMenuButton() {
             role="menu"
             aria-label={getString("settings_profiles")}
             onKeyDown={onKeyDown}
-            className="w-72 rounded-xl border border-chrome-neutral-800 bg-surface-container-high p-1.5 text-sm text-chrome-neutral-200"
+            className="w-72 rounded-xl border border-outline-soft bg-surface-container-high p-1.5 text-sm text-chrome-neutral-200"
           >
             {active && (
               <div className="flex items-center gap-3 px-2.5 py-2">
@@ -106,7 +106,7 @@ export function ProfileMenuButton() {
                 <span className="truncate">{profileDisplayName(profile)}</span>
               </button>
             ))}
-            <div role="separator" className="mx-1.5 my-1.5 border-t border-chrome-neutral-800" />
+            <div role="separator" className="mx-1.5 my-1.5 border-t border-outline-soft" />
             <button
               type="button"
               role="menuitem"

@@ -62,7 +62,7 @@ export function SubscriptionsManage({
       </div>
 
       {shown.length > 0 ? (
-        <div className="divide-y divide-chrome-neutral-800 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low">
+        <div className="divide-y divide-outline-soft rounded-2xl surface-panel">
           {shown.map((channel) => {
             const details = channelDetails[channel.id];
             const avatarUrl = getAvatarUrl(channel.avatarUrl) || getAvatarUrl(details?.avatarUrl);

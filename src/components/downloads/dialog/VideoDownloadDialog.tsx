@@ -141,7 +141,7 @@ export function VideoDownloadDialog({ video, onClose }: { video: VideoSummary; o
         ) : failure ? (
           <PlayerErrorState error={failure} variant="compact" onRetry={state.retry} />
         ) : audioMode ? (
-          <div className="flex items-center gap-3 rounded-xl border border-chrome-neutral-800 bg-surface-container px-3 py-3 text-sm">
+          <div className="flex items-center gap-3 rounded-xl surface-panel px-3 py-3 text-sm">
             <span className="h-4 w-4 rounded-full border-[5px] border-[var(--color-primary)]" aria-hidden />
             <span className="font-mono font-medium text-chrome-neutral-100">AAC</span>
             <span className="min-w-0 flex-1 truncate text-chrome-neutral-400">
@@ -156,7 +156,7 @@ export function VideoDownloadDialog({ video, onClose }: { video: VideoSummary; o
           <div
             role="radiogroup"
             aria-label={getString("download_resolution")}
-            className="overflow-hidden rounded-xl border border-chrome-neutral-800"
+            className="overflow-hidden rounded-xl border border-outline-soft"
             onKeyDown={(event) => {
               if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
               event.preventDefault();
@@ -178,7 +178,7 @@ export function VideoDownloadDialog({ video, onClose }: { video: VideoSummary; o
                   tabIndex={selected ? 0 : -1}
                   onClick={() => state.setSelectedId(row.formatId)}
                   onDoubleClick={() => void start()}
-                  className={`grid w-full grid-cols-[18px_64px_minmax(0,1fr)_auto] items-center gap-3 border-t border-chrome-neutral-800 px-3 py-2.5 text-start text-sm transition-colors duration-200 ease-out first:border-t-0 ${
+                  className={`grid w-full grid-cols-[18px_64px_minmax(0,1fr)_auto] items-center gap-3 border-t border-outline-soft px-3 py-2.5 text-start text-sm transition-colors duration-200 ease-out first:border-t-0 ${
                     selected ? "bg-surface-container" : "hover:bg-surface-container-low"
                   }`}
                 >

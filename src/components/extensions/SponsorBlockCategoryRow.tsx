@@ -85,7 +85,7 @@ export function SponsorBlockCategoryRow({
         <AnchoredPortalMenu
           anchor={anchor}
           onClose={() => setAnchor(null)}
-          className="z-50 w-56 rounded-xl border border-chrome-neutral-800 bg-surface-container-high p-3"
+          className="z-50 w-56 rounded-xl border border-outline-soft bg-surface-container-high p-3"
         >
           <div className="mb-2.5 flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-widest text-chrome-neutral-500">

@@ -41,7 +41,7 @@ export function PlaylistFormDialog({
     >
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-sm space-y-4 rounded-2xl border border-chrome-neutral-800 bg-surface-container p-6"
+        className="w-full max-w-sm space-y-4 rounded-2xl border border-outline-soft bg-surface-container p-6"
       >
         <h3 className="text-lg font-medium text-chrome-neutral-100">{title}</h3>
 

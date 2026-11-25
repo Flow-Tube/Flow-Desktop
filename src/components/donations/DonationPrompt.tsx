@@ -92,7 +92,7 @@ function DonationPromptDialog({
         aria-modal="true"
         aria-labelledby="donation-prompt-title"
         onClick={(event) => event.stopPropagation()}
-        className="animate-fade-in w-full max-w-sm rounded-2xl border border-chrome-neutral-800 bg-surface-container p-6"
+        className="animate-fade-in w-full max-w-sm rounded-2xl border border-outline-soft bg-surface-container p-6"
       >
         <div className="flex flex-col items-center text-center">
           <span className="grid h-16 w-16 place-items-center rounded-full bg-surface-container-high">

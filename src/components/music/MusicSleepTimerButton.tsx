@@ -43,7 +43,7 @@ export function MusicSleepTimerButton({ className, activeClassName, always = fal
         <AnchoredPortalMenu
           anchor={anchor}
           onClose={() => setAnchor(null)}
-          className="z-[70] w-72 rounded-xl border border-chrome-neutral-800 bg-surface-container-high p-2"
+          className="z-[70] w-72 rounded-xl border border-outline-soft bg-surface-container-high p-2"
         >
           <SleepTimerPanel tone="music" onDone={() => setAnchor(null)} />
         </AnchoredPortalMenu>

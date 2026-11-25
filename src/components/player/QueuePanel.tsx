@@ -206,8 +206,8 @@ export function QueuePanel() {
   };
 
   return (
-    <section className="flex h-full w-full flex-col overflow-hidden rounded-2xl border border-chrome-neutral-800 bg-surface-container-low text-chrome-neutral-100">
-      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-chrome-neutral-800 px-4 py-3.5">
+    <section className="flex h-full w-full flex-col overflow-hidden rounded-2xl surface-panel text-chrome-neutral-100">
+      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-outline-soft px-4 py-3.5">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <ListVideo className="h-4 w-4 shrink-0 text-chrome-neutral-400" />
@@ -250,7 +250,7 @@ export function QueuePanel() {
         </button>
       </header>
 
-      <div className="flex shrink-0 items-center gap-2 border-b border-chrome-neutral-800 px-4 py-3">
+      <div className="flex shrink-0 items-center gap-2 border-b border-outline-soft px-4 py-3">
         <button
           type="button"
           onClick={cycleRepeatMode}
@@ -300,7 +300,7 @@ export function QueuePanel() {
             onDragEnd={handleDragEnd}
           >
             <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
-              <div className="divide-y divide-chrome-neutral-800">
+              <div className="divide-y divide-outline-soft">
                 {queue.map((video, index) => (
                   <QueueRow
                     key={video.id}

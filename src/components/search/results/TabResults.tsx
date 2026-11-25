@@ -92,7 +92,7 @@ export function TabResults({ search, visible, actions, sentinelRef, layout, onPl
       {filterType === 'songs' && (
         <>
           <div role="list" className="flex flex-col gap-0.5">
-            <div aria-hidden="true" className="mb-1 flex items-center gap-4 border-b border-outline-variant px-2 pb-2 text-xs font-semibold text-chrome-neutral-500">
+            <div aria-hidden="true" className="mb-1 flex items-center gap-4 border-b border-outline-soft px-2 pb-2 text-xs font-semibold text-chrome-neutral-500">
               <span className="w-6 shrink-0 text-center">#</span>
               <span className="w-12 shrink-0" />
               <span className="flex-1">{getString('search_songs_col_title')}</span>

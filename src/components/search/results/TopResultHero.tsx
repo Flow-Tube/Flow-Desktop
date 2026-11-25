@@ -140,7 +140,7 @@ export function TopResultHero({
           open();
         }
       }}
-      className="group flex h-full cursor-pointer flex-col gap-4 rounded-2xl border border-outline-variant bg-surface-container-low p-5 outline-none transition-colors duration-200 ease-out hover:bg-surface-container focus-visible:ring-2 focus-visible:ring-primary"
+      className="group flex h-full cursor-pointer flex-col gap-4 rounded-2xl surface-panel p-5 outline-none transition-colors duration-200 ease-out hover:bg-surface-row-hover focus-visible:ring-2 focus-visible:ring-primary"
     >
       <div
         className={cx(

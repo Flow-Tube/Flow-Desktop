@@ -83,7 +83,7 @@ export function ResultsSkeleton({ filterType, layout }: { filterType: SearchCate
     default:
       return (
         <div className="flex flex-col gap-10">
-          <div className="flex items-center gap-5 rounded-2xl border border-chrome-neutral-800/50 bg-surface-container-low p-5">
+          <div className="flex items-center gap-5 rounded-2xl surface-panel p-5">
             <ShimmerBlock className="h-28 w-28 shrink-0 rounded-xl" />
             <div className="flex flex-1 flex-col gap-3">
               <ShimmerBlock className="h-6 w-1/2 rounded" />

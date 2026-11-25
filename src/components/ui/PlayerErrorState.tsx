@@ -77,7 +77,7 @@ export function PlayerErrorState({
   if (compact) {
     return (
       <div
-        className={`flex items-center gap-3 rounded-2xl border border-chrome-neutral-800 bg-surface-container-high px-4 py-3 ${className}`}
+        className={`flex items-center gap-3 rounded-2xl bg-surface-container-high px-4 py-3 ${className}`}
       >
         <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-chrome-red-900/50 bg-chrome-red-950/30 text-chrome-red-400">
           <AlertTriangle className="h-[18px] w-[18px]" />

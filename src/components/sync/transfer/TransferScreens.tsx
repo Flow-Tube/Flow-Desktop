@@ -43,7 +43,7 @@ function StatsTable({ stats }: { stats: StatInfo[] }) {
     return <p className="text-sm text-chrome-neutral-400">{getString("sync_up_to_date")}</p>;
   }
   return (
-    <div className="flex flex-col divide-y divide-chrome-neutral-800/50 overflow-hidden rounded-xl border border-chrome-neutral-800/50">
+    <div className="flex flex-col divide-y divide-outline-soft overflow-hidden rounded-xl border border-outline-soft">
       {meaningful.map((s) => (
         <div key={s.collection} className="flex items-center justify-between px-4 py-3">
           <span className="text-sm font-medium text-chrome-neutral-200">{collectionTitle(s.collection)}</span>
@@ -130,7 +130,7 @@ function ConsentScreen() {
   const manifests: ManifestInfo[] = status.manifests ?? [];
 
   return (
-    <div className="mx-auto mt-6 flex max-w-md flex-col items-center gap-6 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-8">
+    <div className="mx-auto mt-6 flex max-w-md flex-col items-center gap-6 rounded-2xl surface-panel p-8">
       <IconChip>
         <ShieldCheck className="h-5 w-5" />
       </IconChip>
@@ -149,7 +149,7 @@ function ConsentScreen() {
       {status.sas && <VerificationCode sas={status.sas} size="md" />}
 
       {isMerge && manifests.length > 0 && (
-        <div className="flex w-full flex-col divide-y divide-chrome-neutral-800/50 overflow-hidden rounded-xl border border-chrome-neutral-800/50">
+        <div className="flex w-full flex-col divide-y divide-outline-soft overflow-hidden rounded-xl border border-outline-soft">
           {manifests.map((m) => (
             <div key={m.collection} className="flex items-center justify-between px-4 py-2.5">
               <span className="text-sm text-chrome-neutral-200">{collectionTitle(m.collection)}</span>
@@ -183,7 +183,7 @@ function ConsentScreen() {
 
 function CenteredCard({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mx-auto mt-6 flex max-w-md flex-col items-center gap-5 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-8 text-center">
+    <div className="mx-auto mt-6 flex max-w-md flex-col items-center gap-5 rounded-2xl surface-panel p-8 text-center">
       {children}
     </div>
   );

@@ -20,7 +20,7 @@ export function CommunityPlaylistCard({ playlist, preview, onOpen, onPlay, onPla
   const covers = preview.map((track) => track.thumbnail).filter(Boolean).slice(0, 4);
   const byline = playlist.author?.name || playlist.songCountText;
   return (
-    <div className="flex w-72 flex-col gap-3 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-4 md:w-80">
+    <div className="flex w-72 flex-col gap-3 rounded-2xl surface-panel p-4 md:w-80">
       <button type="button" onClick={onOpen} className="group flex items-center gap-3 text-start">
         <div className="grid h-20 w-20 shrink-0 grid-cols-2 overflow-hidden rounded-xl bg-surface-container-high">
           {covers.length === 4
@@ -35,7 +35,7 @@ export function CommunityPlaylistCard({ playlist, preview, onOpen, onPlay, onPla
         </div>
       </button>
 
-      <div className="flex flex-col divide-y divide-chrome-neutral-800 border-y border-chrome-neutral-800">
+      <div className="flex flex-col divide-y divide-outline-soft border-y border-outline-soft">
         {preview.slice(0, PREVIEW_ROWS).map((track) => (
           <button
             key={track.videoId ?? track.id}

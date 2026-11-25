@@ -15,7 +15,7 @@ export function MusicGenreAffinity({ profile }: MusicGenreAffinityProps) {
   const totalWeight = segment.reduce((acc, g) => acc + g.weight, 0);
 
   return (
-    <section className="flex h-full w-full flex-col rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-6">
+    <section className="flex h-full w-full flex-col rounded-2xl surface-panel p-6">
       <div className="flex flex-col gap-1">
         <h3 className="text-lg font-semibold text-[var(--color-on-surface)]">
           {getString("music_genre_affinity")}

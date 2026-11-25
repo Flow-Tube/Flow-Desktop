@@ -15,7 +15,7 @@ export function AlertsStep() {
         </h1>
         <p className="text-lg text-chrome-neutral-400">{getString("onboarding_alerts_subtitle")}</p>
       </div>
-      <div className="flex items-center gap-4 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5">
+      <div className="flex items-center gap-4 rounded-2xl surface-panel p-5">
         <BellRing className="shrink-0 text-chrome-neutral-400" size={20} />
         <div className="min-w-0 flex-1">
           <div className="text-base font-medium text-chrome-neutral-100">{getString("onboarding_alerts_new_videos")}</div>

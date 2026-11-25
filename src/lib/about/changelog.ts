@@ -1,9 +1,6 @@
-import { parseChangelog } from "../../../scripts/changelog-format.mjs";
+import { changelogSections, compareReleases, parseChangelog, type ChangelogSection } from "../../../scripts/changelog-format.mjs";
 
-export interface ChangelogSection {
-  title: string;
-  items: string[];
-}
+export type { ChangelogSection };
 
 export interface ChangelogRelease {
   version: string;
@@ -11,33 +8,18 @@ export interface ChangelogRelease {
   sections: ChangelogSection[];
 }
 
-/** "ABOUT" describes the app rather than the release, so it stays out of the dialog. */
-const SKIPPED_SECTION = "ABOUT";
-
-const BULLET = /^[-*•]\s+/;
-
 export function releaseFromText(fileName: string, text: string): ChangelogRelease {
   const { meta, blocks } = parseChangelog(text);
-  const sections: ChangelogSection[] = [];
-  let current: ChangelogSection | null = null;
-  for (const block of blocks) {
-    if (block.kind === "heading") {
-      current = block.text === SKIPPED_SECTION ? null : { title: block.text, items: [] };
-      if (current) sections.push(current);
-    } else if (block.kind === "text" && current) {
-      current.items.push(block.text.replace(BULLET, ""));
-    }
-  }
   return {
     version: meta.VERSION ?? fileName.replace(/^.*\/v?/, "").replace(/\.txt$/, ""),
     date: meta.DATE ?? null,
-    sections: sections.filter((section) => section.items.length > 0),
+    sections: changelogSections(blocks),
   };
 }
 
 /** Newest first. Betas of one version share its numbers, so the date settles the order. */
 export function sortReleases(releases: ChangelogRelease[]): ChangelogRelease[] {
-  return [...releases].sort((a, b) => (b.date ?? "").localeCompare(a.date ?? "") || b.version.localeCompare(a.version, undefined, { numeric: true }));
+  return [...releases].sort((a, b) => compareReleases(b, a));
 }
 
 // Lazy, so the notes of every release stay out of the startup bundle.

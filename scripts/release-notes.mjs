@@ -6,19 +6,10 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { parseChangelog } from "./changelog-format.mjs";
+import { nextPreRelease, parseChangelog, sentenceCase } from "./changelog-format.mjs";
 
 export const SUPPORT_MESSAGE =
   "Enjoying Flow? Consider supporting its development on [Open Collective](https://opencollective.com/flow-tube) or [Patreon](https://patreon.com/A_EDev) to help keep the app free, open source, ad-free, and improving!";
-
-// Sentence-casing a heading would otherwise print "Macos" or "Youtube".
-const PROPER_NOUNS = { macos: "macOS", linux: "Linux", android: "Android", youtube: "YouTube" };
-
-function sentenceCase(heading) {
-  const lower = heading.toLowerCase();
-  const cased = lower.charAt(0).toUpperCase() + lower.slice(1);
-  return cased.replace(/[A-Za-z]+/g, (word) => PROPER_NOUNS[word.toLowerCase()] ?? word);
-}
 
 function renderMarkdownBlocks(blocks) {
   const out = [];
@@ -72,35 +63,19 @@ export function releaseNotes(tag, { app = false, changelogDir = "changelog" } = 
   return app ? renderAppNotes(parsed) : renderGithubNotes(parsed, tag);
 }
 
-function compareVersions(a, b) {
-  const [coreA, preA] = splitVersion(a);
-  const [coreB, preB] = splitVersion(b);
-  for (let i = 0; i < 3; i += 1) {
-    if (coreA[i] !== coreB[i]) return coreA[i] - coreB[i];
-  }
-  // A pre-release ranks below its release; beta10 ranks above beta4.
-  if (preA === preB) return 0;
-  if (!preA) return 1;
-  if (!preB) return -1;
-  return preA.localeCompare(preB, "en", { numeric: true });
-}
-
-function splitVersion(version) {
-  const [core, pre = ""] = version.replace(/^v/, "").split("+")[0].split(/-(.*)/s);
-  return [core.split(".").map(Number), pre];
-}
-
 /**
  * The changes listed so far for the next release: the lowest-versioned
  * PRE-RELEASE changelog above `currentVersion`, without its ABOUT section.
  * Returns null when there is none.
  */
 export function nextReleaseNotes(currentVersion, { app = false, changelogDir = "changelog" } = {}) {
-  const next = readdirSync(changelogDir)
+  const entries = readdirSync(changelogDir)
     .filter((name) => /^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?\.txt$/.test(name))
-    .map((name) => ({ version: name.slice(1, -4), parsed: parseChangelog(readFileSync(join(changelogDir, name), "utf8")) }))
-    .filter(({ version, parsed }) => parsed.meta.STATUS === "PRE-RELEASE" && compareVersions(version, currentVersion) > 0)
-    .sort((a, b) => compareVersions(a.version, b.version))[0];
+    .map((name) => {
+      const parsed = parseChangelog(readFileSync(join(changelogDir, name), "utf8"));
+      return { version: name.slice(1, -4), status: parsed.meta.STATUS ?? "", parsed };
+    });
+  const next = nextPreRelease(entries, currentVersion);
   if (!next) return null;
 
   const blocks = [];

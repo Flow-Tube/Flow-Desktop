@@ -27,9 +27,10 @@ export function expectedKeys(platforms) {
 /**
  * `packages`: `[{ file, manifest, version, platform, arch, bundle, url }]`.
  * `expected`: `{ [manifest]: [platform key, …] }`.
+ * `history`: the structured notes newer apps read (update-history.mjs), if any.
  * Returns `{ [manifest]: manifest }`. Every package must be signed.
  */
-export function buildManifests({ packages, signatures, notes, pubDate, expected }) {
+export function buildManifests({ packages, signatures, notes, history, pubDate, expected }) {
   const unsigned = packages.filter(({ file }) => !signatures[file]).map(({ file }) => file);
   if (unsigned.length > 0) {
     throw new Error(`unsigned updater packages: ${unsigned.join(", ")}`);
@@ -37,7 +38,7 @@ export function buildManifests({ packages, signatures, notes, pubDate, expected 
 
   const manifests = {};
   for (const { file, manifest, version, platform, arch, bundle, url } of packages) {
-    manifests[manifest] ??= { version, notes, pub_date: pubDate, platforms: {} };
+    manifests[manifest] ??= { version, notes, ...(history ? { history } : {}), pub_date: pubDate, platforms: {} };
     if (manifests[manifest].version !== version) {
       throw new Error(`${file} is ${version}, ${manifest} is ${manifests[manifest].version}`);
     }

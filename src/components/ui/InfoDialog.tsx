@@ -50,9 +50,9 @@ export function InfoDialog({ title, closeLabel, onClose, wide = false, titleAcce
         aria-modal="true"
         aria-label={title}
         onClick={(event) => event.stopPropagation()}
-        className={`flex max-h-full w-full ${wide ? "max-w-3xl" : "max-w-xl"} flex-col overflow-hidden rounded-2xl border border-chrome-neutral-800 bg-surface-container`}
+        className={`flex max-h-full w-full ${wide ? "max-w-3xl": "max-w-xl"} flex-col overflow-hidden rounded-2xl border border-outline-soft bg-surface-container`}
       >
-        <div className="flex items-center justify-between border-b border-chrome-neutral-800 px-6 py-4">
+        <div className="flex items-center justify-between border-b border-outline-soft px-6 py-4">
           <h2 className="flex items-center gap-2 text-lg font-bold tracking-tight text-chrome-neutral-100">
             {title}
             {titleAccessory}
@@ -68,7 +68,7 @@ export function InfoDialog({ title, closeLabel, onClose, wide = false, titleAcce
           </button>
         </div>
         <div className="overflow-y-auto p-6">{children}</div>
-        {footer && <div className="flex justify-end gap-2 border-t border-chrome-neutral-800 bg-surface-container-low px-6 py-3">{footer}</div>}
+        {footer && <div className="flex justify-end gap-2 border-t border-outline-soft bg-surface-container-low px-6 py-3">{footer}</div>}
       </div>
     </motion.div>,
     document.body,

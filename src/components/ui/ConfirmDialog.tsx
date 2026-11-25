@@ -74,7 +74,7 @@ export function ConfirmDialog({
         exit={{ opacity: 0, scale: 0.98, y: 6 }}
         transition={SURFACE_SPRING}
         onClick={(event) => event.stopPropagation()}
-        className="w-full max-w-md overflow-hidden rounded-2xl border border-chrome-neutral-800 bg-surface-container"
+        className="w-full max-w-md overflow-hidden rounded-2xl border border-outline-soft bg-surface-container"
       >
         <div className="flex items-start gap-4 p-6">
           <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-surface-container-high">
@@ -88,7 +88,7 @@ export function ConfirmDialog({
               {message}
             </p>
             {item && (
-              <div className="mt-4 flex items-center gap-3 rounded-xl border border-chrome-neutral-800 bg-surface-container-low p-2.5">
+              <div className="mt-4 flex items-center gap-3 rounded-xl surface-panel p-2.5">
                 {item.image && (
                   <img
                     src={item.image}
@@ -104,7 +104,7 @@ export function ConfirmDialog({
             )}
           </div>
         </div>
-        <div className="flex justify-end gap-2 border-t border-chrome-neutral-800 bg-surface-container-low px-6 py-3">
+        <div className="flex justify-end gap-2 border-t border-outline-soft bg-surface-container-low px-6 py-3">
           {/* Enter on a destructive question lands on Cancel, so a stray key press can't delete anything. */}
           <Button variant="ghost" className={FOCUS_RING} onClick={onCancel} autoFocus={destructive}>
             {cancelLabel}

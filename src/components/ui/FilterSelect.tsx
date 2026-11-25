@@ -71,7 +71,7 @@ export function FilterSelect<T extends string>({
         <AnchoredPortalMenu
           anchor={anchor}
           onClose={close}
-          className="z-[130] max-h-72 min-w-[12rem] overflow-y-auto rounded-xl border border-chrome-neutral-800 bg-surface-container-high py-1.5"
+          className="z-[130] max-h-72 min-w-[12rem] overflow-y-auto rounded-xl border border-outline-soft bg-surface-container-high py-1.5"
         >
           <div role="listbox">
             {options.map((o) => {

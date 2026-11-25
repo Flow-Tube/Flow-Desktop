@@ -40,6 +40,7 @@ import { HomeFeedButton } from "../components/home/HomeFeedButton";
 import { HomeChipRow } from "../components/home/HomeChipRow";
 import { HomeMixCard } from "../components/home/HomeMixCard";
 import { usePageRefresh } from "../lib/pageRefresh";
+import { useBackOnline } from "../lib/useBackOnline";
 
 interface HomeProps {
   onPlay: (video: VideoSummary) => void;
@@ -122,6 +123,10 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
 
   // Cards the viewer hid leave at once; the backend drops them from its next pages too.
   const visibleVideos = useMemo(() => snapshot.cards.filter((card) => !isHidden(card)), [snapshot.cards, isHidden]);
+  // Nothing on screen to keep, so a failed Home and a failed chip load again by themselves.
+  const homeFailedEmpty = homeFeedEnabled && visibleVideos.length === 0 && (failed || Boolean(snapshot.error));
+  useBackOnline(handleRefresh, !chipFeed && homeFailedEmpty && !snapshot.loading);
+  useBackOnline(reloadChip, chipFeed?.status === "failed");
   const feedIndex = useMemo(
     () => new Map(snapshot.cards.map((card, index) => [card.id, index])),
     [snapshot.cards],
@@ -232,7 +237,7 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
     body = <HomeFeedMessage title={getString("home_feed_disabled_title")} body={getString("home_feed_disabled_body")} />;
   } else if (visibleVideos.length === 0 && snapshot.loading) {
     body = <VideoGrid loading onPlay={onPlay} />;
-  } else if (visibleVideos.length === 0 && (failed || snapshot.error)) {
+  } else if (homeFailedEmpty) {
     body = (
       <HomeFeedMessage
         title={getString("home_feed_error_title")}

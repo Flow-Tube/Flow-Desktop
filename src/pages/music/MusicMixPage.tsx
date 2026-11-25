@@ -12,6 +12,7 @@ import { useAlbumLibraryStore } from '../../store/useAlbumLibraryStore';
 import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
 import { useMusicHiddenFilter } from '../../store/useMusicActionsStore';
 import { useUiStore } from '../../store/useUiStore';
+import { useBackOnline } from '../../lib/useBackOnline';
 
 export default function MusicMixPage() {
   const { id } = useParams<{ id: string }>();
@@ -20,6 +21,7 @@ export default function MusicMixPage() {
   const searchKey = search.toString();
   const routeMix = useMemo(() => mixFromRoute(new URLSearchParams(searchKey)), [searchKey]);
   const { mix, songs: allSongs, loading, error, reload } = useMusicMix(id, routeMix);
+  useBackOnline(() => void reload(), Boolean(error));
   const isHidden = useMusicHiddenFilter();
   const songs = useMemo(() => allSongs.filter((song) => !isHidden(song)), [allSongs, isHidden]);
   const playQueue = useMusicPlayerStore((store) => store.playQueue);

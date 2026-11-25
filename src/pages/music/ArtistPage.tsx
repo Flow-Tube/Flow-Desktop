@@ -25,6 +25,7 @@ import { openExternal } from '../../lib/openExternal';
 import { shuffled } from '../../lib/musicRecall';
 import { shareLink } from '../../lib/clipboard';
 import { youtubeMusicArtistUrl } from '../../lib/youtubeUrl';
+import { useBackOnline } from '../../lib/useBackOnline';
 
 const videoIdOf = (track: SongItem) => track.videoId ?? track.id;
 
@@ -242,6 +243,7 @@ export default function ArtistPage() {
   const currentTrack = useMusicPlayerStore((state) => state.currentTrack);
   const isPlaying = useMusicPlayerStore((state) => state.isPlaying);
   const { data, loading, error, reload } = useArtistPage(artistId);
+  useBackOnline(() => void reload(), Boolean(error));
   usePublishTitle(data?.header?.title);
 
   const followId = (data?.header.id || artistId || '').replace('channel:', '');

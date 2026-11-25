@@ -10,6 +10,7 @@ import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
 import { useMusicArtistHidden, useMusicHiddenFilter } from '../../store/useMusicActionsStore';
 import { episodeAsSong } from '../../lib/searchResults';
 import type { SongItem, YTItem } from '../../types/music';
+import { useBackOnline } from '../../lib/useBackOnline';
 
 export default function MusicBrowsePage() {
   const [params] = useSearchParams();
@@ -25,6 +26,7 @@ export default function MusicBrowsePage() {
     title, browseId, params: browseParams, orderBy: 0,
   } : null, [browseId, browseParams, title]);
   const { items, sections, loading, loadingMore, error, reload, loadMore, hasMore } = useMusicChipFilter(chip);
+  useBackOnline(reload, Boolean(error));
   const shown = (list: YTItem[]) => list
     .filter((item) => item.type === 'song' ? !isHidden(item)
       : item.type === 'artist' ? !isArtistHidden(item) : true);

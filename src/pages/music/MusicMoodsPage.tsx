@@ -4,10 +4,12 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { useMusicMoods } from '../../lib/useMusicMoods';
 import { musicSeeAllRoute } from '../../lib/musicRoutes';
+import { useBackOnline } from '../../lib/useBackOnline';
 
 export default function MusicMoodsPage() {
   const navigate = useNavigate();
   const { groups, loading, error, reload } = useMusicMoods();
+  useBackOnline(() => void reload(), Boolean(error));
 
   return <main className="px-6 py-8 lg:px-8">
     <h1 className="mb-6 text-3xl font-bold tracking-tight text-chrome-neutral-100">{getString('music_browse')}</h1>

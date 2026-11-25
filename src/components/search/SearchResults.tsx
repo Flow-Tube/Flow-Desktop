@@ -9,6 +9,7 @@ import { VIDEO_FILTER_CATEGORIES } from '../../lib/searchFilterState';
 import { TabResults } from './results/TabResults';
 import type { SearchLayout } from './results/VideoResults';
 import { useResultActions } from './results/useResultActions';
+import { useBackOnline } from '../../lib/useBackOnline';
 
 interface SearchResultsProps {
   search: UseCombinedSearchReturn;
@@ -50,6 +51,8 @@ export function SearchResults({ search, layout, onFiltersChange, onPlayVideo, on
     onLoadMore: search.fetchNextPage,
   });
   const hasAny = hasAnyResult(visible.results, Boolean(visible.creator));
+  // A failed first page runs the search again; a failed later page asks for that page again.
+  useBackOnline(hasAny ? search.fetchNextPage : search.refetch, Boolean(error));
 
   // Until a changed search is sent, an empty page means "not asked yet", not "nothing found".
   if ((isLoading || search.isSettling) && !hasAny) return <ResultsSkeleton filterType={filterType} layout={layout} />;

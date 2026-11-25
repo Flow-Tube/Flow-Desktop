@@ -35,6 +35,7 @@ import type {
   VideoItemSummary,
   VideoSummary,
 } from "../types/video";
+import { useBackOnline } from "../lib/useBackOnline";
 
 interface ChannelProps {
   onPlay: (video: VideoSummary) => void;
@@ -102,6 +103,7 @@ export const Channel: React.FC<ChannelProps> = ({ onPlay, onAddToQueue }) => {
   const { channelId } = useParams<{ channelId: string }>();
   const navigate = useNavigate();
   const { page, loading, failed, retry } = useChannelPage(channelId);
+  useBackOnline(retry, failed);
   const details = page?.details ?? null;
   usePublishTitle(details?.name);
 
@@ -127,6 +129,7 @@ export const Channel: React.FC<ChannelProps> = ({ onPlay, onAddToQueue }) => {
     ? { key: `q:${activeSearch}`, query: activeSearch }
     : view.request;
   const feed = useChannelFeed(channelId, request, page?.home ?? null);
+  useBackOnline(feed.retry, feed.failed);
   const isHome = !activeSearch && view.kind === "home";
   const layout = activeSearch ? "videos" : layoutForKind(view.kind);
   const watched = useChannelWatched(channelId, isHome && !!details);

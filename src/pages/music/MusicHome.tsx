@@ -34,6 +34,7 @@ import { episodeAsSong } from '../../lib/searchResults';
 import { useGridStyle } from '../../lib/useGridColumns';
 import type { AlbumItem, ArtistItem, MoodAndGenreItem, MusicHomeChip, PlaylistItem, PodcastItem, SongItem, YTItem } from '../../types/music';
 import { usePageRefresh } from '../../lib/pageRefresh';
+import { useBackOnline } from '../../lib/useBackOnline';
 
 const songsOf = (items: YTItem[]): SongItem[] =>
   items.flatMap((i) => (i.type === 'song' ? [i] : i.type === 'episode' ? [episodeAsSong(i)] : []));
@@ -59,6 +60,9 @@ export default function MusicHome() {
   const playQueue = useMusicPlayerStore((s) => s.playQueue);
   const { data, loading, error, reload, loadMore, hasMore, loadingMore, loadMoreError } = useMusicHome();
   usePageRefresh(() => void reload());
+  // Only with nothing on screen: shelves the viewer is reading never swap by themselves.
+  useBackOnline(() => void reload(), Boolean(error) && !data);
+  useBackOnline(loadMore, Boolean(loadMoreError));
   const personalization = useMusicPersonalization();
   const discoverySections = useMusicDiscoverySections();
   const [chartCountry] = usePreference(SETTINGS.TRENDING_REGION, 'US');
@@ -102,6 +106,7 @@ export default function MusicHome() {
     }
   }, [activeMood, chips]);
   const chipFilter = useMusicChipFilter(activeChip);
+  useBackOnline(chipFilter.reload, Boolean(chipFilter.error));
 
   const isFiltering = !!activeChip;
   const pageHasMore = isFiltering ? chipFilter.hasMore : hasMore;

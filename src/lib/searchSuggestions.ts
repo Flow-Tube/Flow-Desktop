@@ -30,7 +30,8 @@ export interface SuggestionColumns {
   side: SuggestionRow[];
 }
 
-const lower = (value: string) => value.trim().toLowerCase();
+// Spacing and case never make two queries different: "lofi  girl" and "Lofi girl" are one row.
+const lower = (value: string) => value.trim().toLowerCase().replace(/\s+/g, " ");
 
 /** Past searches containing `query`, those starting with it first. */
 export function matchHistory(entries: SearchHistoryEntry[], query: string, limit: number): string[] {

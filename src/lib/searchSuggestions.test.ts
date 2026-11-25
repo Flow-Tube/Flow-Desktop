@@ -63,6 +63,16 @@ describe("buildSuggestionColumns", () => {
     ]);
   });
 
+  it("treats a query with extra spaces as the same query", () => {
+    const columns = buildSuggestionColumns({
+      query: "lofi",
+      history: history("lofi  girl"),
+      suggestions: [suggestion("lofi girl"), suggestion("lofi beats")],
+      musicItems: [],
+    });
+    expect(columns.main.map((row) => row.key)).toEqual(["history:lofi  girl", "query:lofi beats"]);
+  });
+
   it("keeps openable music items once each, without hidden songs", () => {
     const columns = buildSuggestionColumns({
       query: "the weeknd",

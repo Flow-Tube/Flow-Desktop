@@ -66,6 +66,7 @@ import { SETTINGS } from "../../lib/settings/schema";
 import { useNumberPref } from "../../lib/usePreference";
 import { useAppSettingsStore } from "../../store/useAppSettingsStore";
 import { controlsShade, controlsShadeClasses } from "../../lib/player/controlsShade";
+import { watchSeekCollapse } from "../../lib/player/seekCollapse";
 
 export interface FlowPlayerControlsProps {
   title?: string;
@@ -264,10 +265,12 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
   const frameStepEnabled = useAppSettingsStore((s) => s.values[SETTINGS.FRAME_STEP_BUTTONS_ENABLED] === "true");
   const idleStripEnabled = useAppSettingsStore((s) => s.values[SETTINGS.IDLE_PROGRESS_STRIP_ENABLED] !== "false");
   const shade = controlsShadeClasses(controlsShade(useAppSettingsStore((s) => s.values[SETTINGS.PLAYER_CONTROLS_SHADE])));
+  // Everything but the seek bar fades with the controls; the bar slides into the bottom strip instead.
+  const fade = cx("transition-opacity duration-200", shouldShowControls ? "opacity-100" : "opacity-0");
+  const collapsed = idleStripEnabled && !isLive && !shouldShowControls && !isScrubbing;
   const [showRemaining, setShowRemaining] = useState(false);
   const showRemainingRef = useRef(showRemaining);
   showRemainingRef.current = showRemaining;
-  const idleStripRef = useRef<HTMLDivElement>(null);
 
   const { level: volumeLevel, maxLevel, setLevel: setVolumeLevel } = useVolumeLevel();
   const changeVolume = (value: number) => {
@@ -325,6 +328,17 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
   const [seekStep] = useNumberPref(SETTINGS.DOUBLE_TAP_SEEK_SECONDS, 10);
   const trackpadGestures = useTrackpadGesturesEnabled();
   const seekWheelRef = useWheelSeek({ enabled: trackpadGestures && !isLive, step: seekStep, duration, seekTo });
+  const setSeekTrack = React.useCallback(
+    (node: HTMLDivElement | null) => {
+      const stopWheel = seekWheelRef(node);
+      const stopCollapse = node ? watchSeekCollapse(node) : undefined;
+      return () => {
+        stopWheel?.();
+        stopCollapse?.();
+      };
+    },
+    [seekWheelRef],
+  );
   const durationTimeRef = useRef<HTMLSpanElement>(null);
   const hoverPillRef = useRef<HTMLDivElement>(null);
   const hoverTextRef = useRef<HTMLSpanElement>(null);
@@ -430,7 +444,6 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
         setStyleIfChanged(fill, "width", cssPercent(segmentFillPercent(bufferedTime, start, end)));
       }
 
-      setStyleIfChanged(idleStripRef.current, "width", pct);
       setTextIfChanged(currentTimeRef.current, elapsedOrRemaining(cur, dur, showRemainingRef.current));
       setTextIfChanged(durationTimeRef.current, formatTime(dur));
 
@@ -610,38 +623,36 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
 
   return (
     <>
-      {idleStripEnabled && !isLive && !shouldShowControls && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-[3px] bg-chrome-white/25">
-          <div ref={idleStripRef} className="h-full bg-primary" style={{ width: `${progressPct}%` }} />
-        </div>
-      )}
       <div
         className={cx(
-          "pointer-events-none absolute inset-0 z-20 flex h-full w-full flex-col justify-end pt-24 transition-opacity duration-200",
+          "pointer-events-none absolute inset-0 z-20 flex h-full w-full flex-col justify-end pt-24",
           isTheaterMode ? "px-4 pb-3 sm:px-6 sm:pb-4 lg:px-8" : "px-3 pb-3 sm:px-5 sm:pb-4",
-          shouldShowControls ? "opacity-100" : "opacity-0"
         )}
       >
         {/* The scrim only covers the band the controls sit in, and that band shrinks with the player, so a
             small player is not mostly shade (#719). Spread over the whole player it was also blended into
             every video frame, across every pixel of the picture. */}
         {shade.scrim && (
-          <div className={cx("absolute inset-x-0 bottom-0 -z-10 h-[clamp(7rem,38%,12rem)] max-h-full bg-gradient-to-t to-transparent", shade.scrim)} />
+          <div className={cx("absolute inset-x-0 bottom-0 -z-10 h-[clamp(7rem,38%,12rem)] max-h-full bg-gradient-to-t to-transparent", shade.scrim, fade)} />
         )}
         <div
           className="pointer-events-auto"
           onClick={(event) => event.stopPropagation()}
         >
           {title && (isFullscreen ? showFullscreenTitle : isPopOut) && (
-            <div dir="auto" className={cx("mb-2 hidden max-w-[70%] truncate text-sm font-bold text-chrome-white/95 sm:block", shade.title && cx("w-fit rounded-full px-3 py-1", shade.title))}>
+            <div dir="auto" className={cx("mb-2 hidden max-w-[70%] truncate text-sm font-bold text-chrome-white/95 sm:block", shade.title && cx("w-fit rounded-full px-3 py-1", shade.title), fade)}>
               {title}
             </div>
           )}
 
           <div
-            ref={seekWheelRef}
+            ref={setSeekTrack}
             data-progress-track
-            className="group/seekbar relative flex h-6 cursor-pointer items-center"
+            data-collapsed={collapsed ? "true" : undefined}
+            className={cx(
+              "seek-track-collapsible group/seekbar relative flex h-6 cursor-pointer items-center",
+              !shouldShowControls && !collapsed && "opacity-0",
+            )}
             onMouseMove={handleProgressMove}
             onMouseLeave={() => {
               seekBarActiveRef.current = isScrubbing;
@@ -655,7 +666,11 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
             onMouseUp={() => setIsScrubbing(false)}
             onClick={(event) => handlePointerSeek(event.clientX)}
           >
-            {!isLive && <HeatmapStrip markers={heatmap} duration={duration} />}
+            {!isLive && (
+              <div className={fade}>
+                <HeatmapStrip markers={heatmap} duration={duration} />
+              </div>
+            )}
 
             {/* Split Chapter Seekbar Track — the whole track springs taller on hover/scrub, mirroring the mobile seekbar. */}
             <div className="relative flex h-full w-full select-none items-center gap-[3px] pointer-events-none">
@@ -760,7 +775,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
             )}
           </div>
 
-          <div className="flex items-center justify-between gap-3">
+          <div className={cx("flex items-center justify-between gap-3", fade)}>
             <div className="flex min-w-0 items-center gap-1 sm:gap-2">
               {showNextPrevious && (
                 <button

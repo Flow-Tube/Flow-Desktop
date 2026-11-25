@@ -32,6 +32,7 @@ SEARCH
 - YouTube Music suggestions are no longer retried after a failure. A retry arrived after you had typed on, and a slow one could hold a connection for up to 30 seconds.
 - A past search now shows once in suggestions, even when it was typed with extra spaces.
 - Search suggestions now follow your content language in Settings. They were always asked for in English, while the results came back in your language.
+- The first suggestion after a pause comes faster. Clicking into an empty search box opens the connection to YouTube's suggestion server, which cut the first answer from about 365 to 157 milliseconds in a test.
 
 SUBSCRIPTIONS AND CHANNELS
 - Subscriptions opens on its first 120 videos and adds more as you scroll, instead of drawing up to 1500 cards at once. Coming back to the page returns to where you were.

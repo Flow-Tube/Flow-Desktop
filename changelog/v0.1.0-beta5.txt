@@ -66,6 +66,7 @@ PLAYER
 - The buffered part of the seek bar keeps growing while a video is paused.
 - The seek bar, the mini player bar and the music bar are redrawn only when they move by a pixel, not on every frame. On a long video that is a few times a second instead of 60 or more.
 - The mini player's bar and the seek bar's thumb are no longer animated while they are hidden.
+- When the controls hide, the seek bar slides down to the bottom edge and stretches across the whole video instead of fading out and leaving a separate plain bar. It keeps its chapter gaps and SponsorBlock marks, and slides back up when you move the pointer over the video.
 - Auto quality now stops at the size that fills the player on your screen. Fullscreen on a 4K screen still reaches 2160p, while a small player or the mini player no longer loads and decodes a picture larger than it shows. A quality you pick yourself is never limited.
 - On Linux, Auto stays on H.264 and stops at 1080p, since video there is mostly decoded on the processor. Pick a higher quality by hand to go above it.
 - Fixed Auto starting far too high after a video had played through the backup stream: its segments were timed as if they came over the network, which made the connection look hundreds of times faster than it was.
@@ -81,6 +82,7 @@ PLAYER
 - Settings > Player > Wheel over the video picks what the mouse wheel or a two-finger scroll does with the pointer on the video: scroll the page as before, change the volume, or zoom. When it zooms, Ctrl (Cmd on macOS) and the wheel change the volume instead (#700).
 - Space and Enter on a button you reached with Tab now press that button instead of pausing the video, and the arrow keys on a focused slider or seek bar no longer also seek or change the volume. A button clicked with the mouse still leaves Space to the player, and the same now holds in Shorts and the music player.
 - The buffering circle waits a fifth of a second before it shows, so a short refill after a seek or speed change no longer flashes it.
+- The backings behind the player's buttons, time and chapter pills are darker, so they stay readable over a bright video. Standard goes to 35%, Light to 45% and Off to 55%.
 
 COMMENTS
 - Oldest now starts from the oldest comment. YouTube has no oldest-first order, so Flow reads the Newest order to its end, up to about 500 comments on big videos, and turns it around. Past that it says how far it reached.

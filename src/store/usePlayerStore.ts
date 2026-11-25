@@ -720,6 +720,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   clearQueue: () => set({
     queue: [],
+    // The player's loop lasts until the player closes, as on Android.
+    repeatMode: "none",
     currentIndex: -1,
     playlistContext: null,
     isShuffle: false,

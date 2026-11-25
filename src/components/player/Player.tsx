@@ -6,6 +6,7 @@ import { PlayerErrorState } from "../ui/PlayerErrorState";
 import { CurrentVideoReminderButton } from "../watch/UpcomingReminderButton";
 import type { PlayerErrorInfo } from "../../lib/playerError";
 import { getString } from "../../lib/i18n/index";
+import { toggledLoop } from "../../lib/videoLoop";
 import { SUBTITLE_FONT_SCALES, usePlayerStore } from "../../store/usePlayerStore";
 import { useShallow } from "zustand/react/shallow";
 import { useSettingsStore, type SponsorBlockCategory } from "../../store/useSettingsStore";
@@ -470,7 +471,9 @@ export const Player: React.FC<PlayerProps> = ({
 
 
   const autoplayEnabled = useAppSettingsStore((state) => state.values[SETTINGS.AUTOPLAY_ENABLED] !== "false");
-  const videoLoopEnabled = useAppSettingsStore((state) => state.values[SETTINGS.VIDEO_LOOP_ENABLED] === "true");
+  const loopsEveryVideo = useAppSettingsStore((state) => state.values[SETTINGS.VIDEO_LOOP_ENABLED] === "true");
+  const sessionLoop = usePlayerStore((state) => state.repeatMode === "one");
+  const loopEnabled = loopsEveryVideo || sessionLoop;
   const rememberPlaybackSpeed = useAppSettingsStore((state) => state.values[SETTINGS.REMEMBER_PLAYBACK_SPEED] === "true");
   const normalizeLoudness = useAppSettingsStore((state) => state.values[SETTINGS.VIDEO_LOUDNESS_NORMALIZATION] === "true");
   // The slider keeps showing the chosen volume; only what reaches the element is scaled.
@@ -1081,9 +1084,12 @@ export const Player: React.FC<PlayerProps> = ({
     }
   }, [notePickedSpeed, rememberPlaybackSpeed, setPlaybackRate]);
 
-  const toggleLoopSetting = useCallback(() => {
-    void setSettingValue(SETTINGS.VIDEO_LOOP_ENABLED, String(!videoLoopEnabled));
-  }, [videoLoopEnabled]);
+  const toggleLoop = useCallback(() => {
+    const { repeatMode, setRepeatMode } = usePlayerStore.getState();
+    const next = toggledLoop(repeatMode, loopsEveryVideo);
+    if (next === "settings") notifyPlayer(getString("player_loop_every_video_on"));
+    else setRepeatMode(next);
+  }, [loopsEveryVideo]);
 
   useSubtitleSettingsSync();
   useSubtitleFileDrop(containerRef, currentVideoId);
@@ -1110,8 +1116,8 @@ export const Player: React.FC<PlayerProps> = ({
 
   useEffect(() => {
     const video = videoRef.current;
-    if (video) video.loop = videoLoopEnabled && !isLive;
-  }, [isLive, videoLoopEnabled]);
+    if (video) video.loop = loopEnabled && !isLive;
+  }, [isLive, loopEnabled]);
 
   useEffect(() => {
     return () => {
@@ -2477,7 +2483,7 @@ export const Player: React.FC<PlayerProps> = ({
           if (!isLive && duration > 0) seekTo(duration * action.fraction);
           break;
         case "toggle-loop":
-          toggleLoopSetting();
+          toggleLoop();
           break;
         case "next-resize": {
           const { videoFit: fit, setVideoFit } = usePlayerStore.getState();
@@ -2563,7 +2569,7 @@ export const Player: React.FC<PlayerProps> = ({
     togglePlay,
     volume,
     zoom,
-    toggleLoopSetting,
+    toggleLoop,
     title,
     toggleStats,
     setPlaybackRate,
@@ -2771,7 +2777,7 @@ export const Player: React.FC<PlayerProps> = ({
         crossOrigin="anonymous"
         src={isDashPlayback || isHlsPlayback ? undefined : src || undefined}
         poster={effectivePoster}
-        loop={videoLoopEnabled && !isLive}
+        loop={loopEnabled && !isLive}
         playsInline
         preload="auto"
         onLoadedMetadata={handleLoadedMetadata}
@@ -2818,7 +2824,7 @@ export const Player: React.FC<PlayerProps> = ({
             setPlaybackDesired(false);
             return;
           }
-          if (videoLoopEnabled && !isLive) {
+          if (loopEnabled && !isLive) {
             seekTo(0);
             setPlaybackDesired(true);
             return;
@@ -2880,9 +2886,9 @@ export const Player: React.FC<PlayerProps> = ({
         seekIntervalSeconds={seekIntervalSeconds}
         doubleClickSeek={doubleClickSeek}
         longPressPlaybackRate={longPressPlaybackRate}
-        loopEnabled={videoLoopEnabled}
+        loopEnabled={loopEnabled}
         setPlaybackRate={setPlaybackRate}
-        onToggleLoop={toggleLoopSetting}
+        onToggleLoop={toggleLoop}
         togglePlay={togglePlay}
         toggleFullscreen={toggleFullscreen}
         togglePictureInPicture={togglePictureInPicture}

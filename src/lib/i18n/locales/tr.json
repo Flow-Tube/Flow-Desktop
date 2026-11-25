@@ -2752,8 +2752,6 @@
   "settings_long_press_speed": "Uzun Basma Hızı",
   "settings_long_press_speed_desc": "Videoya basılı tuttuğundaki oynatma hızı ya da basılı tutmayı kapatmak için Kapalı",
   "settings_long_press_speed_off": "Kapalı",
-  "settings_loop_video": "Videoyu Döngüye Al",
-  "settings_loop_video_desc": "Mevcut videoyu sürekli tekrarla",
   "settings_lyrics_cache": "Şarkı sözü önbelleği",
   "settings_lyrics_cache_clear": "Şarkı sözü önbelleğini temizle",
   "settings_lyrics_cache_clear_failed": "Şarkı sözü önbelleği temizlenemedi",

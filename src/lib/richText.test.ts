@@ -87,6 +87,21 @@ describe("inserted icons and highlights", () => {
     ]);
   });
 
+  it("splits a link around an icon inserted inside it, keeping the link on both halves", () => {
+    const rich = {
+      text: "Twitch: \u00a0/ linus\u00a0",
+      spans: [{ start: 8, length: 9, target: { kind: "url" as const, url: "https://twitch.tv/linus" } }],
+      emojis: [{ start: 9, length: 0, imageUrl: "https://e/t.png", label: "" }],
+      highlights: [{ start: 8, length: 9 }],
+    };
+    expect(richSegments(rich).map((segment) => [segment.text, Boolean(segment.emoji), segment.target?.kind, segment.highlight])).toEqual([
+      ["Twitch: ", false, undefined, undefined],
+      ["\u00a0", false, "url", 0],
+      ["", true, undefined, 0],
+      ["/ linus\u00a0", false, "url", 0],
+    ]);
+  });
+
   it("slices runs with the text", () => {
     const rich = { text: "ab #tag cd", spans: [{ start: 3, length: 4, target: { kind: "hashtag" as const, tag: "#tag" } }], emojis: [] };
     expect(sliceRich(rich, 3, 10).spans).toEqual([{ start: 0, length: 4, target: { kind: "hashtag", tag: "#tag" } }]);

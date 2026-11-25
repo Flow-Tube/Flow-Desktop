@@ -15,6 +15,8 @@
   --color-surface-row-control: var(--color-surface-container-high);
   --color-surface-row-control-hover: var(--color-surface-container-highest);
   --color-outline-variant: var(--color-outline-variant-val);
+  /* Dialog, menu and toast edges and the dividers inside them: the outline taken halfway to the surface. */
+  --color-outline-soft: var(--color-outline-soft-val);
   --color-on-surface: var(--color-on-surface-val);
   --color-on-surface-variant: var(--color-on-surface-variant-val);
   --color-error: #F44336;
@@ -104,6 +106,18 @@
   --color-chrome-input-surface: #0F0F0F;
 }
 
+/*
+  Cards and panels on a page take the settings rows' fill and no border. That fill is tuned per
+  variant: the low container on dark, the high one on light and AMOLED, where the low one all but
+  vanishes against white or black. Controls inside step up as they do in a settings group, so a
+  raised chip still stands out on the panel.
+*/
+@utility surface-panel {
+  background-color: var(--color-surface-row);
+  --color-surface-container-high: var(--color-surface-row-control);
+  --color-surface-container-highest: var(--color-surface-row-control-hover);
+}
+
 @layer base {
   :root {
     --color-secondary-val: #606060;
@@ -116,6 +130,7 @@
     --color-surface-row-val: #E8E8E8;
     --color-surface-row-hover-val: #E1E1E1;
     --color-outline-variant-val: #D7D7D7;
+    --color-outline-soft-val: #E3E3E3;
     --color-on-surface-val: #111111;
     --color-on-surface-variant-val: #5F5F5F;
     --color-on-primary-val: #FFFFFF;
@@ -133,6 +148,7 @@
       --color-surface-row-val: #171717;
       --color-surface-row-hover-val: #1D1D1D;
       --color-outline-variant-val: #2A2A2A;
+      --color-outline-soft-val: #232323;
       --color-on-surface-val: #F4F4F4;
       --color-on-surface-variant-val: #B8B8B8;
       --color-on-primary-val: #FFFFFF;

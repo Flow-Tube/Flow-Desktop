@@ -86,6 +86,13 @@ describe("themes", () => {
     expect(row("amoled")["--color-surface-row-hover-val"]).toBe(theme.variants.amoled.surfaceContainerHighest);
   });
 
+  it("softens the outline halfway toward the surface for floating edges and dividers", () => {
+    const colors = BUILTIN_THEMES[0]!.variants.dark;
+    expect(themeCssVariables(colors, "dark")["--color-outline-soft-val"]).toBe(
+      `color-mix(in srgb, ${colors.outline} 55%, ${colors.surfaceContainer})`,
+    );
+  });
+
   it("scopes one variant, including the tokens Tailwind derives from -val variables", () => {
     const theme = BUILTIN_THEMES[0]!;
     const dark = scopeVariables(theme, "dark");

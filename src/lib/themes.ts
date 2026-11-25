@@ -344,6 +344,7 @@ export function themeCssVariables(colors: ThemeColors, variant: ThemeVariant): R
     "--color-surface-row-control": lowRow ? colors.surfaceContainerHigh : `color-mix(in srgb, ${colors.onSurface} 10%, ${colors.surfaceContainerHigh})`,
     "--color-surface-row-control-hover": lowRow ? colors.surfaceContainerHighest : `color-mix(in srgb, ${colors.onSurface} 16%, ${colors.surfaceContainerHigh})`,
     "--color-outline-variant-val": colors.outline,
+    "--color-outline-soft-val": `color-mix(in srgb, ${colors.outline} 55%, ${colors.surfaceContainer})`,
     "--color-on-surface-val": colors.onSurface,
     "--color-on-surface-variant-val": colors.onSurfaceVariant,
     "--color-error": colors.error,

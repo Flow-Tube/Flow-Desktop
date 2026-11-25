@@ -8,6 +8,7 @@ import {
   type Update,
 } from "../lib/api/updater";
 import type { UpdateSupport } from "../lib/updateSupport";
+import { updateNotesFor, type UpdateNotes } from "../lib/updateNotes";
 
 const UPDATER_PREFS_KEY = "updater_preferences";
 
@@ -36,7 +37,10 @@ interface UpdaterState {
   dialogOpen: boolean;
   latestVersion: string | null;
   currentVersion: string | null;
+  /** The manifest's plain notes, shown when it has no history to list from. */
   releaseNotes: string | null;
+  /** The changes since this install, from the manifest's history. */
+  notes: UpdateNotes | null;
   releaseDate: string | null;
   /** Download progress as a 0..1 fraction, or `null` when indeterminate. */
   progress: number | null;
@@ -69,6 +73,7 @@ export const useUpdaterStore = create<UpdaterState>((set, get) => ({
   latestVersion: null,
   currentVersion: null,
   releaseNotes: null,
+  notes: null,
   releaseDate: null,
   progress: null,
   errorMessage: null,
@@ -132,12 +137,14 @@ export const useUpdaterStore = create<UpdaterState>((set, get) => ({
         return "available";
       }
 
+      const notes = await updateNotesFor(update);
       set({
         phase: "available",
         dialogOpen: true,
         latestVersion: update.version,
         currentVersion: update.currentVersion,
         releaseNotes: update.body ?? null,
+        notes,
         releaseDate: update.date ?? null,
         progress: null,
         errorMessage: null,

@@ -36,6 +36,13 @@ describe("manual order", () => {
   });
 });
 
+describe("most watched", () => {
+  it("puts the channels watched most first and keeps the order of ties", () => {
+    const sorted = sortSubscriptions(channels, "watched", { watchCounts: { c: 4, a: 1 } });
+    expect(sorted.map((c) => c.id)).toEqual(["c", "a", "b"]);
+  });
+});
+
 describe("reorderedManualOrder", () => {
   it("gives every channel a place and moves only the shown ones", () => {
     // Stored order names only c; a and b were followed later and show after it.

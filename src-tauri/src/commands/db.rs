@@ -153,6 +153,16 @@ pub async fn get_watch_history_years(
         .map_err(ErrorResponse::from)
 }
 
+/// `(channel_id, videos watched)` for every channel in the watch history.
+#[tauri::command]
+pub async fn get_watched_count_by_channel(
+    pool: State<'_, SqlitePool>,
+) -> Result<Vec<(String, i64)>, ErrorResponse> {
+    watch_history::watched_count_by_channel(&pool)
+        .await
+        .map_err(ErrorResponse::from)
+}
+
 #[tauri::command]
 pub async fn delete_short_watch_records(
     app: AppHandle,

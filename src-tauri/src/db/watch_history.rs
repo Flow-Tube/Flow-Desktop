@@ -306,6 +306,18 @@ pub async fn watch_history_years(pool: &SqlitePool) -> AppResult<Vec<i64>> {
     .map_err(AppError::from)
 }
 
+/// Videos and songs watched per channel, for the Most watched subscriptions sort. The same count
+/// as Flow for Android's `watchedCountByChannel`: one row per video, local files left out.
+pub async fn watched_count_by_channel(pool: &SqlitePool) -> AppResult<Vec<(String, i64)>> {
+    sqlx::query_as::<_, (String, i64)>(
+        "SELECT channel_id, COUNT(*) FROM watch_history \
+         WHERE channel_id IS NOT NULL AND channel_id != '' GROUP BY channel_id",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(AppError::from)
+}
+
 pub async fn short_video_ids(pool: &SqlitePool) -> AppResult<Vec<String>> {
     sqlx::query_scalar("SELECT video_id FROM watch_history WHERE is_short")
         .fetch_all(pool)
@@ -530,6 +542,27 @@ mod shorts_and_years_tests {
                 ("three_percent".to_string(), 18, 600)
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn counts_watched_videos_per_channel() {
+        let pool = pool().await;
+        let row = |id: &str, channel: Option<&str>| WatchHistoryRecord {
+            channel_id: channel.map(str::to_string),
+            ..record(id, "2026-11-12T10:00:00Z", false)
+        };
+        for record in [
+            row("a1", Some("UCa")),
+            row("a2", Some("UCa")),
+            row("a1", Some("UCa")),
+            row("b1", Some("UCb")),
+            row("local", None),
+        ] {
+            upsert_watch_record(&pool, &record).await.unwrap();
+        }
+        let mut counts = watched_count_by_channel(&pool).await.unwrap();
+        counts.sort();
+        assert_eq!(counts, vec![("UCa".to_string(), 2), ("UCb".to_string(), 1)]);
     }
 
     #[tokio::test]

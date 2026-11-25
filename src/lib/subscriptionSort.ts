@@ -2,7 +2,7 @@ import type { SubscribedChannel } from "../store/useSubscriptionStore";
 import type { VideoSummary } from "../types/video";
 import { reorderSubset } from "./subscriptionPins";
 
-export type SubscriptionSortMode = "" | "name" | "recent" | "manual";
+export type SubscriptionSortMode = "" | "name" | "recent" | "watched" | "manual";
 
 /** What the sorts that don't follow the channels' own fields read. */
 export interface SubscriptionOrderSources {
@@ -10,6 +10,8 @@ export interface SubscriptionOrderSources {
   newestFirst?: string[];
   /** The order set by dragging in Manage. */
   manualOrder?: string[];
+  /** Videos watched per channel id. */
+  watchCounts?: Record<string, number>;
 }
 
 /** Channel ids by their latest upload, newest first. The feed is newest first, so a channel's first video is its latest. */
@@ -38,6 +40,10 @@ export function sortSubscriptions<T extends Pick<SubscribedChannel, "id" | "name
   if (mode === "name") return [...channels].sort((a, b) => a.name.localeCompare(b.name));
   if (mode === "recent") return byRank(channels, sources.newestFirst ?? []);
   if (mode === "manual") return byRank(channels, sources.manualOrder ?? []);
+  if (mode === "watched") {
+    const counts = sources.watchCounts ?? {};
+    return [...channels].sort((a, b) => (counts[b.id] ?? 0) - (counts[a.id] ?? 0));
+  }
   return channels;
 }
 

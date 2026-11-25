@@ -31,6 +31,7 @@ import { isVideoOfChannel } from "../lib/subscriptionFeedMerge";
 import { channelsByNewestUpload, sortSubscriptions } from "../lib/subscriptionSort";
 import { pinnedFirst } from "../lib/subscriptionPins";
 import { useSubscriptionOrder } from "../lib/useSubscriptionOrder";
+import { useChannelWatchCountsStore } from "../store/useChannelWatchCountsStore";
 import { useUnplayableVideoIds } from "../lib/useUnplayableVideoIds";
 import { useFinishedShortIds, useSubscriptionsHiddenFilter } from "../lib/useWatchedFilter";
 import { splitSubscriptionFeed } from "../lib/subscriptionFeedSplit";
@@ -234,7 +235,15 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
   const [showPosts, setShowPosts] = useState(false);
   const postsShown = showPostsChip && showPosts;
   const newestFirst = useMemo(() => channelsByNewestUpload(videos), [videos]);
-  const orderSources = useMemo(() => ({ newestFirst, manualOrder }), [newestFirst, manualOrder]);
+  const watchCounts = useChannelWatchCountsStore((state) => state.counts);
+  // Read again each time the page opens, so videos watched since count.
+  useEffect(() => {
+    if (sortMode === "watched") void useChannelWatchCountsStore.getState().load();
+  }, [sortMode]);
+  const orderSources = useMemo(
+    () => ({ newestFirst, manualOrder, watchCounts: watchCounts ?? undefined }),
+    [newestFirst, manualOrder, watchCounts],
+  );
   const sortedFeedChannels = useMemo(
     // The channel row puts pins first, as Android's Quick access does.
     () => pinnedFirst(sortSubscriptions(feedChannels, sortMode, orderSources), pins).channels,

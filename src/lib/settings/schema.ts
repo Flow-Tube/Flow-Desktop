@@ -870,7 +870,7 @@ export const SETTING_DEFINITIONS = [
   bool(SETTINGS.CATEGORIES_NAV_TAB_ENABLED, "content", true, "wired"),
   bool(SETTINGS.SUBSCRIPTION_REFRESH_ON_STARTUP, "content", false, "wired"),
   bool(SETTINGS.SUBSCRIPTION_COLLABORATIONS_ENABLED, "content", true, "wired"),
-  str(SETTINGS.SUBS_SORT_MODE, "content", "", "wired", ["", "name", "recent", "manual"]),
+  str(SETTINGS.SUBS_SORT_MODE, "content", "", "wired", ["", "name", "recent", "watched", "manual"]),
   // Channel ids, comma-separated, as Flow for Android keeps its pins.
   str(SETTINGS.SUBS_PINNED_CHANNELS, "content", "", "wired", undefined, "internal"),
   str(SETTINGS.SUBS_MANUAL_ORDER, "content", "", "wired", undefined, "internal"),

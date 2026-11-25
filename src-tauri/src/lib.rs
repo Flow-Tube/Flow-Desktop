@@ -61,8 +61,8 @@ use commands::backup::{
 use commands::db::{
     add_watch_record, add_watch_records_bulk, clear_watch_history, delete_short_watch_records,
     delete_watch_record, get_music_history, get_setting, get_watch_history,
-    get_watch_history_years, get_watch_progress, get_watch_records, reset_app_data,
-    restore_watch_record, set_setting, watch_history_settled,
+    get_watch_history_years, get_watch_progress, get_watch_records, get_watched_count_by_channel,
+    reset_app_data, restore_watch_record, set_setting, watch_history_settled,
 };
 use commands::diagnostics::{
     clear_logs, crash_report_delete, crash_report_dismiss, crash_report_read, get_graphics_mode,
@@ -760,6 +760,7 @@ pub fn run() {
             get_watch_records,
             get_watch_progress,
             get_watch_history_years,
+            get_watched_count_by_channel,
             clear_watch_history,
             reset_app_data,
             get_setting,

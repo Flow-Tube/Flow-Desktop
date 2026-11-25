@@ -23,6 +23,7 @@
   "subscriptions_sort_default": "Default",
   "subscriptions_sort_name": "Name (A–Z)",
   "subscriptions_sort_recent": "Recently updated",
+  "subscriptions_sort_most_watched": "Most watched",
   "subscriptions_sort_manual": "Your order",
   "subscriptions_manual_hint": "Drag a channel by its handle to move it, or focus the handle, press Space and use the arrow keys. The side rail follows this order.",
   "subscriptions_drag": "Move %s",

@@ -34,6 +34,7 @@ const SORT_OPTIONS: Array<{ value: SubscriptionSortMode; label: StringKey }> = [
   { value: "", label: "subscriptions_sort_default" },
   { value: "name", label: "subscriptions_sort_name" },
   { value: "recent", label: "subscriptions_sort_recent" },
+  { value: "watched", label: "subscriptions_sort_most_watched" },
   { value: "manual", label: "subscriptions_sort_manual" },
 ];
 

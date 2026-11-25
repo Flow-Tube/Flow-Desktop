@@ -56,7 +56,7 @@ export function Sidebar({ mode = 'normal' }: SidebarProps) {
   const isSubsSectionCollapsed = useUiStore((s) => s.isSubsSectionCollapsed);
   const toggleSubsSection = useUiStore((s) => s.toggleSubsSection);
   const setWatchSidebarOpen = useUiStore((s) => s.setWatchSidebarOpen);
-  const subscriptions = useOrderedSubscriptions();
+  const { channels: subscriptions, pinnedCount } = useOrderedSubscriptions();
   const location = useLocation();
   const [subsExpanded, setSubsExpanded] = useState(false);
   const shortsNavEnabled = useAppSettingsStore((state) => state.values[SETTINGS.SHORTS_NAVIGATION_ENABLED] !== 'false');
@@ -128,6 +128,7 @@ export function Sidebar({ mode = 'normal' }: SidebarProps) {
               {!isSubsSectionCollapsed && (
                 <SubscriptionsNav
                   subscriptions={subscriptions}
+                  pinnedCount={pinnedCount}
                   subsExpanded={subsExpanded}
                   onToggleExpanded={() => setSubsExpanded(!subsExpanded)}
                   closeOverlay={closeOverlay}

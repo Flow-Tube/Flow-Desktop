@@ -1,7 +1,16 @@
 import type { SubscribedChannel } from "../store/useSubscriptionStore";
 import type { VideoSummary } from "../types/video";
+import { reorderSubset } from "./subscriptionPins";
 
-export type SubscriptionSortMode = "" | "name" | "recent";
+export type SubscriptionSortMode = "" | "name" | "recent" | "manual";
+
+/** What the sorts that don't follow the channels' own fields read. */
+export interface SubscriptionOrderSources {
+  /** Channel ids by latest upload, from {@link channelsByNewestUpload}. */
+  newestFirst?: string[];
+  /** The order set by dragging in Manage. */
+  manualOrder?: string[];
+}
 
 /** Channel ids by their latest upload, newest first. The feed is newest first, so a channel's first video is its latest. */
 export function channelsByNewestUpload(feed: VideoSummary[]): string[] {
@@ -12,19 +21,33 @@ export function channelsByNewestUpload(feed: VideoSummary[]): string[] {
   return [...seen];
 }
 
-/** The channels in the viewer's chosen order. `newestFirst` comes from {@link channelsByNewestUpload}. */
+const byRank = <T extends { id: string }>(channels: T[], ids: string[]): T[] => {
+  const rank = new Map(ids.map((id, index) => [id, index]));
+  return [...channels].sort((a, b) => (rank.get(a.id) ?? Infinity) - (rank.get(b.id) ?? Infinity));
+};
+
+/**
+ * The channels in the viewer's chosen order. Channels the manual order doesn't name yet, such as
+ * ones followed since, come after it in the order they were followed.
+ */
 export function sortSubscriptions<T extends Pick<SubscribedChannel, "id" | "name">>(
   channels: T[],
   mode: SubscriptionSortMode,
-  newestFirst: string[],
+  sources: SubscriptionOrderSources = {},
 ): T[] {
   if (mode === "name") return [...channels].sort((a, b) => a.name.localeCompare(b.name));
-  if (mode === "recent") {
-    const latest = new Map(newestFirst.map((id, index) => [id, index]));
-    const rank = (channel: T) => latest.get(channel.id) ?? Infinity;
-    return [...channels].sort((a, b) => rank(a) - rank(b));
-  }
+  if (mode === "recent") return byRank(channels, sources.newestFirst ?? []);
+  if (mode === "manual") return byRank(channels, sources.manualOrder ?? []);
   return channels;
+}
+
+/**
+ * The stored manual order after a list showing `shown` (in their new order) was reordered. Every
+ * followed channel gets a place, so ones the order didn't name yet stay where they showed.
+ */
+export function reorderedManualOrder(channels: Array<{ id: string }>, stored: string[], shown: string[]): string[] {
+  const everyChannel = byRank(channels, stored).map((channel) => channel.id);
+  return reorderSubset(everyChannel, shown);
 }
 
 export type SubscriptionKind = "video" | "music";

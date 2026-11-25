@@ -1,26 +1,28 @@
 import { useEffect, useMemo } from "react";
-import { usePreference } from "./usePreference";
-import { SETTINGS } from "./settings/schema";
-import { sortSubscriptions, type SubscriptionSortMode } from "./subscriptionSort";
+import { pinnedFirst } from "./subscriptionPins";
+import { sortSubscriptions } from "./subscriptionSort";
 import { loadChannelUploadsFromCache } from "./useSubscriptionFeed";
+import { useSubscriptionOrder } from "./useSubscriptionOrder";
 import { useChannelUploadsStore } from "../store/useChannelUploadsStore";
 import { useSubscriptionStore, type SubscribedChannel } from "../store/useSubscriptionStore";
 
 const NO_UPLOADS: string[] = [];
 
 /**
- * Every followed channel in the order chosen on the Subscriptions page, for lists outside it
- * such as the side rail. "Recent" uses the last feed read; until one is, the stored order shows.
+ * Every followed channel as the side rail lists it: the pins first, then the order chosen on the
+ * Subscriptions page. "Recent" uses the last feed read; until one is, the stored order shows.
  */
-export function useOrderedSubscriptions(): SubscribedChannel[] {
+export function useOrderedSubscriptions(): { channels: SubscribedChannel[]; pinnedCount: number } {
   const subscriptions = useSubscriptionStore((state) => state.subscriptions);
-  const [sortMode] = usePreference(SETTINGS.SUBS_SORT_MODE);
-  const mode = sortMode as SubscriptionSortMode;
+  const { sortMode, pins, manualOrder } = useSubscriptionOrder();
   const newestFirst = useChannelUploadsStore((state) => state.newestFirst) ?? NO_UPLOADS;
 
   useEffect(() => {
-    if (mode === "recent") void loadChannelUploadsFromCache();
-  }, [mode]);
+    if (sortMode === "recent") void loadChannelUploadsFromCache();
+  }, [sortMode]);
 
-  return useMemo(() => sortSubscriptions(subscriptions, mode, newestFirst), [subscriptions, mode, newestFirst]);
+  return useMemo(
+    () => pinnedFirst(sortSubscriptions(subscriptions, sortMode, { newestFirst, manualOrder }), pins),
+    [subscriptions, sortMode, newestFirst, manualOrder, pins],
+  );
 }

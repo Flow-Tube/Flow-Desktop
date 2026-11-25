@@ -23,14 +23,14 @@ export interface ControlsShadeClasses {
 const CLASSES: Record<ControlsShade, ControlsShadeClasses> = {
   standard: {
     scrim: "from-chrome-black/70 via-chrome-black/25",
-    pill: "bg-chrome-black/20",
+    pill: "bg-chrome-black/35",
     bare: null,
     title: null,
     track: "bg-chrome-white/25",
   },
   light: {
     scrim: "from-chrome-black/45 via-chrome-black/15",
-    pill: "bg-chrome-black/30",
+    pill: "bg-chrome-black/45",
     bare: null,
     title: "bg-chrome-black/30",
     track: "bg-chrome-white/25",
@@ -39,9 +39,9 @@ const CLASSES: Record<ControlsShade, ControlsShadeClasses> = {
   // snow, and the track gets a dark edge that a bright frame can't wash out.
   off: {
     scrim: null,
-    pill: "bg-chrome-black/45",
-    bare: "bg-chrome-black/45",
-    title: "bg-chrome-black/45",
+    pill: "bg-chrome-black/55",
+    bare: "bg-chrome-black/55",
+    title: "bg-chrome-black/55",
     track: "bg-chrome-white/25 ring-1 ring-inset ring-chrome-black/30",
   },
 };

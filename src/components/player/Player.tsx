@@ -1090,6 +1090,10 @@ export const Player: React.FC<PlayerProps> = ({
     if (next === "settings") notifyPlayer(getString("player_loop_every_video_on"));
     else setRepeatMode(next);
   }, [loopsEveryVideo]);
+  const loopMenu = useMemo(
+    () => (isLive ? null : { on: loopEnabled, onToggle: toggleLoop }),
+    [isLive, loopEnabled, toggleLoop],
+  );
 
   useSubtitleSettingsSync();
   useSubtitleFileDrop(containerRef, currentVideoId);
@@ -3076,6 +3080,7 @@ export const Player: React.FC<PlayerProps> = ({
         speedSliderEnabled={speedSliderEnabled}
         onSelectPlaybackRate={selectPlaybackRate}
         spherical={sphericalMenu}
+        loop={loopMenu}
         settingsOpen={settingsOpen}
         setSettingsOpen={setSettingsOpen}
         isScrubbing={isScrubbing}

@@ -116,6 +116,8 @@ export interface FlowPlayerControlsProps {
   onSelectPlaybackRate?: (playbackRate: PlaybackRate) => void;
   /** The 360 view switch in the settings menu; null where it can't show. */
   spherical?: { shown: boolean; onToggle: (shown: boolean) => void } | null;
+  /** The player's session loop; null where a video can't loop (live streams). */
+  loop?: { on: boolean; onToggle: () => void } | null;
 
   settingsOpen: boolean;
   setSettingsOpen: React.Dispatch<React.SetStateAction<boolean>>;
@@ -187,6 +189,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
   speedSliderEnabled = false,
   onSelectPlaybackRate,
   spherical = null,
+  loop = null,
   settingsOpen,
   setSettingsOpen,
   isScrubbing,
@@ -1095,6 +1098,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
         playbackRate={playbackRate}
         onSelectPlaybackRate={selectPlaybackRate}
         spherical={spherical}
+        loop={loop}
       />
 
       {submitDialogOpen && currentVideo && (

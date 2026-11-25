@@ -46,7 +46,7 @@ export function BlockedContent({ brain, onUnblockTopic, onUnblockChannel }: Bloc
   }
 
   return (
-    <section className="flex h-full w-full flex-col rounded-2xl bg-[var(--color-surface-container-low)] border border-[var(--color-outline-variant)] p-6">
+    <section className="flex h-full w-full flex-col rounded-2xl surface-panel p-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div className="flex min-w-0 items-start gap-3">
           <Ban className="mt-0.5 h-5 w-5 shrink-0 text-[var(--color-on-surface-variant)]" />
@@ -85,9 +85,9 @@ export function BlockedContent({ brain, onUnblockTopic, onUnblockChannel }: Bloc
             <p className="font-mono text-xs text-[var(--color-on-surface-variant)]">{blockedTopics.length}</p>
           </div>
 
-          <div className="max-h-72 overflow-y-auto rounded-xl border border-[var(--color-outline-variant)]">
+          <div className="max-h-72 overflow-y-auto rounded-xl border border-outline-soft">
             <table className="w-full border-collapse text-sm">
-              <tbody className="divide-y divide-[var(--color-outline-variant)]">
+              <tbody className="divide-y divide-outline-soft">
                 {blockedTopics.map((topic) => (
                   <tr key={topic}>
                     <td className="w-10 px-4 py-3 text-[var(--color-on-surface-variant)]">
@@ -120,9 +120,9 @@ export function BlockedContent({ brain, onUnblockTopic, onUnblockChannel }: Bloc
             <p className="font-mono text-xs text-[var(--color-on-surface-variant)]">{blockedChannels.length}</p>
           </div>
 
-          <div className="max-h-72 overflow-y-auto rounded-xl border border-[var(--color-outline-variant)]">
+          <div className="max-h-72 overflow-y-auto rounded-xl border border-outline-soft">
             <table className="w-full border-collapse text-sm">
-              <tbody className="divide-y divide-[var(--color-outline-variant)]">
+              <tbody className="divide-y divide-outline-soft">
                 {blockedChannels.map((id) => {
                   const name = channelNames[id] || (id.startsWith("UC") ? getString("persona_channel_fallback", id.slice(0, 8)) : id);
 

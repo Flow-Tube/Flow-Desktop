@@ -102,7 +102,7 @@ export function TasteTab() {
 
   return (
     <div className="grid grid-cols-12 gap-6 pb-8">
-      <header className="col-span-12 flex flex-col gap-4 border-b border-chrome-neutral-800 pb-5 lg:flex-row lg:items-end lg:justify-between">
+      <header className="col-span-12 flex flex-col gap-4 border-b border-outline-soft pb-5 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-chrome-neutral-100">
             {getString("taste_title")}
@@ -168,7 +168,7 @@ export function TasteTab() {
 
       {view === "interests" ? (
         <>
-          <section className="col-span-12 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5 xl:col-span-5">
+          <section className="col-span-12 rounded-2xl surface-panel p-5 xl:col-span-5">
             <div className="mb-4">
               <h2 className="text-base font-medium text-chrome-neutral-200">
                 {getString("taste_add_interest")}
@@ -188,7 +188,7 @@ export function TasteTab() {
           </section>
 
           {(loading || preferredTopics.length > 0) && (
-            <section className="col-span-12 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5 xl:col-span-7">
+            <section className="col-span-12 rounded-2xl surface-panel p-5 xl:col-span-7">
               <div className="mb-4 flex items-center justify-between gap-4">
                 <div>
                   <h2 className="text-base font-medium text-chrome-neutral-200">
@@ -324,7 +324,7 @@ export function TasteTab() {
         </>
       ) : (
         <>
-          <section className="col-span-12 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5 xl:col-span-5">
+          <section className="col-span-12 rounded-2xl surface-panel p-5 xl:col-span-5">
             <div className="mb-4">
               <h2 className="text-base font-medium text-chrome-neutral-200">
                 {getString("taste_block_topic")}
@@ -344,7 +344,7 @@ export function TasteTab() {
           </section>
 
           {(loading || blockedTopics.length > 0) && (
-            <section className="col-span-12 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5 xl:col-span-7">
+            <section className="col-span-12 rounded-2xl surface-panel p-5 xl:col-span-7">
               <div className="mb-4">
                 <h2 className="text-base font-medium text-chrome-neutral-200">
                   {getString("taste_current_blocked")}
@@ -390,7 +390,7 @@ export function TasteTab() {
             </TasteSection>
           )}
 
-          <section className="col-span-12 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5">
+          <section className="col-span-12 rounded-2xl surface-panel p-5">
             <div className="mb-4">
               <h2 className="text-base font-medium text-chrome-neutral-200">
                 {getString("taste_quick_block")}

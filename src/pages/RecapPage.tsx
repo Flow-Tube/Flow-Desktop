@@ -32,7 +32,7 @@ import { useMusicEnabled } from "../lib/useMusicContent";
 
 function EmptyPanel({ title, body }: { title: string; body?: string }) {
   return (
-    <div className="col-span-12 flex flex-col items-center gap-3 rounded-3xl border border-outline-variant bg-surface-container-low px-6 py-16 text-center">
+    <div className="col-span-12 flex flex-col items-center gap-3 rounded-3xl surface-panel px-6 py-16 text-center">
       <ChartNoAxesColumn className="h-8 w-8 text-chrome-neutral-400" />
       <h2 className="text-base font-medium text-on-surface">{title}</h2>
       {body && <p className="max-w-md text-sm text-on-surface-variant">{body}</p>}
@@ -45,7 +45,7 @@ function LoadingCards() {
   return (
     <>
       {spans.map((span, index) => (
-        <div key={index} className={`${span} animate-pulse rounded-2xl border border-outline-variant bg-surface-container-low`} />
+        <div key={index} className={`${span} animate-pulse rounded-2xl surface-panel`} />
       ))}
     </>
   );
@@ -123,7 +123,7 @@ export default function RecapPage({ onPlay }: { onPlay: (video: VideoSummary) =>
       </header>
       <div className="grid grid-cols-12 gap-4">
         {recap.error ? (
-          <div className="col-span-12 flex flex-col items-center gap-3 rounded-3xl border border-outline-variant bg-surface-container-low px-6 py-16 text-center">
+          <div className="col-span-12 flex flex-col items-center gap-3 rounded-3xl surface-panel px-6 py-16 text-center">
             <h2 className="text-base font-medium text-on-surface">{getString("recap_load_failed")}</h2>
             <Button variant="secondary" size="sm" onClick={recap.retry}>{getString("retry")}</Button>
           </div>

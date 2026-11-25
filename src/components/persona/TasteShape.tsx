@@ -103,7 +103,7 @@ export function TasteShape({ brain }: TasteShapeProps) {
   }));
 
   return (
-    <section className="flex h-full w-full flex-col rounded-2xl bg-[var(--color-surface-container-low)] border border-[var(--color-outline-variant)] p-6">
+    <section className="flex h-full w-full flex-col rounded-2xl surface-panel p-6">
       <div className="flex flex-col gap-1">
         <h3 className="text-lg font-semibold text-[var(--color-on-surface)]">{getString("persona_taste_shape_title")}</h3>
         <p className="text-sm text-[var(--color-on-surface-variant)]">
@@ -171,7 +171,7 @@ export function TasteShape({ brain }: TasteShapeProps) {
         </span>
       </div>
 
-      <div className="mt-6 divide-y divide-[var(--color-outline-variant)]">
+      <div className="mt-6 divide-y divide-outline-soft">
         {metrics.map((metric) => (
           <div key={metric.key} className="grid grid-cols-[1fr_auto] gap-4 py-3">
             <div className="min-w-0">

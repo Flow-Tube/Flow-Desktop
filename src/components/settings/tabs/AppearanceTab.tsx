@@ -125,7 +125,7 @@ export function AppearanceTab() {
         </div>
       </div>
 
-      <section className="mt-8 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5">
+      <section className="mt-8 rounded-2xl surface-panel p-5">
         <div>
           <h2 className="text-base font-medium text-chrome-neutral-200">{getString("theme_variant")}</h2>
           <p className="mt-1 text-sm text-chrome-neutral-400">

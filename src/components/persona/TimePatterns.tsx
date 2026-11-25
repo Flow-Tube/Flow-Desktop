@@ -128,7 +128,7 @@ export function TimePatterns({ brain }: TimePatternsProps) {
   const currentBucket = getCurrentTimeBucket();
 
   return (
-    <section className="w-full rounded-2xl bg-[var(--color-surface-container-low)] border border-[var(--color-outline-variant)] p-6">
+    <section className="w-full rounded-2xl surface-panel p-6">
       <div className="flex flex-col gap-1">
         <h3 className="text-lg font-semibold text-[var(--color-on-surface)]">
           {getString("persona_time_title")}
@@ -138,8 +138,8 @@ export function TimePatterns({ brain }: TimePatternsProps) {
         </p>
       </div>
 
-      <div className="mt-6 overflow-hidden rounded-xl border border-[var(--color-outline-variant)]">
-        <div className="grid grid-cols-1 divide-y divide-[var(--color-outline-variant)] md:grid-cols-5 md:divide-x md:divide-y-0">
+      <div className="mt-6 overflow-hidden rounded-xl border border-outline-soft">
+        <div className="grid grid-cols-1 divide-y divide-outline-soft md:grid-cols-5 md:divide-x md:divide-y-0">
           {ARCHETYPES.map((archetype) => {
             const Icon = archetype.icon;
             const isActive = archetype.buckets.includes(currentBucket);

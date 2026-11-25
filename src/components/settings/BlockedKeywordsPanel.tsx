@@ -82,7 +82,7 @@ export function BlockedKeywordsPanel() {
         </div>
       )}
 
-      <div className="border-t border-chrome-neutral-800/50 pt-4">
+      <div className="border-t border-outline-soft pt-4">
         <div className="text-sm font-medium text-chrome-neutral-200">
           {getString("settings_blocked_pin")}
         </div>

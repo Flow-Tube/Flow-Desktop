@@ -17,7 +17,7 @@ export function MusicTopArtists({ profile }: MusicTopArtistsProps) {
   const artists = profile.topArtists;
 
   return (
-    <section className="flex h-full w-full flex-col rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-6">
+    <section className="flex h-full w-full flex-col rounded-2xl surface-panel p-6">
       <div className="flex flex-col gap-1">
         <h3 className="text-lg font-semibold text-[var(--color-on-surface)]">
           {getString("music_top_artists")}
@@ -34,10 +34,10 @@ export function MusicTopArtists({ profile }: MusicTopArtistsProps) {
           </span>
         </div>
       ) : (
-        <div className="mt-6 max-h-[480px] overflow-y-auto rounded-xl border border-[var(--color-outline-variant)]">
+        <div className="mt-6 max-h-[480px] overflow-y-auto rounded-xl border border-outline-soft">
           <table className="w-full border-collapse text-sm">
             <thead className="sticky top-0 bg-[var(--color-surface-container-high)]">
-              <tr className="border-b border-[var(--color-outline-variant)]">
+              <tr className="border-b border-outline-soft">
                 <th className="px-4 py-3 text-start text-xs font-semibold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
                   {getString("music_role_artist")}
                 </th>
@@ -49,7 +49,7 @@ export function MusicTopArtists({ profile }: MusicTopArtistsProps) {
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[var(--color-outline-variant)]">
+            <tbody className="divide-y divide-outline-soft">
               {artists.map((artist) => {
                 const clickable = artist.idKeyed;
                 return (

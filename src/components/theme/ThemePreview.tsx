@@ -38,7 +38,7 @@ export function ThemePreview({
         aria-label={`${selectLabel}: ${name}`}
         className="flex min-w-0 flex-1 cursor-pointer items-center gap-4 p-4 text-start"
       >
-        <span className="flex h-12 w-16 shrink-0 items-center justify-center gap-1 rounded-xl border border-chrome-neutral-800 bg-background">
+        <span className="flex h-12 w-16 shrink-0 items-center justify-center gap-1 rounded-xl border border-outline-soft bg-background">
           {swatches.map((color, index) => (
             <span key={index} className="h-7 w-2.5 rounded-full" style={{ backgroundColor: color }} />
           ))}

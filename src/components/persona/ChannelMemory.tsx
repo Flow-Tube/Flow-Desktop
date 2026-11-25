@@ -54,7 +54,7 @@ export function ChannelMemory({ brain, onBlockChannel }: ChannelMemoryProps) {
   }, [brain.channel_scores]);
 
   return (
-    <section className="h-full w-full rounded-2xl bg-[var(--color-surface-container-low)] border border-[var(--color-outline-variant)] p-6">
+    <section className="h-full w-full rounded-2xl surface-panel p-6">
       <div className="flex flex-col gap-1">
         <h3 className="text-lg font-semibold text-[var(--color-on-surface)]">
           {getString("persona_channels_title")}
@@ -72,7 +72,7 @@ export function ChannelMemory({ brain, onBlockChannel }: ChannelMemoryProps) {
             </span>
           </div>
         ) : (
-          <div className="divide-y divide-[var(--color-outline-variant)]">
+          <div className="divide-y divide-outline-soft">
             {sortedChannels.map(([id, score]) => {
               const name = channelNames[id] || (id.startsWith("UC") ? getString("persona_channel_fallback", id.slice(0, 8)) : id);
               const scorePct = Math.round(score * 100);

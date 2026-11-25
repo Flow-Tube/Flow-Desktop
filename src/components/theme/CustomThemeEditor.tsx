@@ -50,8 +50,8 @@ export function CustomThemeEditor({ theme, onCancel, onSave, onExport }: CustomT
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-chrome-black/70 p-6" role="dialog" aria-modal="true" aria-labelledby="custom-theme-title">
-      <div className="flex max-h-[88vh] w-full max-w-3xl flex-col rounded-2xl border border-chrome-neutral-800 bg-background">
-        <header className="flex items-center justify-between border-b border-chrome-neutral-800 px-6 py-4">
+      <div className="flex max-h-[88vh] w-full max-w-3xl flex-col rounded-2xl border border-outline-soft bg-background">
+        <header className="flex items-center justify-between border-b border-outline-soft px-6 py-4">
           <div>
             <h2 id="custom-theme-title" className="text-lg font-semibold text-chrome-neutral-100">{getString("theme_editor_title")}</h2>
             <p className="mt-1 text-sm text-chrome-neutral-400">{getString("theme_editor_description")}</p>
@@ -84,7 +84,7 @@ export function CustomThemeEditor({ theme, onCancel, onSave, onExport }: CustomT
               const value = draft.variants[variant][field.key];
               const isHex = /^#[0-9a-f]{6}$/i.test(value);
               return (
-                <label key={field.key} className="flex items-center gap-3 rounded-xl border border-chrome-neutral-800 bg-surface-container-low p-3 text-sm text-chrome-neutral-300">
+                <label key={field.key} className="flex items-center gap-3 rounded-xl surface-panel p-3 text-sm text-chrome-neutral-300">
                   <input type="color" value={isHex ? value : draft.variants[variant].surface} onChange={(event) => setColor(field.key, event.target.value)} className="h-9 w-11 cursor-pointer rounded-md border-0 bg-transparent" />
                   <span className="min-w-0 flex-1 truncate">{getString(field.labelKey)}</span>
                   <span className="font-mono text-xs text-chrome-neutral-500">{value}</span>
@@ -94,7 +94,7 @@ export function CustomThemeEditor({ theme, onCancel, onSave, onExport }: CustomT
           </div>
         </div>
 
-        <footer className="flex justify-end gap-2 border-t border-chrome-neutral-800 px-6 py-4">
+        <footer className="flex justify-end gap-2 border-t border-outline-soft px-6 py-4">
           <Button variant="secondary" className="me-auto" disabled={!draft.name.trim()} onClick={() => onExport({ ...draft, name: draft.name.trim() })}>
             <Download size={16} />
             {getString("theme_export")}

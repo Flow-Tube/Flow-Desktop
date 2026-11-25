@@ -23,7 +23,7 @@ export function PersonaOverview({ brain, persona }: PersonaOverviewProps) {
   const maturitySubtitle = persona?.description ?? getString("persona_default_subtitle");
 
   return (
-    <section className="w-full rounded-2xl bg-[var(--color-surface-container-low)] border border-[var(--color-outline-variant)] p-6">
+    <section className="w-full rounded-2xl surface-panel p-6">
       <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-widest text-[var(--color-on-surface-variant)]">

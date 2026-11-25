@@ -42,7 +42,7 @@ export function ThemeFileSection() {
   };
 
   return (
-    <section className="mt-8 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5">
+    <section className="mt-8 rounded-2xl surface-panel p-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 max-w-2xl">
           <h2 className="flex items-center gap-2 text-base font-medium text-chrome-neutral-200">

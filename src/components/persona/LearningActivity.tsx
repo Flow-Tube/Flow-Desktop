@@ -28,7 +28,7 @@ export function LearningActivity() {
   const { events, loading } = useLearningActivity(40);
 
   return (
-    <section className="rounded-2xl bg-[var(--color-surface-container-low)] border border-[var(--color-outline-variant)] p-5">
+    <section className="rounded-2xl surface-panel p-5">
       <div className="mb-4 flex items-center gap-2">
         <Activity className="h-4 w-4 text-[var(--color-primary)]" />
         <h2 className="text-sm font-semibold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
@@ -43,7 +43,7 @@ export function LearningActivity() {
           {getString("persona_activity_empty")}
         </p>
       ) : (
-        <ul className="flex max-h-80 flex-col divide-y divide-[var(--color-outline-variant)] overflow-y-auto">
+        <ul className="flex max-h-80 flex-col divide-y divide-outline-soft overflow-y-auto">
           {events.map((event, index) => {
             const known = EVENT_STYLES[event.eventType];
             const style = known

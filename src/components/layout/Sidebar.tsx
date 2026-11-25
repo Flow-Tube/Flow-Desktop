@@ -3,7 +3,7 @@ import { RefreshCw } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useUiStore } from '../../store/useUiStore';
 import { useAppSettingsStore } from '../../store/useAppSettingsStore';
-import { useSubscriptionStore } from '../../store/useSubscriptionStore';
+import { useOrderedSubscriptions } from '../../lib/useOrderedSubscriptions';
 import { useSyncActivityStore } from '../../store/useSyncActivityStore';
 import { SidebarItem } from '../ui/SidebarItem';
 import { SidebarNavIcon, type SidebarNavIconName } from '../ui/SidebarNavIcon';
@@ -56,7 +56,7 @@ export function Sidebar({ mode = 'normal' }: SidebarProps) {
   const isSubsSectionCollapsed = useUiStore((s) => s.isSubsSectionCollapsed);
   const toggleSubsSection = useUiStore((s) => s.toggleSubsSection);
   const setWatchSidebarOpen = useUiStore((s) => s.setWatchSidebarOpen);
-  const { subscriptions } = useSubscriptionStore();
+  const subscriptions = useOrderedSubscriptions();
   const location = useLocation();
   const [subsExpanded, setSubsExpanded] = useState(false);
   const shortsNavEnabled = useAppSettingsStore((state) => state.values[SETTINGS.SHORTS_NAVIGATION_ENABLED] !== 'false');

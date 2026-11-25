@@ -16,6 +16,7 @@ import { mapWithConcurrency } from './concurrency';
 import { observeChannelUploads } from './api/recommendation';
 import { mergeCollaborations, mergeScopedFeed } from './subscriptionFeedMerge';
 import { reuseById } from "./reuseItems";
+import { useChannelUploadsStore } from '../store/useChannelUploadsStore';
 
 export interface ScanProgress {
   processed: number;
@@ -87,6 +88,7 @@ const feedKey = (channelIds: string[]) => [...channelIds].sort().join('|');
 
 /** Keeps a finished scan: memory for this session, disk for the next, and the engine's reading of it. */
 function rememberFinishedFeed(key: string, feed: SubscriptionRssFeed): void {
+  useChannelUploadsStore.getState().noteFeed(feed.videos);
   feedCache.set(key, {
     videos: feed.videos,
     channels: feed.channels,
@@ -116,6 +118,15 @@ export function refreshSubscriptionsAtStartup(channelIds: string[]): Promise<voi
   return done;
 }
 
+/** Reads the saved feed for the "Recent" sort once, when no feed has been seen this session. */
+export async function loadChannelUploadsFromCache(): Promise<void> {
+  if (useChannelUploadsStore.getState().newestFirst) return;
+  const persisted = await loadPersistedFeed();
+  if (persisted && !useChannelUploadsStore.getState().newestFirst) {
+    useChannelUploadsStore.getState().noteFeed(persisted.videos);
+  }
+}
+
 export function useSubscriptionFeed(channels: SubscribedChannel[]) {
   const [videos, setVideos] = useState<VideoSummary[]>([]);
   const [rssChannels, setRssChannels] = useState<SubscriptionRssChannel[]>([]);
@@ -135,6 +146,7 @@ export function useSubscriptionFeed(channels: SubscribedChannel[]) {
   const shownCountRef = useRef(0);
   useEffect(() => {
     shownCountRef.current = videos.length;
+    useChannelUploadsStore.getState().noteFeed(videos);
   }, [videos]);
 
   useEffect(() => {

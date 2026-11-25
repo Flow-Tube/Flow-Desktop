@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { channelsOfKind, sortSubscriptions } from "./subscriptionSort";
+import { channelsByNewestUpload, channelsOfKind, sortSubscriptions } from "./subscriptionSort";
 import type { VideoSummary } from "../types/video";
 
 const channels = [
@@ -19,8 +19,13 @@ describe("sortSubscriptions", () => {
   });
 
   it("puts the channel with the latest upload first and the silent last", () => {
-    const sorted = sortSubscriptions(channels, "recent", [video("c"), video("b"), video("c")]);
-    expect(sorted.map((c) => c.id)).toEqual(["c", "b", "a"]);
+    const newestFirst = channelsByNewestUpload([video("c"), video("b"), video("c")]);
+    expect(newestFirst).toEqual(["c", "b"]);
+    expect(sortSubscriptions(channels, "recent", newestFirst).map((c) => c.id)).toEqual(["c", "b", "a"]);
+  });
+
+  it("keeps the stored order for recent when no feed has been read yet", () => {
+    expect(sortSubscriptions(channels, "recent", []).map((c) => c.id)).toEqual(["b", "a", "c"]);
   });
 });
 

@@ -28,7 +28,7 @@ import { useSubscriptionChannelDetails, useSubscriptionFeed } from "../lib/useSu
 import { useBoolPref, usePreference } from "../lib/usePreference";
 import { useShortsEnabled } from "../lib/useShortsContent";
 import { isVideoOfChannel } from "../lib/subscriptionFeedMerge";
-import { sortSubscriptions, type SubscriptionSortMode } from "../lib/subscriptionSort";
+import { channelsByNewestUpload, sortSubscriptions, type SubscriptionSortMode } from "../lib/subscriptionSort";
 import { useUnplayableVideoIds } from "../lib/useUnplayableVideoIds";
 import { useFinishedShortIds, useSubscriptionsHiddenFilter } from "../lib/useWatchedFilter";
 import { splitSubscriptionFeed } from "../lib/subscriptionFeedSplit";
@@ -231,13 +231,14 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
   const [showPostsChip] = useBoolPref(SETTINGS.SUBS_POSTS_CHIP);
   const [showPosts, setShowPosts] = useState(false);
   const postsShown = showPostsChip && showPosts;
+  const newestFirst = useMemo(() => channelsByNewestUpload(videos), [videos]);
   const sortedFeedChannels = useMemo(
-    () => sortSubscriptions(feedChannels, sortMode as SubscriptionSortMode, videos),
-    [feedChannels, sortMode, videos],
+    () => sortSubscriptions(feedChannels, sortMode as SubscriptionSortMode, newestFirst),
+    [feedChannels, sortMode, newestFirst],
   );
   const sortedManageChannels = useMemo(
-    () => sortSubscriptions(visibleChannels, sortMode as SubscriptionSortMode, videos),
-    [visibleChannels, sortMode, videos],
+    () => sortSubscriptions(visibleChannels, sortMode as SubscriptionSortMode, newestFirst),
+    [visibleChannels, sortMode, newestFirst],
   );
 
   const channelsWithNewVideos = useMemo(() => {

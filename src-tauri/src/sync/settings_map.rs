@@ -60,6 +60,11 @@ const SHARED: &[Shared] = &[
     shared("video_loop", "video_loop_enabled", Kind::Bool),
     shared("stable_volume", "stable_volume_enabled", Kind::Bool),
     shared(
+        "subscriptions_pinned_channels",
+        "subs_pinned_channels",
+        Kind::Text,
+    ),
+    shared(
         "subscriptions_show_videos",
         "subscription_show_videos",
         Kind::Bool,
@@ -164,6 +169,7 @@ const DESKTOP_ONLY: &[&str] = &[
     "subscription_refresh_on_startup",
     "subscription_collaborations_enabled",
     "subs_sort_mode",
+    "subs_manual_order",
     "notif_shorts_enabled",
     "hide_unplayable_subscriptions",
     "show_region_picker_in_explore",
@@ -370,6 +376,29 @@ fn typed(kind: Kind, stored: &str) -> Value {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn pinned_channels_cross_as_androids_comma_list() {
+        assert_eq!(
+            to_wire("subs_pinned_channels", "UCa,UCb"),
+            Some((
+                "subscriptions_pinned_channels".to_string(),
+                json!("UCa,UCb")
+            ))
+        );
+        assert_eq!(
+            from_wire("subscriptions_pinned_channels", &json!("UCb,UCa")),
+            Some(("subs_pinned_channels", "UCb,UCa".to_string()))
+        );
+    }
+
+    #[test]
+    fn the_manual_channel_order_stays_among_desktops() {
+        assert_eq!(
+            to_wire("subs_manual_order", "UCa,UCb").map(|(key, _)| key),
+            Some("desktop.subs_manual_order".to_string())
+        );
+    }
 
     #[test]
     fn queue_autoplay_uses_androids_name_both_ways() {

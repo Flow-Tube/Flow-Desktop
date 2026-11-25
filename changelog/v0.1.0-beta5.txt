@@ -48,6 +48,7 @@ SUBSCRIPTIONS AND CHANNELS
 - The channels in the side rail follow the order chosen in Subscriptions > Manage (by name or by latest upload) instead of the order you followed them in.
 - Pin channels to the top with the pin button in Subscriptions > Manage, by right clicking a channel in the side rail, or from the Subscribed menu on a channel. Pinned channels lead the side rail and the channel row on Subscriptions, always show even past the first seven, and drag into the order you want. Pins sync with Flow for Android.
 - A new Your order sort in Subscriptions > Manage lets you drag every channel into your own order, and the side rail follows it. Channels you follow later go at the end.
+- Subscriptions > Manage has a Most watched sort, as in Flow for Android: the channels you have watched the most videos from come first, in Manage and in the side rail.
 
 CARDS
 - Upload dates on cards, such as "3 days ago", now follow the app's language instead of the computer's, and "Streamed" and "Premiered" can be translated.

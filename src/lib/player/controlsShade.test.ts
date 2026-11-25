@@ -20,11 +20,16 @@ describe("controlsShadeClasses", () => {
   it("drops the band when off and gives every control a darker backing instead", () => {
     const off = controlsShadeClasses("off");
     expect(off.scrim).toBeNull();
-    expect(off.pill).toBe("bg-chrome-black/45");
-    expect(off.bare).toBe("bg-chrome-black/45");
-    expect(off.title).toBe("bg-chrome-black/45");
+    expect(off.pill).toBe("bg-chrome-black/55");
+    expect(off.bare).toBe("bg-chrome-black/55");
+    expect(off.title).toBe("bg-chrome-black/55");
     expect(off.track).toContain("ring-chrome-black/30");
     expect(controlsShadeClasses("standard").bare).toBeNull();
+  });
+
+  it("darkens the pills in step with the shade", () => {
+    expect(controlsShadeClasses("standard").pill).toBe("bg-chrome-black/35");
+    expect(controlsShadeClasses("light").pill).toBe("bg-chrome-black/45");
   });
 
   it("puts a backing behind the title only once the band no longer darkens it enough", () => {

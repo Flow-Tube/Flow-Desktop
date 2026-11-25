@@ -451,6 +451,29 @@
   }
 }
 
+/*
+  While the controls are hidden the seek bar slides into the strip along the player's bottom
+  edge, as wide as the player, keeping its chapter gaps and SponsorBlock marks. It moves by
+  transform only, so the slide lays nothing out. The variables come from watchSeekCollapse.
+*/
+.seek-track-collapsible {
+  transform-origin: center;
+  transition: transform 280ms cubic-bezier(0.05, 0.7, 0.1, 1), opacity 200ms ease-out;
+}
+
+.seek-track-collapsible[data-collapsed] {
+  transform: translate(var(--seek-collapse-x, 0px), var(--seek-collapse-y, 0px))
+    scale(var(--seek-collapse-sx, 1), var(--seek-collapse-sy, 1));
+  transition: transform 240ms cubic-bezier(0.3, 0, 0.8, 0.15), opacity 200ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .seek-track-collapsible,
+  .seek-track-collapsible[data-collapsed] {
+    transition: none;
+  }
+}
+
 .animate-seek-ripple {
   animation: seek-ripple-pulse 260ms var(--motion-ease);
 }

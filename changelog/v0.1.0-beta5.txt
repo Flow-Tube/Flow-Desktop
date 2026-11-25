@@ -22,6 +22,8 @@ LINUX
 - The video no longer goes black for a moment when you seek or change the speed (#696). Flow keeps the last picture on screen, zoomed as it was, until the new one is ready.
 - The Device rows in Settings > About, such as Graphics and Video decoders, can be selected and copied.
 - Settings > About now names the graphics path in use (GPU, GPU through shared memory, or no GPU) and why. The Linux help page explains what each one costs.
+- Settings > Appearance > Paint the page on the processor (Automatic, Processor, Graphics card) lets you choose where the page is drawn without starting Flow from a terminal, including in the Flatpak. Try Processor if pictures go black or flicker while the text stays. Automatic keeps doing it on NVIDIA driver 580 only.
+- The Graphics line in Settings > About and in bug reports says when the page is painted on the processor and names the GPUs Flow can draw with, so a hybrid laptop shows as, for example, GPU amd + nvidia.
 
 HOME AND RECOMMENDATIONS
 - Home no longer redraws every card each time the feed loads more or changes state. Loading a page sends only its new videos, where it used to resend the whole feed at least three times.

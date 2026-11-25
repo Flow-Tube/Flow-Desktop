@@ -941,6 +941,16 @@ pub async fn get_search_suggestions(
         .map_err(ErrorResponse::from)
 }
 
+/// Opens the suggest connection while the search box is empty. Never fails:
+/// a connection that doesn't open just leaves the first keystroke to open it.
+#[tauri::command]
+pub async fn warm_search_suggestions(
+    youtube_service: State<'_, YoutubeService>,
+) -> Result<(), ErrorResponse> {
+    youtube_service.warm_search_suggestions().await;
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn parse_subscription_export(
     data: String,

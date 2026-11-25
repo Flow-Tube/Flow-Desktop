@@ -184,7 +184,7 @@ use commands::youtube::{
     get_unplayable_video_ids, get_video_category, get_video_details, get_video_metadata,
     get_video_storyboard, parse_subscription_export, resolve_channel_id,
     scan_subscription_collaborations, search_videos, stream_subscription_rss_feed,
-    submit_sponsorblock_segment,
+    submit_sponsorblock_segment, warm_search_suggestions,
 };
 use services::discord_presence::DiscordPresence;
 use services::music_service::MusicService;
@@ -747,6 +747,7 @@ pub fn run() {
             get_explore_page,
             get_explore_grid,
             get_search_suggestions,
+            warm_search_suggestions,
             parse_subscription_export,
             get_watch_history,
             get_music_history,

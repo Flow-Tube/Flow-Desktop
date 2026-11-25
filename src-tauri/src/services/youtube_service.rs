@@ -217,6 +217,10 @@ impl YoutubeService {
         self.extractor.get_search_suggestions(query, region).await
     }
 
+    pub async fn warm_search_suggestions(&self) {
+        self.extractor.warm_search_suggestions().await;
+    }
+
     pub async fn get_shorts_sequence(
         &self,
         sequence_params: Option<String>,

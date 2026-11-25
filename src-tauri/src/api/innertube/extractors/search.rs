@@ -19,7 +19,7 @@ use crate::models::video::VideoSummary;
 use base64::Engine;
 use serde_json::Value;
 use std::collections::HashSet;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 fn custom_url_encode(s: &str) -> String {
     let mut encoded = String::new();
@@ -471,6 +471,7 @@ impl InnertubeClient {
         region: Option<&str>,
     ) -> AppResult<Vec<SearchSuggestion>> {
         let url = suggest_url(query, region, &content_language());
+        let started = Instant::now();
 
         let res = shared_client()
             .get(&url)
@@ -488,10 +489,36 @@ impl InnertubeClient {
             .text()
             .await
             .map_err(|e| AppError::Network(format!("suggestions body: {e}")))?;
+        tracing::debug!(
+            elapsed_ms = started.elapsed().as_millis(),
+            "suggestions answered"
+        );
 
         let val: Value = serde_json::from_str(&body)
             .map_err(|e| AppError::Extractor(format!("JSON error suggestions: {}", e)))?;
         Ok(parse_suggestions(&val))
+    }
+
+    /// Opens a connection to the suggest host before the first keystroke needs
+    /// one. Start-up never talks to that host, and a new TLS connection doubled
+    /// the first suggestion's wait (365 ms against 157 ms reused, measured
+    /// 2026-11-25). An empty query answers in 15 bytes.
+    pub async fn warm_search_suggestions(&self) {
+        let started = Instant::now();
+        let result = shared_client()
+            .get(suggest_url("", None, &content_language()))
+            .timeout(SUGGESTION_TIMEOUT)
+            .send()
+            .await;
+        let ok = match result {
+            Ok(response) => response.bytes().await.is_ok(),
+            Err(_) => false,
+        };
+        tracing::debug!(
+            elapsed_ms = started.elapsed().as_millis(),
+            ok,
+            "suggest connection warmed"
+        );
     }
 }
 

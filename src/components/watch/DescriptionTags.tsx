@@ -12,8 +12,8 @@ export function DescriptionTags({ tags, category }: { tags?: string[]; category?
   const shown = descriptionTags(tags, category);
   if (shown.length === 0) return null;
   return (
-    <div className="mt-3">
-      <p className="mb-2 text-xs font-semibold text-chrome-neutral-500">{getString("watch_tags")}</p>
+    <div className="flex flex-col gap-2">
+      <p className="text-xs font-semibold text-chrome-neutral-400">{getString("watch_tags")}</p>
       <div className="flex flex-wrap gap-1.5">
         {shown.map((tag) => (
           <button
@@ -23,7 +23,7 @@ export function DescriptionTags({ tags, category }: { tags?: string[]; category?
               event.stopPropagation();
               navigate(`/search?q=${encodeURIComponent(tag)}`);
             }}
-            className="rounded-full bg-surface-container-high px-2.5 py-1 text-xs font-medium text-chrome-neutral-300 transition-colors duration-200 ease-out hover:bg-surface-container-highest hover:text-chrome-neutral-100"
+            className="rounded-full bg-[var(--desc-raised,var(--color-surface-container-high))] px-3 py-1.5 text-xs font-medium text-chrome-neutral-300 transition-opacity duration-200 ease-out hover:opacity-80"
           >
             {tag}
           </button>

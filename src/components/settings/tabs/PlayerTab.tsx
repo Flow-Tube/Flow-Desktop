@@ -69,6 +69,7 @@ export function PlayerTab() {
   const [miniContinueWatching, setMiniContinueWatching] = useBoolPref(SETTINGS.MINI_PLAYER_CONTINUE_WATCHING_ENABLED);
   const [miniPlayerSize, setMiniPlayerSize] = usePreference(SETTINGS.MINI_PLAYER_SIZE);
   const [paidPromotion, setPaidPromotion] = useBoolPref(SETTINGS.PAID_PROMOTION_LABEL);
+  const [descriptionTint, setDescriptionTint] = useBoolPref(SETTINGS.DESCRIPTION_TINT_ENABLED);
   const [idleProgress, setIdleProgress] = useBoolPref(SETTINGS.IDLE_PROGRESS_STRIP_ENABLED);
   const [frameStep, setFrameStep] = useBoolPref(SETTINGS.FRAME_STEP_BUTTONS_ENABLED);
 
@@ -282,6 +283,9 @@ export function PlayerTab() {
         </SettingItem>
         <SettingItem title={getString('settings_paid_promotion')} description={getString('settings_paid_promotion_desc')}>
           <ToggleSwitch checked={paidPromotion} onChange={setPaidPromotion} />
+        </SettingItem>
+        <SettingItem title={getString('settings_description_tint')} description={getString('settings_description_tint_desc')}>
+          <ToggleSwitch checked={descriptionTint} onChange={setDescriptionTint} />
         </SettingItem>
         <SettingItem title={getString('settings_idle_progress')} description={getString('settings_idle_progress_desc')}>
           <ToggleSwitch checked={idleProgress} onChange={setIdleProgress} />

@@ -21,8 +21,11 @@ export function useSearchSuggestions(
   const [suggestions, setSuggestions] = useState<SearchSuggestion[]>([]);
   const [musicItems, setMusicItems] = useState<YTItem[]>([]);
 
+  // Keyed on the trimmed text: a space typed after a word asks nothing new, so the
+  // request already out for that word keeps running instead of being thrown away.
+  const q = query.trim();
+
   useEffect(() => {
-    const q = query.trim();
     if (!enabled || q.length < MIN_QUERY_LENGTH) {
       setSuggestions([]);
       setMusicItems([]);
@@ -33,31 +36,28 @@ export function useSearchSuggestions(
     // land out of order; without this guard an older keystroke's answer would win.
     let current = true;
     if (!musicEnabled) setMusicItems([]);
+    // A failed request leaves the rows on screen: they are closer to the text than an
+    // empty list, and the next keystroke asks again.
     const timer = setTimeout(() => {
       getSearchSuggestions(q, region)
         .then((results) => {
           if (current) setSuggestions(results);
         })
-        .catch((error) => {
-          console.warn("Suggestions error", error);
-          if (current) setSuggestions([]);
-        });
+        .catch((error) => console.warn("Suggestions error", error));
       if (!musicEnabled) return;
       getMusicSearchSuggestions(q)
         .then((results) => {
           if (current) setMusicItems(results.recommendedItems);
         })
-        .catch(() => {
-          // Music entities are a bonus beside the text suggestions; their absence needs no notice.
-          if (current) setMusicItems([]);
-        });
+        // Music entities are a bonus beside the text suggestions; their absence needs no notice.
+        .catch(() => undefined);
     }, DEBOUNCE_MS);
 
     return () => {
       current = false;
       clearTimeout(timer);
     };
-  }, [query, region, enabled, musicEnabled]);
+  }, [q, region, enabled, musicEnabled]);
 
   return { suggestions, musicItems };
 }

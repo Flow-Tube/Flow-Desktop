@@ -16,13 +16,13 @@ import { useSearchSuggestions } from "./useSearchSuggestions";
 let root: Root;
 let latest: ReturnType<typeof useSearchSuggestions> | null = null;
 
-function Probe({ musicEnabled }: { musicEnabled: boolean }) {
-  latest = useSearchSuggestions("linux", "US", true, musicEnabled);
+function Probe({ musicEnabled, query }: { musicEnabled: boolean; query: string }) {
+  latest = useSearchSuggestions(query, "US", true, musicEnabled);
   return null;
 }
 
-async function suggest(musicEnabled: boolean) {
-  act(() => root.render(createElement(Probe, { musicEnabled })));
+async function suggest(musicEnabled: boolean, query = "linux") {
+  act(() => root.render(createElement(Probe, { musicEnabled, query })));
   await act(async () => {
     vi.advanceTimersByTime(300);
     for (let i = 0; i < 4; i += 1) await Promise.resolve();
@@ -58,5 +58,30 @@ describe("useSearchSuggestions", () => {
     expect(api.getMusicSearchSuggestions).not.toHaveBeenCalled();
     expect(latest?.suggestions).toHaveLength(1);
     expect(latest?.musicItems).toEqual([]);
+  });
+
+  it("keeps the request for a word when only a trailing space is typed", async () => {
+    let answer: (rows: unknown[]) => void = () => undefined;
+    api.getSearchSuggestions.mockReset().mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    await suggest(false, "linux");
+    await suggest(false, "linux ");
+    await act(async () => {
+      answer([{ text: "linux mint", entity: null }]);
+      for (let i = 0; i < 4; i += 1) await Promise.resolve();
+    });
+    expect(api.getSearchSuggestions).toHaveBeenCalledTimes(1);
+    expect(latest?.suggestions).toEqual([{ text: "linux mint", entity: null }]);
+  });
+
+  it("keeps the rows on screen when a newer request fails", async () => {
+    await suggest(true, "linux");
+    api.getSearchSuggestions.mockRejectedValueOnce(new Error("offline"));
+    api.getMusicSearchSuggestions.mockRejectedValueOnce(new Error("offline"));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    await suggest(true, "linux k");
+    warn.mockRestore();
+    expect(api.getSearchSuggestions).toHaveBeenLastCalledWith("linux k", "US");
+    expect(latest?.suggestions).toEqual([{ text: "linux kernel", entity: null }]);
+    expect(latest?.musicItems).toHaveLength(1);
   });
 });

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useState, useEffect } from "react";
+import { lazy, Suspense, useCallback, useMemo, useState, useEffect } from "react";
 import { registerAutoBackup } from "./lib/api/backup";
 import { getString } from "./lib/i18n/index";
 import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
@@ -116,6 +116,8 @@ import { IS_MAIN_WINDOW } from "./lib/appWindow";
 import { SelectionMenu } from "./components/common/SelectionMenu";
 
 import { APP_TITLEBAR_HEIGHT, IS_LINUX_RUNTIME } from "./lib/platform";
+import { showsTitleBar, titleBarHeight, useWindowButtonsPlace } from "./lib/windowButtons";
+import { useMusicPlayerStore } from "./store/useMusicPlayerStore";
 import type { CSSProperties } from "react";
 import "./App.css";
 
@@ -131,10 +133,22 @@ const Diagnostics = lazy(() => import("./pages/Diagnostics"));
 const Onboarding = lazy(() => import("./pages/Onboarding"));
 const FlowNeuroPersona = lazy(() => import("./pages/FlowNeuroPersona"));
 
-const windowLayoutStyle = { "--app-titlebar-height": `${APP_TITLEBAR_HEIGHT}px` } as CSSProperties;
-
 if (typeof document !== "undefined") {
   document.documentElement.style.setProperty("--app-titlebar-height", `${APP_TITLEBAR_HEIGHT}px`);
+}
+
+/**
+ * Whether the title bar shows on this screen, with its height published where the layers that
+ * sit below it read it: the layout div and `<html>` (the music sheet reads the latter, #693).
+ */
+function useTitleBar(screenHasTopBar: boolean) {
+  const shown = showsTitleBar(useWindowButtonsPlace(), screenHasTopBar);
+  const height = titleBarHeight(shown);
+  useEffect(() => {
+    document.documentElement.style.setProperty("--app-titlebar-height", `${height}px`);
+  }, [height]);
+  const style = useMemo(() => ({ "--app-titlebar-height": `${height}px` }) as CSSProperties, [height]);
+  return { shown, style };
 }
 
 function App() {
@@ -148,6 +162,7 @@ function App() {
   const setQueue = usePlayerStore((s) => s.setQueue);
   const navigate = useNavigate();
   const location = useLocation();
+  const musicPlayerOpen = useMusicPlayerStore((s) => s.currentTrack !== null && s.viewState !== "dock");
 
   // Clear the Linux startup-crash sentinel as soon as the app mounts
   useStartupHealth();
@@ -229,11 +244,15 @@ function App() {
     addToQueue(video);
   }, [addToQueue]);
 
+  const titleBar = useTitleBar(
+    !loadingOnboarding && tabsRestored && location.pathname !== "/onboarding" && !musicPlayerOpen,
+  );
+
   if (loadingOnboarding || !tabsRestored) {
     return (
-      <div style={windowLayoutStyle} className="relative flex h-screen flex-col overflow-hidden bg-background text-chrome-zinc-100 font-sans">
+      <div style={titleBar.style} className="relative flex h-screen flex-col overflow-hidden bg-background text-chrome-zinc-100 font-sans">
         <ThemeController />
-        <TitleBar />
+        <TitleBar shown={titleBar.shown} />
         <div className="flex flex-1 items-center justify-center">
           {arrivedFrom ? (
             <ProfileSwitchPanel profile={arrivedFrom} />
@@ -246,10 +265,10 @@ function App() {
   }
 
   return (
-    <div style={windowLayoutStyle} className="relative flex h-screen flex-col overflow-hidden bg-background text-chrome-zinc-100 font-sans">
+    <div style={titleBar.style} className="relative flex h-screen flex-col overflow-hidden bg-background text-chrome-zinc-100 font-sans">
       <ThemeController />
       <SelectionMenu />
-      <TitleBar />
+      <TitleBar shown={titleBar.shown} />
       <div data-app-content className="relative min-h-0 flex-1">
       <Routes>
         <Route path="/onboarding" element={<Suspense fallback={null}><Onboarding /></Suspense>} />

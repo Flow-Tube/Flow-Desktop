@@ -124,8 +124,16 @@ files". Flow now raises its limit at start to what your system allows
 (524288 on most). On the 580 driver it also has the page painted by the
 processor, while the GPU still puts the picture together, which stopped the
 leak on a reporter's computer without making video less smooth. To turn that
-off, start Flow with `WEBKIT_SKIA_ENABLE_CPU_RENDERING=0`. A later WebKitGTK
-works around the driver bug itself.
+off, set Settings > Appearance > Paint the page on the processor to Graphics
+card, or start Flow with `WEBKIT_SKIA_ENABLE_CPU_RENDERING=0`. A later
+WebKitGTK works around the driver bug itself.
+
+If pictures go black or flicker while the text stays, or come back only under
+the pointer, set Paint the page on the processor to Processor and restart Flow.
+That takes the GPU out of painting on any driver. Settings > About shows
+"page painted on the processor" in the Graphics line when it is on, and the
+GPUs Flow can draw with, such as `GPU amd + nvidia` on a hybrid laptop. A
+variable set in your environment wins over the setting.
 
 With the Flatpak, the NVIDIA driver inside the sandbox is a separate package
 that has to match the driver on your system. After a driver update, run

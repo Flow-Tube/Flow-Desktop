@@ -12,11 +12,19 @@ const report: GraphicsReport = {
   packaging: "appimage",
   webkitgtk: "2.48.3",
   decoders: "bundled: H.264 present, VP9 present, AV1 present, OpenH264 absent, VA present, NVDEC absent",
+  processorPainting: false,
+  gpus: [],
 };
 
 describe("formatGraphics", () => {
   it("names the tier, why, the session and the build", () => {
     expect(formatGraphics(report)).toBe("Tier 0 (default), GPU, Automatic mode, x11, appimage, WebKitGTK 2.48.3");
+  });
+
+  it("names processor painting and the GPUs of a hybrid laptop", () => {
+    expect(formatGraphics({ ...report, renderPath: "shared-memory", processorPainting: true, gpus: ["amd", "nvidia"] })).toBe(
+      "Tier 0 (default), GPU through shared memory, page painted on the processor, Automatic mode, x11, appimage, WebKitGTK 2.48.3, GPU amd + nvidia",
+    );
   });
 
   it("says when a Wayland session is drawn through X11", () => {

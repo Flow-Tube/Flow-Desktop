@@ -66,10 +66,10 @@ use commands::db::{
 };
 use commands::diagnostics::{
     clear_logs, crash_report_delete, crash_report_dismiss, crash_report_read, get_graphics_mode,
-    graphics_report, graphics_trial_shown, keep_graphics_trial, linux_codec_source,
-    log_frontend_event, logs_dir_path, read_logs, reset_visitor_identity, reveal_logs_folder,
-    revert_graphics_trial, set_graphics_mode, start_graphics_trial, startup_render_ok,
-    updates_supported,
+    get_page_painting, graphics_report, graphics_trial_shown, keep_graphics_trial,
+    linux_codec_source, log_frontend_event, logs_dir_path, read_logs, reset_visitor_identity,
+    reveal_logs_folder, revert_graphics_trial, set_graphics_mode, set_page_painting,
+    start_graphics_trial, startup_render_ok, updates_supported,
 };
 use commands::discord::{clear_discord_presence, set_discord_presence};
 use commands::downloads::{
@@ -308,7 +308,9 @@ pub fn run() {
     #[cfg(target_os = "linux")]
     let open_file_limit = linux_open_files::raise();
     #[cfg(target_os = "linux")]
-    let processor_painting = linux_nvidia::apply();
+    let processor_painting = linux_nvidia::apply(linux_startup::page_painting(
+        context.config().identifier.as_str(),
+    ));
     #[cfg(target_os = "linux")]
     let boot_report = linux_startup::begin(
         context.config().identifier.as_str(),
@@ -458,6 +460,7 @@ pub fn run() {
                 open_files_before = open_file_limit.map(|limit| limit.before),
                 open_files_after = open_file_limit.map(|limit| limit.after),
                 processor_painting,
+                render_gpus = linux_system::render_gpus().join(","),
                 "linux_startup_workarounds_applied"
             );
 
@@ -907,6 +910,8 @@ pub fn run() {
             startup_render_ok,
             get_graphics_mode,
             set_graphics_mode,
+            get_page_painting,
+            set_page_painting,
             start_graphics_trial,
             graphics_trial_shown,
             keep_graphics_trial,

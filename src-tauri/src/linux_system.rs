@@ -97,6 +97,40 @@ pub struct GraphicsReport {
     pub webkitgtk: String,
     /// The startup decoder probe, until it finishes `None`.
     pub decoders: Option<String>,
+    /// The page is painted on the processor (`WEBKIT_SKIA_ENABLE_CPU_RENDERING=1`).
+    pub processor_painting: bool,
+    /// The graphics vendors that can draw, such as `["amd", "nvidia"]` on a hybrid laptop.
+    pub gpus: Vec<&'static str>,
+}
+
+/// The vendor behind a PCI vendor id as `/sys/class/drm/*/device/vendor` gives it.
+#[cfg(any(target_os = "linux", test))]
+fn gpu_vendor(id: &str) -> &'static str {
+    match id.trim().to_ascii_lowercase().as_str() {
+        "0x10de" => "nvidia",
+        "0x1002" => "amd",
+        "0x8086" => "intel",
+        _ => "other",
+    }
+}
+
+/// The vendors of this machine's render nodes, sorted, each once. Two or more means a hybrid
+/// laptop, where the GPU that draws Flow may not be the one its NVIDIA settings assume.
+#[cfg(target_os = "linux")]
+#[must_use]
+pub fn render_gpus() -> Vec<&'static str> {
+    let Ok(entries) = std::fs::read_dir("/sys/class/drm") else {
+        return Vec::new();
+    };
+    let mut vendors: Vec<&'static str> = entries
+        .flatten()
+        .filter(|entry| entry.file_name().to_string_lossy().starts_with("renderD"))
+        .filter_map(|entry| std::fs::read_to_string(entry.path().join("device/vendor")).ok())
+        .map(|id| gpu_vendor(&id))
+        .collect();
+    vendors.sort_unstable();
+    vendors.dedup();
+    vendors
 }
 
 #[cfg(target_os = "linux")]
@@ -129,12 +163,23 @@ pub fn graphics_report() -> Option<GraphicsReport> {
         packaging: packaging(),
         webkitgtk: crate::linux_startup::webkit_string(),
         decoders: crate::codec_probe::summary(),
+        processor_painting: std::env::var("WEBKIT_SKIA_ENABLE_CPU_RENDERING")
+            .is_ok_and(|value| value.trim() == "1"),
+        gpus: render_gpus(),
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn names_the_gpu_vendors() {
+        assert_eq!(gpu_vendor("0x10de\n"), "nvidia");
+        assert_eq!(gpu_vendor("0x1002"), "amd");
+        assert_eq!(gpu_vendor("0x8086"), "intel");
+        assert_eq!(gpu_vendor("0x1af4"), "other");
+    }
 
     #[test]
     fn reads_the_family_from_id_and_id_like() {

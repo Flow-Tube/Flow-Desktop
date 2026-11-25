@@ -291,6 +291,37 @@ pub fn set_graphics_mode(app: tauri::AppHandle, mode: String) -> Result<(), Erro
     Ok(())
 }
 
+/// Where the Linux web view paints the page: "automatic", "processor" or "gpu". Always
+/// "automatic" on other platforms.
+#[tauri::command]
+#[must_use]
+pub fn get_page_painting(app: tauri::AppHandle) -> &'static str {
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux_startup::page_painting(&app.config().identifier).as_str()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = app;
+        "automatic"
+    }
+}
+
+/// Stores where the Linux web view paints the page, for the next launch.
+#[tauri::command]
+pub fn set_page_painting(app: tauri::AppHandle, painting: String) -> Result<(), ErrorResponse> {
+    #[cfg(target_os = "linux")]
+    {
+        let parsed = crate::linux_nvidia::PagePainting::parse(&painting)
+            .ok_or_else(|| AppError::Validation(format!("Unknown page painting: {painting}")))?;
+        crate::linux_startup::set_page_painting(&app.config().identifier, parsed)
+            .map_err(AppError::from)?;
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = (app, painting);
+    Ok(())
+}
+
 /// Restarts Flow on a faster graphics tier that the user then keeps or lets
 /// lapse (see `linux_startup`). False when there is no faster tier to try, and
 /// always on other platforms.

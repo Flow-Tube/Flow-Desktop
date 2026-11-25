@@ -16,6 +16,9 @@ export interface GraphicsReport {
   packaging: string;
   webkitgtk: string;
   decoders: string | null;
+  processorPainting: boolean;
+  /** The graphics vendors that can draw, such as ["amd", "nvidia"] on a hybrid laptop. */
+  gpus: string[];
 }
 
 // Plain English on purpose: these lines go into bug reports as they are.
@@ -49,10 +52,12 @@ export function formatGraphics(report: GraphicsReport): string {
   return [
     `Tier ${report.tier} (${reason})`,
     RENDER_PATHS[report.renderPath] ?? report.renderPath,
+    ...(report.processorPainting ? ["page painted on the processor"] : []),
     `${MODES[report.mode] ?? report.mode} mode`,
     drawnThrough,
     report.packaging,
     `WebKitGTK ${report.webkitgtk}`,
+    ...(report.gpus.length > 0 ? [`GPU ${report.gpus.join(" + ")}`] : []),
   ].join(", ");
 }
 

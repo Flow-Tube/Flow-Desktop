@@ -10,6 +10,38 @@
 #[cfg(target_os = "linux")]
 use std::path::Path;
 
+use serde::{Deserialize, Serialize};
+
+/// Settings > Appearance > Paint the page on the processor. Read at launch, before the web view.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PagePainting {
+    /// Processor painting on the driver branch known to leak, the graphics card elsewhere.
+    #[default]
+    Automatic,
+    Processor,
+    #[serde(rename = "gpu")]
+    GraphicsCard,
+}
+
+impl PagePainting {
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Automatic => "automatic",
+            Self::Processor => "processor",
+            Self::GraphicsCard => "gpu",
+        }
+    }
+
+    #[must_use]
+    pub fn parse(value: &str) -> Option<Self> {
+        [Self::Automatic, Self::Processor, Self::GraphicsCard]
+            .into_iter()
+            .find(|choice| choice.as_str() == value)
+    }
+}
+
 #[cfg(target_os = "linux")]
 const CPU_PAINTING_VAR: &str = "WEBKIT_SKIA_ENABLE_CPU_RENDERING";
 
@@ -26,20 +58,27 @@ fn driver_branch(text: &str) -> Option<u32> {
     })
 }
 
-/// Whether Flow asks for processor painting. A value the user set, 0 or 1, is left alone.
-fn paints_on_processor(branch: Option<u32>, user_set: bool) -> bool {
-    !user_set && branch == Some(LEAKING_BRANCH)
+/// Whether Flow asks for processor painting. A value the user set in the environment, 0 or 1,
+/// is left alone, whatever Settings says.
+fn paints_on_processor(choice: PagePainting, branch: Option<u32>, user_set: bool) -> bool {
+    !user_set
+        && match choice {
+            PagePainting::Automatic => branch == Some(LEAKING_BRANCH),
+            PagePainting::Processor => true,
+            PagePainting::GraphicsCard => false,
+        }
 }
 
-/// Turns processor painting on for the leaking driver branch. Call before the web view exists,
-/// while this is the only thread. Returns whether Flow set it.
+/// Turns processor painting on when Settings asks for it, or by default on the leaking driver
+/// branch. Call before the web view exists, while this is the only thread. Returns whether Flow
+/// set it.
 #[cfg(target_os = "linux")]
-pub fn apply() -> bool {
+pub fn apply(choice: PagePainting) -> bool {
     let branch = ["/proc/driver/nvidia/version", "/sys/module/nvidia/version"]
         .iter()
         .find_map(|path| std::fs::read_to_string(Path::new(path)).ok())
         .and_then(|text| driver_branch(&text));
-    let chosen = paints_on_processor(branch, std::env::var_os(CPU_PAINTING_VAR).is_some());
+    let chosen = paints_on_processor(choice, branch, std::env::var_os(CPU_PAINTING_VAR).is_some());
     if chosen {
         // SAFETY: called at the very start of `run()`, before the Tauri builder spawns any
         // threads or initializes GTK/WebKitGTK.
@@ -80,17 +119,51 @@ mod tests {
         assert_eq!(driver_branch("x86_64. v.1"), None);
     }
 
+    const AUTO: PagePainting = PagePainting::Automatic;
+
     #[test]
-    fn paints_on_the_processor_only_on_the_leaking_branch() {
-        assert!(paints_on_processor(Some(580), false));
-        assert!(!paints_on_processor(Some(615), false));
-        assert!(!paints_on_processor(Some(620), false));
-        assert!(!paints_on_processor(Some(570), false));
-        assert!(!paints_on_processor(None, false));
+    fn automatic_paints_on_the_processor_only_on_the_leaking_branch() {
+        assert!(paints_on_processor(AUTO, Some(580), false));
+        assert!(!paints_on_processor(AUTO, Some(615), false));
+        assert!(!paints_on_processor(AUTO, Some(620), false));
+        assert!(!paints_on_processor(AUTO, Some(570), false));
+        assert!(!paints_on_processor(AUTO, None, false));
+    }
+
+    #[test]
+    fn the_settings_choice_wins_over_the_driver() {
+        assert!(paints_on_processor(PagePainting::Processor, None, false));
+        assert!(paints_on_processor(
+            PagePainting::Processor,
+            Some(620),
+            false
+        ));
+        assert!(!paints_on_processor(
+            PagePainting::GraphicsCard,
+            Some(580),
+            false
+        ));
     }
 
     #[test]
     fn leaves_a_value_the_user_set_alone() {
-        assert!(!paints_on_processor(Some(580), true));
+        assert!(!paints_on_processor(AUTO, Some(580), true));
+        assert!(!paints_on_processor(PagePainting::Processor, None, true));
+    }
+
+    #[test]
+    fn choices_round_trip_through_their_names() {
+        for choice in [
+            PagePainting::Automatic,
+            PagePainting::Processor,
+            PagePainting::GraphicsCard,
+        ] {
+            assert_eq!(PagePainting::parse(choice.as_str()), Some(choice));
+            assert_eq!(
+                serde_json::to_string(&choice).unwrap(),
+                format!("\"{}\"", choice.as_str())
+            );
+        }
+        assert_eq!(PagePainting::parse("bogus"), None);
     }
 }

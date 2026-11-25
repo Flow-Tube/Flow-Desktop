@@ -2,7 +2,8 @@ import type { ReactNode } from 'react';
 import { RotateCcw, Search as SearchIcon, ShieldAlert, X } from 'lucide-react';
 import { Button } from '../../ui/Button';
 import { Chip } from '../../ui/Chip';
-import { getString, type StringKey } from '../../../lib/i18n/index';
+import { getString } from '../../../lib/i18n/index';
+import { loadErrorCopy } from '../../../lib/loadErrorCopy';
 import { activeFilters } from '../../../lib/searchFilterOptions';
 import { DEFAULT_ADVANCED_FILTERS } from '../../../lib/searchFilterState';
 import type { AdvancedFilters } from '../../../lib/useCombinedSearch';
@@ -31,20 +32,13 @@ export function SearchEmptyState({
   );
 }
 
-// Search fails for a few reasons worth naming apart; the rest show YouTube's own message.
-const FAILURE_COPY: Record<string, [StringKey, StringKey]> = {
-  botCheckRequired: ['search_error_bot_title', 'search_error_bot_hint'],
-  rateLimited: ['player_error_rate_limited_title', 'player_error_rate_limited_hint'],
-  network: ['player_error_network_title', 'player_error_network_hint'],
-};
-
 export function SearchFailure({ kind, message, onRetry }: { kind: string | null; message: string; onRetry: () => void }) {
-  const copy = kind ? FAILURE_COPY[kind] : undefined;
+  const copy = loadErrorCopy(kind);
   return (
     <SearchEmptyState
       tone="error"
-      title={getString(copy?.[0] ?? 'search_error_title')}
-      body={copy ? getString(copy[1]) : message}
+      title={getString(copy?.title ?? 'search_error_title')}
+      body={copy ? getString(copy.hint) : message}
     >
       <Button variant="primary" size="sm" onClick={onRetry}>
         <RotateCcw className="h-4 w-4" aria-hidden="true" />

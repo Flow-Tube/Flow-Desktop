@@ -5,7 +5,7 @@ import {
   getMusicMoodGenre,
   getMusicNewReleases,
 } from './api/music';
-import { getBackendErrorMessage } from './api/errors';
+import { describeLoadError } from './loadErrorCopy';
 import { recordDiagnostic } from './diagnostics';
 import { getString } from './i18n/index';
 import type { AlbumItem, MoodGenreSection, MusicHomeChip, MusicHomePage, MusicShelf, YTItem } from '../types/music';
@@ -131,7 +131,7 @@ export function useMusicHome() {
           applyHome(home, false);
           markFirstContent('network');
         } catch (e) {
-          if (reqRef.current === req) setError(getBackendErrorMessage(e));
+          if (reqRef.current === req) setError(describeLoadError(e, 'music_error_generic'));
         }
       }
     } finally {
@@ -163,10 +163,10 @@ export function useMusicHome() {
           const home = await getMusicHomePage();
           if (reqRef.current === req) applyHome(home, false);
         } catch (refreshError) {
-          if (reqRef.current === req) setLoadMoreError(getBackendErrorMessage(refreshError));
+          if (reqRef.current === req) setLoadMoreError(describeLoadError(refreshError, 'music_error_generic'));
         }
       } else {
-        setLoadMoreError(getBackendErrorMessage(e));
+        setLoadMoreError(describeLoadError(e, 'music_error_generic'));
       }
     } finally {
       loadingMoreRef.current = false;
@@ -226,7 +226,7 @@ export function useMusicChipFilter(chip: MusicHomeChip | null) {
         contRef.current = res.continuation ?? null;
       })
       .catch((e) => {
-        if (reqRef.current === req) setError(getBackendErrorMessage(e));
+        if (reqRef.current === req) setError(describeLoadError(e, 'music_error_generic'));
       })
       .finally(() => {
         if (reqRef.current === req) setLoading(false);
@@ -244,7 +244,7 @@ export function useMusicChipFilter(chip: MusicHomeChip | null) {
       contRef.current = res.continuation ?? null;
       setItems((prev) => [...prev, ...res.items]);
     } catch (e) {
-      if (reqRef.current === req) setError(getBackendErrorMessage(e));
+      if (reqRef.current === req) setError(describeLoadError(e, 'music_error_generic'));
     } finally {
       loadingMoreRef.current = false;
       setLoadingMore(false);

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { getMusicMoodGroups } from './api/music';
-import { getBackendErrorMessage } from './api/errors';
+import { describeLoadError } from './loadErrorCopy';
 import type { MoodAndGenreGroup } from '../types/music';
 
 export function useMusicMoods() {
@@ -14,7 +14,7 @@ export function useMusicMoods() {
     try {
       setGroups(await getMusicMoodGroups());
     } catch (reason) {
-      setError(getBackendErrorMessage(reason));
+      setError(describeLoadError(reason, 'music_error_generic'));
     } finally {
       setLoading(false);
     }

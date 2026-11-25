@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { getDailyMixes } from './api/music';
-import { getBackendErrorMessage } from './api/errors';
+import { describeLoadError } from './loadErrorCopy';
 import { dailyMixId, expandDailyMix } from './musicMixes';
 import type { DailyMixSeed, SongItem } from '../types/music';
 
@@ -32,7 +32,7 @@ export function useMusicMix(id: string | undefined, routeMix: DailyMixSeed | nul
       setMix(found);
       setSongs(expanded);
     } catch (reason) {
-      if (requestRef.current === request) setError(getBackendErrorMessage(reason));
+      if (requestRef.current === request) setError(describeLoadError(reason, 'music_error_generic'));
     } finally {
       if (requestRef.current === request) setLoading(false);
     }

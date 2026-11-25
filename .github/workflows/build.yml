@@ -573,6 +573,18 @@ jobs:
           node scripts/release-notes.mjs --next "$version" > changes.md
           node scripts/release-notes.mjs --next "$version" --app > changes.txt
 
+      # The last nightly manifest holds the notes of every earlier run, so this
+      # run adds only the changes none of them listed, and an installed nightly
+      # shows just the runs since its own.
+      - name: Read the previous nightly notes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release download nightly --pattern latest.json --output previous-latest.json --clobber \
+            || echo "::notice::No previous nightly manifest; this run lists every pending change."
+
       - name: Write the updater manifests
         shell: bash
         run: |
@@ -581,7 +593,7 @@ jobs:
           if [[ -s changes.txt ]]; then
             notes+=$'\n\n'"$(cat changes.txt)"
           fi
-          NIGHTLY_NOTES="$notes" node scripts/nightly-updater-manifest.mjs write upload
+          NIGHTLY_NOTES="$notes" NIGHTLY_PREVIOUS=previous-latest.json node scripts/nightly-updater-manifest.mjs write upload
 
       - name: Check the signatures against the nightly key
         run: node scripts/verify-updater-manifests.mjs upload src-tauri/updater-nightly.pub

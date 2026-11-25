@@ -508,11 +508,14 @@ jobs:
               || { echo "missing Flow_${VERSION}_darwin_${arch}.dmg" >&2; exit 1; }
           done
 
+      # `history` lists this release and the ones before it, so an install that
+      # skipped one shows every change since its own version.
       - name: Write latest.json
         env:
           RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
           RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
           RELEASE_APP_NOTES: ${{ needs.prepare.outputs.app_notes }}
+          RELEASE_CHANGELOG_DIR: changelog
         run: node scripts/release-updater-manifest.mjs write upload
 
       - name: Check the signatures against the app's public key

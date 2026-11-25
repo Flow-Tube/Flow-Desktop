@@ -5,7 +5,8 @@
 //          prints "<version>\t<file>" for each package to sign
 //        node scripts/release-updater-manifest.mjs write <folder>
 // Env: RELEASE_VERSION, RELEASE_TAG, GITHUB_REPOSITORY (write),
-//      RELEASE_APP_NOTES (plain text, write).
+//      RELEASE_APP_NOTES (plain text, write), RELEASE_CHANGELOG_DIR (write,
+//      adds the release history newer apps list their notes from).
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -39,17 +40,26 @@ export function releasePackages({ files, version, tag, repository }) {
     });
 }
 
-export function buildReleaseManifest({ files, signatures, version, tag, repository, notes, pubDate }) {
+export function buildReleaseManifest({ files, signatures, version, tag, repository, notes, history, pubDate }) {
   return buildManifests({
     packages: releasePackages({ files, version, tag, repository }),
     signatures,
     notes,
+    history,
     pubDate,
     expected: EXPECTED,
   })["latest.json"];
 }
 
-function main(mode, folder) {
+/** Only the publish job carries history; the signing job checks out no changelog. */
+async function publishedHistory(version) {
+  const dir = process.env.RELEASE_CHANGELOG_DIR;
+  if (!dir) return undefined;
+  const { readChangelogs, releaseHistory } = await import("./update-history.mjs");
+  return releaseHistory(readChangelogs(dir), version);
+}
+
+async function main(mode, folder) {
   const { RELEASE_VERSION: version, RELEASE_TAG: tag, GITHUB_REPOSITORY: repository } = process.env;
   if (!["plan", "write"].includes(mode) || !folder || !version || !tag || (mode === "write" && !repository)) {
     throw new Error("usage: RELEASE_VERSION=… RELEASE_TAG=… GITHUB_REPOSITORY=… release-updater-manifest.mjs plan|write <folder>");
@@ -70,6 +80,7 @@ function main(mode, folder) {
     tag,
     repository,
     notes: process.env.RELEASE_APP_NOTES ?? "",
+    history: await publishedHistory(version),
     pubDate: new Date().toISOString(),
   });
   writeFileSync(join(folder, "latest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
@@ -77,5 +88,5 @@ function main(mode, folder) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main(process.argv[2], process.argv[3]);
+  await main(process.argv[2], process.argv[3]);
 }

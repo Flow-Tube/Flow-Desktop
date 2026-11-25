@@ -134,6 +134,8 @@ SYNC
 - A device removed on the local network now finds out straight away when it is reachable, instead of staying Linked until it next reaches a member. The devices left in the group get the removal at once too.
 
 DESKTOP
+- The update dialog lists only what changed since the version you have. Skipped a release? You see each one since yours, newest first. A nightly shows just the runs after the one you have, merged into one list, instead of everything since the last release.
+- The update dialog is redesigned like Flow for Android's update page: the new version and what it replaces, the release date, the notes in sections, and the download running inside the main button. Skip this version and View on GitHub sit in its menu.
 - Flow starts with a smaller first script: Settings, Sync, Recap, your Persona, Extensions, Diagnostics, Import, Support and the welcome screens now load when they are first opened.
 - Cards and panels across the app no longer have an outline. They sit on the same fill as the settings rows, so pages like Your taste, Taste and Appearance look lighter. Dialogs, menus and dividers keep a softer line, and chips, fields and outlined buttons keep theirs.
 

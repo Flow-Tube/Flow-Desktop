@@ -61,6 +61,9 @@ CARDS
 - See all, Show all and View all on every shelf are now a rounded button, as on the Library page. More like this in a card's menu has a thumbs up icon instead of sparkles.
 
 PLAYER
+- The description is laid out like Flow for Android's: the likes, views and date as three tiles, the text with YouTube's own formatting, links to other videos as cards, then hashtags, credited songs, how the video was made, Chapters and Transcript rows that open their panel, the channel with its links, and the tags.
+- Links in descriptions and comments look like Android's: channel and site links sit on rounded chips with the site's icon, moments and hashtags are bold, and web links are underlined.
+- Settings > Player > Tint the description colors the description's cards and links from the video's thumbnail. It is off by default.
 - The player, its controls and its menus no longer redraw several times a second while a video plays. Only the parts that show the time follow it.
 - The transcript panel redraws when the spoken line changes instead of on every tick, and a Short no longer redraws its whole surface as it plays.
 - The buffered part of the seek bar keeps growing while a video is paused.

@@ -1,4 +1,5 @@
 import { readFileSync, writeFileSync } from "node:fs";
+import { NIGHTLY_ICONS } from "./nightly-icons.mjs";
 import {
   nightlyDownloadUrl,
   nightlyManifestName,
@@ -40,6 +41,8 @@ const nightlyConfig = {
     // A later job signs the packages, so the signing key never reaches the
     // build or its dependencies.
     createUpdaterArtifacts: false,
+    // Tauri's config merge replaces arrays, so none of the stable icons stay in the list.
+    icon: NIGHTLY_ICONS,
     // The firewall profiles belong to the stable package: two channels shipping the same files
     // can't be installed side by side. `null` removes them in Tauri's config merge.
     linux: { deb: { files: null }, rpm: { files: null } },

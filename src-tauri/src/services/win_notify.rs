@@ -24,7 +24,17 @@ const AUMID: &str = "io.github.aedev.flow.desktop";
 const DISPLAY_NAME: &str = "Flow";
 /// Embedded so it is always available regardless of how the app was launched.
 const LOGO_BYTES: &[u8] = include_bytes!("../../icons/icon.png");
+const NIGHTLY_LOGO_BYTES: &[u8] = include_bytes!("../../icons/nightly/icon.png");
 const LOGO_FILE: &str = "flow-notify-logo.png";
+
+/// The logo of the channel that is running, told apart by its bundle identifier.
+fn logo_bytes(app: &AppHandle) -> &'static [u8] {
+    if app.config().identifier.ends_with(".nightly") {
+        NIGHTLY_LOGO_BYTES
+    } else {
+        LOGO_BYTES
+    }
+}
 
 /// Absolute path to the on-disk logo used for the toast icon and registry `IconUri`.
 fn logo_path(app: &AppHandle) -> Option<PathBuf> {
@@ -50,11 +60,13 @@ pub fn ensure_setup(app: &AppHandle) {
     let Some(logo) = logo_path(app) else {
         return;
     };
-    if !logo.exists() {
+    // Rewritten when it differs, so a logo an older build wrote is replaced.
+    let bytes = logo_bytes(app);
+    if std::fs::read(&logo).ok().as_deref() != Some(bytes) {
         if let Some(parent) = logo.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
-        if let Err(error) = std::fs::write(&logo, LOGO_BYTES) {
+        if let Err(error) = std::fs::write(&logo, bytes) {
             tracing::warn!(%error, "Failed to write notification logo");
         }
     }

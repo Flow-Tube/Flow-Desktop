@@ -116,6 +116,8 @@ export interface ChipFeed {
   cards: HomeCard[];
   mixes: HomeMix[];
   failed: boolean;
+  /** The error kind when it failed. */
+  error?: string | null;
 }
 
 /** The chips to offer: the viewer's interests, and which fixed ones have something to show. */

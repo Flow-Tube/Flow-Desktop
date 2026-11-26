@@ -42,6 +42,7 @@ import { HomeMixCard } from "../components/home/HomeMixCard";
 import { usePageRefresh } from "../lib/pageRefresh";
 import { useBackOnline } from "../lib/useBackOnline";
 import { HomeOfflineDownloads } from "../components/home/HomeOfflineDownloads";
+import { screenErrorCopy, type LoadErrorCopy } from "../lib/loadErrorCopy";
 
 interface HomeProps {
   onPlay: (video: VideoSummary) => void;
@@ -51,6 +52,9 @@ interface HomeProps {
 // A card keeps its place in the tree when one before it is hidden, instead of every card after
 // it being mounted again.
 const videoIdKey = (video: VideoSummary) => video.id;
+
+const FEED_ERROR_COPY: LoadErrorCopy = { title: "home_feed_error_title", hint: "home_feed_error_body" };
+const CHIP_ERROR_COPY: LoadErrorCopy = { title: "home_chip_error_title", hint: "home_chip_error_body" };
 
 /** Home: the backend builds the feed (services/home_feed); this page lays it out. */
 export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
@@ -210,13 +214,8 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
     if (chips.feed.status === "loading") {
       body = <VideoGrid loading onPlay={onPlay} />;
     } else if (chips.feed.status === "failed") {
-      body = (
-        <HomeFeedMessage
-          title={getString("home_chip_error_title")}
-          body={getString("home_chip_error_body")}
-          action={retryButton}
-        />
-      );
+      const copy = screenErrorCopy(chips.feed.error, CHIP_ERROR_COPY);
+      body = <HomeFeedMessage title={getString(copy.title)} body={getString(copy.hint)} action={retryButton} />;
     } else if (chipMixes.length > 0) {
       body = (
         <div className="flow-grid gap-y-8 pb-8" style={gridStyle}>
@@ -248,13 +247,10 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
   } else if (visibleVideos.length === 0 && snapshot.loading) {
     body = <VideoGrid loading onPlay={onPlay} />;
   } else if (homeFailedEmpty) {
+    const copy = screenErrorCopy(snapshot.error, FEED_ERROR_COPY);
     body = (
       <div className="flex flex-col gap-8">
-        <HomeFeedMessage
-          title={getString("home_feed_error_title")}
-          body={getString("home_feed_error_body")}
-          action={refreshButton}
-        />
+        <HomeFeedMessage title={getString(copy.title)} body={getString(copy.hint)} action={refreshButton} />
         <HomeOfflineDownloads onPlay={onPlay} />
       </div>
     );

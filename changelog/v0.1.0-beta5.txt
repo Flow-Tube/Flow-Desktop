@@ -171,3 +171,4 @@ FIXES
 UNDER THE HOOD
 - The check for a video's paid promotion label now asks YouTube for only the two fields it reads, as it was meant to. A missing separator in the request address made YouTube send the whole player answer, about 238 KB, where 37 bytes do.
 - A first component, the video card, is built with the React Compiler, which only compiles components that opt in.
+- While Google blocks your network for unusual traffic, Flow stops the requests you didn't ask for: Home's work after its first page, prefetches, hover previews and the new-upload check. They wait 15 minutes, then 30, then an hour if the block is still there (#770). Playing, searching and Refresh still ask YouTube, and the first answer from YouTube ends the wait.

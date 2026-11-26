@@ -21,6 +21,7 @@ use super::sources::{
     channel_uploads, refresh_subscription_store, rotating_window, subscription_window_size,
 };
 use super::{HomeFeedService, cache, channel_memory, kind_checks, neighbours, now_ms};
+use crate::api::innertube::transport::block::in_background;
 use crate::flow_neuro::scoring::classify_persona;
 use crate::services::recommendation_service::{DiscoverySurface, RecommendationService};
 use crate::services::youtube_service::YoutubeService;
@@ -336,7 +337,9 @@ impl HomeFeedService {
     fn start_after_paint(&self, app: &AppHandle, after: AfterPaint) {
         let service = self.clone();
         let app = app.clone();
-        tauri::async_runtime::spawn(async move { service.after_paint(&app, after).await });
+        tauri::async_runtime::spawn(async move {
+            in_background(service.after_paint(&app, after)).await;
+        });
     }
 
     /// Ends a load that painted nothing; `error` says why when it failed rather than found nothing.

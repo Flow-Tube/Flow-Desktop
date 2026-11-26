@@ -80,7 +80,7 @@ export function VideoInlinePreview({ videoId, clearTopEnd = false }: VideoInline
     if (reducedMotion) return;
     let cancelled = false;
     const resolveTimer = window.setTimeout(() => {
-      resolveStreamInfo(videoId, { timeoutMs: RESOLVE_TIMEOUT_MS })
+      resolveStreamInfo(videoId, { timeoutMs: RESOLVE_TIMEOUT_MS, background: true })
         .then((info) => {
           if (cancelled) return;
           const picked = inlinePreviewSource(info);

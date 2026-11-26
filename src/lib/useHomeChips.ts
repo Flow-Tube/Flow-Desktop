@@ -8,6 +8,7 @@ import {
   type HomeMix,
   type InterestChip,
 } from "./api/homeFeed";
+import { normalizeBackendError } from "./api/errors";
 import { getString, type StringKey } from "./i18n/index";
 import type { VideoSummary } from "../types/video";
 
@@ -57,7 +58,7 @@ export function visibleHomeMixes(mixes: HomeMix[], isHidden: (video: VideoSummar
 export type ChipFeedState =
   | { status: "loading" }
   | { status: "ready"; cards: HomeCard[]; mixes: HomeMix[] }
-  | { status: "failed" };
+  | { status: "failed"; error: string | null };
 
 /** The order chips appear in, which never changes. Chips with nothing to show stay out, unless chosen. */
 export function visibleChipKeys(chips: HomeChips, selected: string): string[] {
@@ -98,10 +99,14 @@ export function useHomeChips(enabled: boolean) {
     try {
       const result = await getHomeChipFeed(key, refresh);
       if (request !== requestRef.current) return;
-      setFeed(result.failed ? { status: "failed" } : { status: "ready", cards: result.cards, mixes: result.mixes });
+      setFeed(
+        result.failed
+          ? { status: "failed", error: result.error ?? null }
+          : { status: "ready", cards: result.cards, mixes: result.mixes },
+      );
     } catch (error) {
       console.error("Home chip failed to load", error);
-      if (request === requestRef.current) setFeed({ status: "failed" });
+      if (request === requestRef.current) setFeed({ status: "failed", error: normalizeBackendError(error).kind });
     }
   }, []);
 

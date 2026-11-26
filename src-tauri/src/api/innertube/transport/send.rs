@@ -5,7 +5,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde_json::Value;
 
-use super::error::{TransportError, parse_retry_after, snippet};
+use super::block;
+use super::error::{TransportError, is_unusual_traffic_page, parse_retry_after, snippet};
 use super::request::RequestSpec;
 
 /// The longest any one attempt may take. Player requests sit inside the ladder's
@@ -30,33 +31,65 @@ pub async fn send_once(
     payload: &Value,
     visitor: Option<&str>,
 ) -> Result<Value, TransportError> {
+    if block::holds_request() {
+        return Err(TransportError::Blocked);
+    }
     let mut request = http.post(spec.url()).timeout(REQUEST_TIMEOUT).json(payload);
     for (name, value) in spec.headers(visitor) {
         request = request.header(name, value);
     }
     let response = request.send().await.map_err(|error| classify(&error))?;
-    let status = response.status();
-    if status.as_u16() == 429 {
-        let retry_after = parse_retry_after(
-            response
-                .headers()
-                .get(reqwest::header::RETRY_AFTER)
-                .and_then(|value| value.to_str().ok()),
-        );
+    let status = response.status().as_u16();
+    let final_url = response.url().to_string();
+    let retry_after = parse_retry_after(
+        response
+            .headers()
+            .get(reqwest::header::RETRY_AFTER)
+            .and_then(|value| value.to_str().ok()),
+    );
+    let body = match response.text().await {
+        Ok(body) => body,
+        // A 429 says enough without its body.
+        Err(_) if status == 429 => String::new(),
+        Err(error) => return Err(classify(&error)),
+    };
+    let answer = read_answer(status, &final_url, retry_after, &body);
+    match &answer {
+        Err(TransportError::Blocked) => block::record_block(),
+        // Any answer from YouTube itself, even a refusal, means the address
+        // is not blocked.
+        Ok(_) | Err(TransportError::Status { .. } | TransportError::NotJson(_)) => {
+            block::record_answer();
+        }
+        Err(_) => {}
+    }
+    answer
+}
+
+/// What a response that arrived in full means.
+fn read_answer(
+    status: u16,
+    final_url: &str,
+    retry_after: Option<u64>,
+    body: &str,
+) -> Result<Value, TransportError> {
+    if is_unusual_traffic_page(status, final_url, body) {
+        return Err(TransportError::Blocked);
+    }
+    if status == 429 {
         return Err(TransportError::RateLimited { retry_after });
     }
-    let body = response.text().await.map_err(|error| classify(&error))?;
-    if !status.is_success() {
-        let message = serde_json::from_str::<Value>(&body)
+    if !(200..300).contains(&status) {
+        let message = serde_json::from_str::<Value>(body)
             .ok()
             .and_then(|value| value["error"]["message"].as_str().map(ToOwned::to_owned))
-            .unwrap_or_else(|| snippet(&body));
+            .unwrap_or_else(|| snippet(body));
         return Err(TransportError::Status {
-            code: status.as_u16(),
+            code: status,
             message,
         });
     }
-    serde_json::from_str(&body).map_err(|_| TransportError::NotJson(snippet(&body)))
+    serde_json::from_str(body).map_err(|_| TransportError::NotJson(snippet(body)))
 }
 
 /// [`send_once`], repeated after a short, growing pause while the failure looks
@@ -124,6 +157,62 @@ mod tests {
             retry_limit(&TransportError::RateLimited { retry_after: None }),
             0
         );
+        assert_eq!(retry_limit(&TransportError::Blocked), 0);
+    }
+
+    const PLAYER: &str = "https://www.youtube.com/youtubei/v1/player?prettyPrint=false";
+    const SORRY: &str =
+        "<html><head><title>Sorry...</title></head><body>unusual traffic</body></html>";
+
+    #[test]
+    fn a_block_page_is_blocked_whatever_its_status() {
+        assert_eq!(
+            read_answer(403, PLAYER, None, SORRY),
+            Err(TransportError::Blocked)
+        );
+        assert_eq!(
+            read_answer(429, PLAYER, Some(60), SORRY),
+            Err(TransportError::Blocked)
+        );
+        assert_eq!(
+            read_answer(
+                200,
+                "https://www.google.com/sorry/index",
+                None,
+                "<html></html>"
+            ),
+            Err(TransportError::Blocked)
+        );
+    }
+
+    #[test]
+    fn other_answers_keep_their_kind() {
+        assert_eq!(
+            read_answer(429, PLAYER, Some(30), ""),
+            Err(TransportError::RateLimited {
+                retry_after: Some(30)
+            })
+        );
+        assert_eq!(
+            read_answer(
+                403,
+                PLAYER,
+                None,
+                r#"{"error":{"code":403,"message":"The caller does not have permission"}}"#
+            ),
+            Err(TransportError::Status {
+                code: 403,
+                message: "The caller does not have permission".into()
+            })
+        );
+        assert_eq!(
+            read_answer(200, PLAYER, None, r#"{"ok":true}"#),
+            Ok(serde_json::json!({ "ok": true }))
+        );
+        assert!(matches!(
+            read_answer(200, PLAYER, None, "<html>consent</html>"),
+            Err(TransportError::NotJson(_))
+        ));
     }
 
     #[test]

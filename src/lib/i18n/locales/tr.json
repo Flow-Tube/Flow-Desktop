@@ -1800,7 +1800,6 @@
   "player_error_music_premium_title": "YouTube Music Premium içeriği",
   "player_error_network_hint": "Flow YouTube'a ulaşamadı. İnternet bağlantını kontrol et ve tekrar dene.",
   "player_error_network_title": "Bağlantı yok",
-  "player_error_network_wall_hint": "Bot doğrulaması yeni bir kimlikle bile aşılamadı. Daha sonra veya başka bir ağdan tekrar dene.",
   "player_error_network_wall_title": "YouTube bu ağı engelliyor",
   "player_error_not_available_hint": "Bu video silinmiş, gizliye alınmış veya YouTube tarafından kaldırılmış olabilir. Geçici bir aksaklık olma ihtimaline karşı tekrar dene.",
   "player_error_not_available_title": "İçerik kullanılamıyor",

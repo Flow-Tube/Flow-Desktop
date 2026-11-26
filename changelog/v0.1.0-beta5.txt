@@ -24,12 +24,14 @@ LINUX
 - Settings > About now names the graphics path in use (GPU, GPU through shared memory, or no GPU) and why. The Linux help page explains what each one costs.
 - Settings > Appearance > Paint the page on the processor (Automatic, Processor, Graphics card) lets you choose where the page is drawn without starting Flow from a terminal, including in the Flatpak. Try Processor if pictures go black or flicker while the text stays. Automatic keeps doing it on NVIDIA driver 580 only.
 - The Graphics line in Settings > About and in bug reports says when the page is painted on the processor and names the GPUs Flow can draw with, so a hybrid laptop shows as, for example, GPU amd + nvidia.
+- The AppImage now registers itself for flow:// links again, so videos sent from the browser extension open in Flow. Registering ran the system's xdg-mime with the AppImage's own libraries, which made the system shell fail with undefined symbol: rl_print_keybinding (#770). Flow now runs it with the system's libraries, as it already did for opening links and folders.
 
 HOME AND RECOMMENDATIONS
 - Home no longer redraws every card each time the feed loads more or changes state. Loading a page sends only its new videos, where it used to resend the whole feed at least three times.
 - Hiding a video on Home no longer reloads every card after it.
 - When Home can't load and has nothing saved, it now lists your downloaded videos and songs under the error, so there is still something to play offline.
 - When the connection comes back, Home offers Back online · Refresh above the cards instead of swapping them while you read. A Home that failed with nothing on screen loads by itself.
+- When Home or a chip can't load, it now says why: YouTube blocking your network, a bot check or a rate limit get their own message and what to try (#770). Check your connection is kept for when Flow is really offline.
 
 SEARCH
 - Search suggestions keep up with typing. A space after a word no longer asks YouTube again, and a request that fails or takes longer than 2 seconds leaves the rows you had instead of an empty list.
@@ -93,6 +95,7 @@ PLAYER
 - The buffering circle waits a fifth of a second before it shows, so a short refill after a seek or speed change no longer flashes it.
 - The backings behind the player's buttons, time and chapter pills are darker, so they stay readable over a bright video. Standard goes to 35%, Light to 45% and Off to 55%.
 - Loop in the player (right click, the R key, and a new switch in the gear menu) now repeats the video until you turn it off or close the player, as in Flow for Android. It used to turn on the saved Loop every video setting, which then looped every later video and reached your phone through sync. Loop every video stays in Settings > Player.
+- When Google blocks your network for unusual traffic, a video now says YouTube is blocking this network, how long that usually lasts and what to try, instead of saying it couldn't read the stream (#770). Flow also stops at the first block page, where it used to ask about ten more times from the same blocked address.
 
 COMMENTS
 - Oldest now starts from the oldest comment. YouTube has no oldest-first order, so Flow reads the Newest order to its end, up to about 500 comments on big videos, and turns it around. Past that it says how far it reached.
@@ -167,7 +170,9 @@ FIXES
 - Scrolling a feed no longer rewrites your whole recommendation profile to disk every three seconds. What a feed showed is now saved once a minute, with the next thing you watch, or when Flow closes.
 - Undoing a deleted note now always wins over the deletion, even when both happen in the same instant.
 - Fixed a possible freeze after hours of use when Flow was started by a launcher that never reads its output.
+- Extension settings such as Discord presence, SponsorBlock and DeArrow now start with their saved values at launch and after a sync. A second load that started while the first was still running used to read the defaults (#763).
 
 UNDER THE HOOD
 - The check for a video's paid promotion label now asks YouTube for only the two fields it reads, as it was meant to. A missing separator in the request address made YouTube send the whole player answer, about 238 KB, where 37 bytes do.
 - A first component, the video card, is built with the React Compiler, which only compiles components that opt in.
+- While Google blocks your network for unusual traffic, Flow stops the requests you didn't ask for: Home's work after its first page, prefetches, hover previews and the new-upload check. They wait 15 minutes, then 30, then an hour if the block is still there (#770). Playing, searching and Refresh still ask YouTube, and the first answer from YouTube ends the wait.

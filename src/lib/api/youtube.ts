@@ -165,7 +165,9 @@ export async function getVideoStoryboard(videoId: string): Promise<StoryboardLev
   return invokeBackend<StoryboardLevel[]>("get_video_storyboard", { videoId });
 }
 
-export async function getStreamInfo(videoId: string, refresh = false): Promise<StreamInfo> {
+/** `background` marks a resolve nobody is waiting on yet (a prefetch, a hover
+ * preview). The backend holds it while YouTube blocks the network. */
+export async function getStreamInfo(videoId: string, refresh = false, background = false): Promise<StreamInfo> {
   if (!(await isTauriEnv())) {
     console.warn("Tauri not detected. Returning public fallback stream link.");
     return {
@@ -207,7 +209,7 @@ export async function getStreamInfo(videoId: string, refresh = false): Promise<S
       dashManifestUrl: null,
     };
   }
-  return invokeBackend<StreamInfo>("get_stream_info", { videoId, refresh });
+  return invokeBackend<StreamInfo>("get_stream_info", { videoId, refresh, background });
 }
 
 export interface SabrDebugState {

@@ -20,7 +20,11 @@ use super::seeds::{GraphCandidate, SeedInput, SeedSource, merge_candidates};
 use super::sources::{
     channel_uploads, refresh_subscription_store, rotating_window, subscription_window_size,
 };
-use super::{HomeFeedService, cache, channel_memory, kind_checks, neighbours, now_ms};
+use super::{
+    HomeFeedService, LOCAL_DATA_FAILED, cache, channel_memory, kind_checks, neighbours, now_ms,
+    telling_failure,
+};
+use crate::api::innertube::transport::block::in_background;
 use crate::flow_neuro::scoring::classify_persona;
 use crate::services::recommendation_service::{DiscoverySurface, RecommendationService};
 use crate::services::youtube_service::YoutubeService;
@@ -132,11 +136,6 @@ pub(super) async fn report_searches(rec: &RecommendationService, searches: &[(St
     }
 }
 
-/// `HomeSnapshot::error` when the device's own data could not be read.
-const LOCAL_DATA_FAILED: &str = "local";
-/// `HomeSnapshot::error` when no source could be reached.
-const NETWORK_FAILED: &str = "network";
-
 impl HomeFeedService {
     /// Every search's first page, and whether each of them failed (no connection, not no results).
     async fn search_all(
@@ -144,18 +143,25 @@ impl HomeFeedService {
         yt: &YoutubeService,
         queries: &[String],
         now: u64,
-    ) -> (Vec<(String, Vec<Card>)>, bool) {
+    ) -> (Vec<(String, Vec<Card>)>, Option<&'static str>) {
         let pages = join_all(queries.iter().map(|query| async move {
             let page = self.inner.search_pages.first_page(yt, query, now).await;
             (query.clone(), page)
         }))
         .await;
         let all_failed = !pages.is_empty() && pages.iter().all(|(_, page)| page.is_err());
+        let failure = all_failed.then(|| {
+            telling_failure(
+                pages
+                    .iter()
+                    .filter_map(|(_, page)| page.as_ref().err().copied()),
+            )
+        });
         let searches = pages
             .into_iter()
             .map(|(query, page)| (query, page.unwrap_or_default()))
             .collect();
-        (searches, all_failed)
+        (searches, failure)
     }
 
     pub(super) async fn load(&self, app: &AppHandle, generation: u64) {
@@ -181,11 +187,11 @@ impl HomeFeedService {
             feed.hides_seen = inputs.hides_seen_videos;
             feed.subscriptions_kept_off = !inputs.subscriptions_on_home;
         }
-        let ((searches, searches_failed), (related_seeds, related)) = tokio::join!(
+        let ((searches, searches_failure), (related_seeds, related)) = tokio::join!(
             self.search_all(&yt, &wave1, now),
             self.related_lane(&yt, &rec, &pool, &inputs, now)
         );
-        let nothing_reached = searches_failed && related.is_empty();
+        let nothing_reached = searches_failure.filter(|_| related.is_empty());
         report_searches(&rec, &searches).await;
 
         let taste = TasteProfile::of(&brain, &classify_persona(&brain));
@@ -223,8 +229,7 @@ impl HomeFeedService {
         let mix = lanes::assemble(&lanes, &on_screen, followed.len(), brain.total_interactions);
         if mix.cards.is_empty() {
             // Nothing to show because no search could be reached is a failure, not an empty feed.
-            let error = nothing_reached.then_some(NETWORK_FAILED);
-            self.settle_without_feed(app, generation, error);
+            self.settle_without_feed(app, generation, nothing_reached);
             return;
         }
         let (laid_out, origins, related_picks) = layout(
@@ -336,7 +341,9 @@ impl HomeFeedService {
     fn start_after_paint(&self, app: &AppHandle, after: AfterPaint) {
         let service = self.clone();
         let app = app.clone();
-        tauri::async_runtime::spawn(async move { service.after_paint(&app, after).await });
+        tauri::async_runtime::spawn(async move {
+            in_background(service.after_paint(&app, after)).await;
+        });
     }
 
     /// Ends a load that painted nothing; `error` says why when it failed rather than found nothing.

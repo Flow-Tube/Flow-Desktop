@@ -63,6 +63,22 @@ const EVENT: &str = "home-feed";
 const STATUS_EVENT: &str = "home-feed-status";
 const APPEND_EVENT: &str = "home-feed-append";
 
+/// `HomeSnapshot::error` when the device's own data could not be read.
+const LOCAL_DATA_FAILED: &str = "local";
+/// The error kind of a search that ran out of time, and of a failure with no better name.
+const NETWORK_FAILED: &str = "network";
+
+/// The kind to show when every search failed. A network block or a bot check says more than the
+/// timeouts around it, and any other failure reads as a connection problem.
+fn telling_failure(kinds: impl IntoIterator<Item = &'static str>) -> &'static str {
+    const TELLING: [&str; 3] = ["networkWall", "botCheckRequired", "rateLimited"];
+    let kinds: Vec<&str> = kinds.into_iter().collect();
+    TELLING
+        .into_iter()
+        .find(|kind| kinds.contains(kind))
+        .unwrap_or(NETWORK_FAILED)
+}
+
 /// What the page renders; its flags are the page's states, sent as they are.
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Serialize, Default)]
@@ -588,5 +604,19 @@ mod tests {
         };
         assert_eq!(sent.cards.len(), 2);
         assert!(Notice::of(&snapshot, &Changed::Nothing).is_none());
+    }
+
+    #[test]
+    fn a_failed_load_names_its_most_telling_cause() {
+        assert_eq!(
+            telling_failure(["network", "networkWall", "extractor"]),
+            "networkWall"
+        );
+        assert_eq!(
+            telling_failure(["rateLimited", "botCheckRequired"]),
+            "botCheckRequired"
+        );
+        assert_eq!(telling_failure(["extractor", "network"]), "network");
+        assert_eq!(telling_failure([]), NETWORK_FAILED);
     }
 }

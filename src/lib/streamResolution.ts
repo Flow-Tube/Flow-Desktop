@@ -1,3 +1,4 @@
+import { normalizeBackendError } from "./api/errors";
 import { getStreamInfo } from "./api/youtube";
 import { isLocalMediaId } from "./localMediaId";
 import type { StreamInfo } from "../types/video";
@@ -29,6 +30,9 @@ type CacheEntry = { info: StreamInfo; resolvedAt: number };
 
 const cache = new Map<string, CacheEntry>();
 const inFlight = new Map<string, Promise<StreamInfo>>();
+/** Ids whose in-flight request is background work, which the backend holds
+ * while YouTube blocks the network. */
+const backgroundFlights = new Set<string>();
 
 const prefetchQueue: string[] = [];
 let activePrefetches = 0;
@@ -56,18 +60,30 @@ function writeCache(videoId: string, info: StreamInfo, resolvedAt = Date.now()) 
 }
 
 /** The underlying request, shared by every caller asking for the same video. */
-function requestStreamInfo(videoId: string): Promise<StreamInfo> {
+function requestStreamInfo(videoId: string, background = false): Promise<StreamInfo> {
   const existing = inFlight.get(videoId);
-  if (existing) return existing;
+  if (existing) {
+    if (background || !backgroundFlights.has(videoId)) return existing;
+    // A held background request never reached YouTube, so the viewer's own
+    // request still asks once.
+    return existing.catch((error: unknown) => {
+      if (normalizeBackendError(error).kind !== "networkWall") throw error;
+      return requestStreamInfo(videoId);
+    });
+  }
 
-  const request = getStreamInfo(videoId).then((info) => {
+  const request = (background ? getStreamInfo(videoId, false, true) : getStreamInfo(videoId)).then((info) => {
     writeCache(videoId, info);
     return info;
   });
   const tracked = request.finally(() => {
-    if (inFlight.get(videoId) === tracked) inFlight.delete(videoId);
+    if (inFlight.get(videoId) !== tracked) return;
+    inFlight.delete(videoId);
+    backgroundFlights.delete(videoId);
   });
   inFlight.set(videoId, tracked);
+  if (background) backgroundFlights.add(videoId);
+  else backgroundFlights.delete(videoId);
   return tracked;
 }
 
@@ -77,11 +93,14 @@ export interface ResolveStreamOptions {
   timeoutMs?: number;
   /** Walk a fresh client ladder instead of reusing a cached response. */
   refresh?: boolean;
+  /** Nobody waits on it yet, as with a hover preview: held while YouTube
+   * blocks the network. */
+  background?: boolean;
 }
 
 export function resolveStreamInfo(
   videoId: string,
-  { timeoutMs, refresh = false }: ResolveStreamOptions = {},
+  { timeoutMs, refresh = false, background = false }: ResolveStreamOptions = {},
 ): Promise<StreamInfo> {
   if (refresh) invalidateStreamInfo(videoId);
 
@@ -93,7 +112,7 @@ export function resolveStreamInfo(
         writeCache(videoId, info);
         return info;
       })
-    : requestStreamInfo(videoId);
+    : requestStreamInfo(videoId, background);
   if (!timeoutMs) return request;
 
   return Promise.race([
@@ -109,7 +128,7 @@ function drainPrefetchQueue() {
     const videoId = prefetchQueue.shift();
     if (!videoId || readCache(videoId) || inFlight.has(videoId)) continue;
     activePrefetches += 1;
-    void requestStreamInfo(videoId)
+    void requestStreamInfo(videoId, true)
       .catch(() => {
         // A speculative resolve that fails costs nothing — the surface that
         // actually needs the video will resolve it again and report the error.

@@ -5,6 +5,8 @@
 mod ai_list;
 pub mod api;
 mod appimage;
+#[cfg(any(target_os = "linux", test))]
+mod appimage_links;
 pub mod backup;
 mod bridge;
 mod cache_usage;
@@ -267,6 +269,20 @@ fn init_tracing(
         tracing::info!(dir = %log_dir.display(), "file_logging_initialized");
     }
     guards
+}
+
+/// Registers Flow for `flow://`: an `AppImage` does it itself, everything else through the
+/// deep-link plugin.
+#[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
+fn register_link_scheme(app: &tauri::AppHandle) -> Result<(), String> {
+    use tauri_plugin_deep_link::DeepLinkExt;
+    #[cfg(target_os = "linux")]
+    if appimage::in_appimage() {
+        return appimage_links::register(app);
+    }
+    app.deep_link()
+        .register_all()
+        .map_err(|error| error.to_string())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -662,11 +678,8 @@ pub fn run() {
             let registers_links = update_support
                 .registers_link_handler(tauri::utils::platform::bundle_type().as_ref());
             #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
-            if registers_links {
-                use tauri_plugin_deep_link::DeepLinkExt;
-                if let Err(error) = app.deep_link().register_all() {
-                    tracing::warn!("failed to register flow:// scheme: {error}");
-                }
+            if registers_links && let Err(error) = register_link_scheme(app.handle()) {
+                tracing::warn!("failed to register flow:// scheme: {error}");
             }
             #[cfg(target_os = "linux")]
             if !registers_links {

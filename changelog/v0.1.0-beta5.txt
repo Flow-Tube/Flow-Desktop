@@ -24,6 +24,7 @@ LINUX
 - Settings > About now names the graphics path in use (GPU, GPU through shared memory, or no GPU) and why. The Linux help page explains what each one costs.
 - Settings > Appearance > Paint the page on the processor (Automatic, Processor, Graphics card) lets you choose where the page is drawn without starting Flow from a terminal, including in the Flatpak. Try Processor if pictures go black or flicker while the text stays. Automatic keeps doing it on NVIDIA driver 580 only.
 - The Graphics line in Settings > About and in bug reports says when the page is painted on the processor and names the GPUs Flow can draw with, so a hybrid laptop shows as, for example, GPU amd + nvidia.
+- The AppImage now registers itself for flow:// links again, so videos sent from the browser extension open in Flow. Registering ran the system's xdg-mime with the AppImage's own libraries, which made the system shell fail with undefined symbol: rl_print_keybinding (#770). Flow now runs it with the system's libraries, as it already did for opening links and folders.
 
 HOME AND RECOMMENDATIONS
 - Home no longer redraws every card each time the feed loads more or changes state. Loading a page sends only its new videos, where it used to resend the whole feed at least three times.

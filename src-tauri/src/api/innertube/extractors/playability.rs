@@ -28,20 +28,39 @@ impl Refusal {
 
 /// What the ladder tells the user once every client has failed.
 #[derive(Clone, Debug)]
-pub(crate) struct LadderReport {
-    pub refusal: Refusal,
-    /// The bot wall held for a freshly minted identity too, so the network,
-    /// not the identity, is the likelier cause.
-    pub fresh_identity_walled: bool,
+pub(crate) enum LadderReport {
+    /// The most specific refusal a client answered with.
+    Refused {
+        refusal: Refusal,
+        /// The bot wall held for a freshly minted identity too, so the network,
+        /// not the identity, is the likelier cause.
+        fresh_identity_walled: bool,
+    },
+    /// Google's unusual-traffic page, which blocks the address every client
+    /// shares, so the walk ended there.
+    Blocked(String),
 }
 
 impl LadderReport {
+    pub(crate) fn refusal(&self) -> Option<&Refusal> {
+        match self {
+            Self::Refused { refusal, .. } => Some(refusal),
+            Self::Blocked(_) => None,
+        }
+    }
+
     pub(crate) fn to_error(&self) -> AppError {
-        match map_playability_error(&self.refusal.playability) {
-            AppError::BotCheckRequired(message) if self.fresh_identity_walled => {
-                AppError::NetworkWall(message)
-            }
-            error => error,
+        match self {
+            Self::Refused {
+                refusal,
+                fresh_identity_walled,
+            } => match map_playability_error(&refusal.playability) {
+                AppError::BotCheckRequired(message) if *fresh_identity_walled => {
+                    AppError::NetworkWall(message)
+                }
+                error => error,
+            },
+            Self::Blocked(message) => AppError::NetworkWall(message.clone()),
         }
     }
 }
@@ -351,7 +370,7 @@ mod tests {
     fn a_wall_that_survives_a_new_identity_is_the_network_s() {
         let wall =
             json!({ "status": "LOGIN_REQUIRED", "reason": "Sign in to confirm you’re not a bot" });
-        let report = |fresh_identity_walled| LadderReport {
+        let report = |fresh_identity_walled| LadderReport::Refused {
             refusal: refusal(wall.clone(), true),
             fresh_identity_walled,
         };
@@ -360,6 +379,13 @@ mod tests {
             report(false).to_error(),
             AppError::BotCheckRequired(_)
         ));
+    }
+
+    #[test]
+    fn a_blocked_address_reports_the_network() {
+        let report = LadderReport::Blocked("player: blocked".into());
+        assert!(report.refusal().is_none());
+        assert!(matches!(report.to_error(), AppError::NetworkWall(_)));
     }
 
     #[test]

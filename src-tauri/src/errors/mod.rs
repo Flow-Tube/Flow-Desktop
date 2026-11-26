@@ -186,42 +186,50 @@ fn cause_chain(error: &AppError) -> String {
     chain
 }
 
+impl AppError {
+    /// The `kind` the frontend switches on.
+    #[must_use]
+    pub const fn kind(&self) -> &'static str {
+        match self {
+            Self::Validation(_) => "validation",
+            Self::Extractor(_) => "extractor",
+            Self::AgeRestricted(_) => "ageRestricted",
+            Self::PrivateContent(_) => "privateContent",
+            Self::PaidContent(_) => "paidContent",
+            Self::MembersOnly(_) => "membersOnly",
+            Self::LiveUpcoming(..) => "liveUpcoming",
+            Self::GeographicRestriction(_) => "geographicRestriction",
+            Self::MusicPremium(_) => "musicPremium",
+            Self::BotCheckRequired(_) => "botCheckRequired",
+            Self::NetworkWall(_) => "networkWall",
+            Self::AccountTerminated(_) => "accountTerminated",
+            Self::ContentNotAvailable(_) => "contentNotAvailable",
+            Self::Network(_) => "network",
+            Self::RateLimited(_) => "rateLimited",
+            Self::Database(_) => "database",
+            Self::ScrobbleSignInRejected(_) => "scrobbleSignInRejected",
+            Self::ScrobbleKeyMissing(_) => "scrobbleKeyMissing",
+            Self::Keychain(_) => "keychain",
+            Self::ProfileLimit(_) => "profileLimit",
+            Self::ProfileName(_) => "profileName",
+            Self::ProfileNotFound(_) => "profileNotFound",
+            Self::ProfileInUse(_) => "profileInUse",
+            Self::ProfileCopyFailed(_) => "profileCopyFailed",
+            Self::ProfileSwitchRefused(_) => "profileSwitchRefused",
+            Self::ProfilePhotoInvalid(_) => "profilePhotoInvalid",
+            Self::LocalFileMissing(_) => "localFileMissing",
+            Self::LocalFileRefused(_) => "localFileRefused",
+            Self::Streaming(_) => "streaming",
+            Self::MediaDecode(_) => "mediaDecode",
+            Self::StreamExpired(_) => "streamExpired",
+            Self::Internal(_) => "internal",
+        }
+    }
+}
+
 impl From<AppError> for ErrorResponse {
     fn from(error: AppError) -> Self {
-        let kind = match &error {
-            AppError::Validation(_) => "validation",
-            AppError::Extractor(_) => "extractor",
-            AppError::AgeRestricted(_) => "ageRestricted",
-            AppError::PrivateContent(_) => "privateContent",
-            AppError::PaidContent(_) => "paidContent",
-            AppError::MembersOnly(_) => "membersOnly",
-            AppError::LiveUpcoming(..) => "liveUpcoming",
-            AppError::GeographicRestriction(_) => "geographicRestriction",
-            AppError::MusicPremium(_) => "musicPremium",
-            AppError::BotCheckRequired(_) => "botCheckRequired",
-            AppError::NetworkWall(_) => "networkWall",
-            AppError::AccountTerminated(_) => "accountTerminated",
-            AppError::ContentNotAvailable(_) => "contentNotAvailable",
-            AppError::Network(_) => "network",
-            AppError::RateLimited(_) => "rateLimited",
-            AppError::Database(_) => "database",
-            AppError::ScrobbleSignInRejected(_) => "scrobbleSignInRejected",
-            AppError::ScrobbleKeyMissing(_) => "scrobbleKeyMissing",
-            AppError::Keychain(_) => "keychain",
-            AppError::ProfileLimit(_) => "profileLimit",
-            AppError::ProfileName(_) => "profileName",
-            AppError::ProfileNotFound(_) => "profileNotFound",
-            AppError::ProfileInUse(_) => "profileInUse",
-            AppError::ProfileCopyFailed(_) => "profileCopyFailed",
-            AppError::ProfileSwitchRefused(_) => "profileSwitchRefused",
-            AppError::ProfilePhotoInvalid(_) => "profilePhotoInvalid",
-            AppError::LocalFileMissing(_) => "localFileMissing",
-            AppError::LocalFileRefused(_) => "localFileRefused",
-            AppError::Streaming(_) => "streaming",
-            AppError::MediaDecode(_) => "mediaDecode",
-            AppError::StreamExpired(_) => "streamExpired",
-            AppError::Internal(_) => "internal",
-        };
+        let kind = error.kind();
 
         let message = error.to_string();
         let cause = cause_chain(&error);

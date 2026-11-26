@@ -19,7 +19,7 @@ use super::chips_rewatch::{
 use super::inputs::Inputs;
 use super::lanes;
 use super::load::{inputs_disliked, local_sources};
-use super::{HomeFeedService, now_ms};
+use super::{HomeFeedService, LOCAL_DATA_FAILED, NETWORK_FAILED, now_ms, telling_failure};
 use crate::flow_neuro::interest_chips::{InterestChip, interest_queries};
 use crate::models::search::SearchVideosRequest;
 use crate::services::recommendation_service::RecommendationService;
@@ -48,6 +48,8 @@ pub struct ChipFeed {
     pub cards: Vec<Card>,
     pub mixes: Vec<HomeMix>,
     pub failed: bool,
+    /// The error kind when it failed.
+    pub error: Option<&'static str>,
 }
 
 impl ChipFeed {
@@ -97,27 +99,30 @@ struct Known {
     channels: HashSet<String>,
 }
 
-async fn search(yt: &YoutubeService, request: SearchVideosRequest, now: u64) -> Option<Vec<Card>> {
+async fn search(
+    yt: &YoutubeService,
+    request: SearchVideosRequest,
+    now: u64,
+) -> Result<Vec<Card>, &'static str> {
     match timeout(SEARCH_TIMEOUT, yt.search_videos(request)).await {
-        Ok(Ok(response)) => Some(
-            response
-                .items
-                .into_iter()
-                .map(|video| Card::from_summary(video, now))
-                .collect(),
-        ),
-        _ => None,
+        Ok(Ok(response)) => Ok(response
+            .items
+            .into_iter()
+            .map(|video| Card::from_summary(video, now))
+            .collect()),
+        Ok(Err(error)) => Err(error.kind()),
+        Err(_) => Err(NETWORK_FAILED),
     }
 }
 
-/// Every search's results together; `None` when each of them failed. `template` carries the filters
-/// all the searches share.
+/// Every search's results together, or the telling error kind when each of them failed.
+/// `template` carries the filters all the searches share.
 async fn search_all(
     yt: &YoutubeService,
     queries: &[String],
     template: &SearchVideosRequest,
     now: u64,
-) -> Option<Vec<Card>> {
+) -> Result<Vec<Card>, &'static str> {
     let results = join_all(queries.iter().map(|query| {
         search(
             yt,
@@ -129,10 +134,14 @@ async fn search_all(
         )
     }))
     .await;
-    if !queries.is_empty() && results.iter().all(Option::is_none) {
-        return None;
+    if !queries.is_empty() && results.iter().all(Result::is_err) {
+        return Err(telling_failure(
+            results
+                .iter()
+                .filter_map(|result| result.as_ref().err().copied()),
+        ));
     }
-    Some(results.into_iter().flatten().flatten().collect())
+    Ok(results.into_iter().flatten().flatten().collect())
 }
 
 /// The ranked order, nudged by age: down the list a fresh upload moves past an older one ranked
@@ -207,11 +216,15 @@ impl HomeFeedService {
         {
             return feed.clone();
         }
-        let Some(feed) = self.fetch_chip(app, &chip, now).await else {
-            return ChipFeed {
-                failed: true,
-                ..ChipFeed::default()
-            };
+        let feed = match self.fetch_chip(app, &chip, now).await {
+            Ok(feed) => feed,
+            Err(kind) => {
+                return ChipFeed {
+                    failed: true,
+                    error: Some(kind),
+                    ..ChipFeed::default()
+                };
+            }
         };
         self.inner
             .chip_results
@@ -242,22 +255,34 @@ impl HomeFeedService {
         }
     }
 
-    async fn fetch_chip(&self, app: &AppHandle, chip: &Chip, now: u64) -> Option<ChipFeed> {
+    async fn fetch_chip(
+        &self,
+        app: &AppHandle,
+        chip: &Chip,
+        now: u64,
+    ) -> Result<ChipFeed, &'static str> {
         let rec = app.state::<RecommendationService>();
         let pool = app.state::<SqlitePool>();
         match chip {
             Chip::Mixes => {
-                let inputs = known_inputs(&rec, &pool, now).await?;
-                let mixes = self.fetch_mixes(app, &rec, &inputs, now).await?;
-                return Some(ChipFeed {
+                let inputs = known_inputs(&rec, &pool, now)
+                    .await
+                    .ok_or(LOCAL_DATA_FAILED)?;
+                let mixes = self
+                    .fetch_mixes(app, &rec, &inputs, now)
+                    .await
+                    .ok_or(NETWORK_FAILED)?;
+                return Ok(ChipFeed {
                     mixes,
                     ..ChipFeed::default()
                 });
             }
             Chip::Watched => {
-                let inputs = known_inputs(&rec, &pool, now).await?;
+                let inputs = known_inputs(&rec, &pool, now)
+                    .await
+                    .ok_or(LOCAL_DATA_FAILED)?;
                 let cards = watched_cards(&rec, &inputs, MAX_VIDEOS, now).await;
-                return Some(ChipFeed {
+                return Ok(ChipFeed {
                     cards,
                     ..ChipFeed::default()
                 });
@@ -265,7 +290,7 @@ impl HomeFeedService {
             _ => {}
         }
         let cards = self.fetch_videos(app, chip, now).await?;
-        Some(ChipFeed {
+        Ok(ChipFeed {
             cards,
             ..ChipFeed::default()
         })
@@ -306,13 +331,18 @@ impl HomeFeedService {
         (!mixes.is_empty() || seeds.is_empty()).then_some(mixes)
     }
 
-    async fn fetch_videos(&self, app: &AppHandle, chip: &Chip, now: u64) -> Option<Vec<Card>> {
+    async fn fetch_videos(
+        &self,
+        app: &AppHandle,
+        chip: &Chip,
+        now: u64,
+    ) -> Result<Vec<Card>, &'static str> {
         let yt = app.state::<YoutubeService>();
         let rec = app.state::<RecommendationService>();
         let pool = app.state::<SqlitePool>();
-        let known = known(&rec, &pool, now).await?;
+        let known = known(&rec, &pool, now).await.ok_or(LOCAL_DATA_FAILED)?;
         match chip {
-            Chip::Mixes | Chip::Watched => None,
+            Chip::Mixes | Chip::Watched => Err(LOCAL_DATA_FAILED),
             Chip::Live => self.live_videos(&yt, &rec, &known, now).await,
             Chip::Interest(interest) => interest_videos(&yt, &rec, &known, interest, now).await,
             Chip::NewToYou => self.new_to_you_videos(&yt, &rec, &pool, &known, now).await,
@@ -326,7 +356,7 @@ impl HomeFeedService {
         rec: &RecommendationService,
         known: &Known,
         now: u64,
-    ) -> Option<Vec<Card>> {
+    ) -> Result<Vec<Card>, &'static str> {
         let queries = {
             let chips = self.inner.chips.lock().unwrap();
             live_queries(&chips)
@@ -348,15 +378,17 @@ impl HomeFeedService {
             .filter(|c| c.video.is_live)
             .cloned()
             .collect();
-        if found.is_none() && stored.is_empty() {
-            return None;
+        if let Err(kind) = found
+            && stored.is_empty()
+        {
+            return Err(kind);
         }
         let live: Vec<Card> = stored
             .into_iter()
             .chain(found.unwrap_or_default())
             .filter(|c| c.video.is_live && !c.video.is_upcoming)
             .collect();
-        Some(ranked(rec, known, live).await)
+        Ok(ranked(rec, known, live).await)
     }
 
     async fn new_to_you_videos(
@@ -366,7 +398,7 @@ impl HomeFeedService {
         pool: &SqlitePool,
         known: &Known,
         now: u64,
-    ) -> Option<Vec<Card>> {
+    ) -> Result<Vec<Card>, &'static str> {
         let queries = rec.exploration_queries(EXPLORATION_QUERIES).await;
         let disliked = inputs_disliked(&known.inputs);
         let seeds = rec
@@ -382,26 +414,26 @@ impl HomeFeedService {
             )
         );
         let related: Vec<Card> = related.into_iter().flatten().collect();
-        if found.is_none() && related.is_empty() {
-            return None;
+        if let Err(kind) = found
+            && related.is_empty()
+        {
+            return Err(kind);
         }
         let mut channels = HashSet::new();
-        Some(
-            ranked(
-                rec,
-                known,
-                found
-                    .unwrap_or_default()
-                    .into_iter()
-                    .chain(related)
-                    .collect(),
-            )
-            .await
-            .into_iter()
-            .filter(|c| !c.channel_id().is_empty() && !known.channels.contains(c.channel_id()))
-            .filter(|c| channels.insert(c.channel_id().to_string()))
-            .collect(),
+        Ok(ranked(
+            rec,
+            known,
+            found
+                .unwrap_or_default()
+                .into_iter()
+                .chain(related)
+                .collect(),
         )
+        .await
+        .into_iter()
+        .filter(|c| !c.channel_id().is_empty() && !known.channels.contains(c.channel_id()))
+        .filter(|c| channels.insert(c.channel_id().to_string()))
+        .collect())
     }
 
     async fn recent_videos(
@@ -410,7 +442,7 @@ impl HomeFeedService {
         rec: &RecommendationService,
         known: &Known,
         now: u64,
-    ) -> Option<Vec<Card>> {
+    ) -> Result<Vec<Card>, &'static str> {
         let queries: Vec<String> = self
             .inner
             .chips
@@ -439,7 +471,7 @@ impl HomeFeedService {
             .filter(|c| !c.video.is_live)
             .filter(|c| c.age_ms(now).is_some_and(|age| age <= RECENT_WINDOW_MS))
             .collect();
-        Some(freshness_order(ranked(rec, known, this_week).await, now))
+        Ok(freshness_order(ranked(rec, known, this_week).await, now))
     }
 }
 
@@ -449,7 +481,7 @@ async fn interest_videos(
     known: &Known,
     interest: &InterestChip,
     now: u64,
-) -> Option<Vec<Card>> {
+) -> Result<Vec<Card>, &'static str> {
     let found = search_all(
         yt,
         &interest_queries(interest),
@@ -481,7 +513,7 @@ async fn interest_videos(
         let outside = rec.outside_category(&videos, category);
         pool.retain(|c| !outside.contains(c.id()));
     }
-    Some(ranked(rec, known, pool).await)
+    Ok(ranked(rec, known, pool).await)
 }
 
 /// The searches behind the Live chip: the top interests', or a plain one without any.

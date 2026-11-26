@@ -495,7 +495,7 @@ impl HomeFeedService {
             .await
         {
             Some(Ok(page)) => Some(page),
-            Some(Err(())) => {
+            Some(Err(_)) => {
                 attempt.failed = true;
                 None
             }
@@ -519,7 +519,7 @@ impl HomeFeedService {
         for query in queries {
             match self.inner.search_pages.first_page(yt, &query, now).await {
                 Ok(cards) => searches.push((query, cards)),
-                Err(()) => attempt.failed = true,
+                Err(_) => attempt.failed = true,
             }
         }
         report_searches(rec, &searches).await;
@@ -535,7 +535,7 @@ impl HomeFeedService {
                     self.add_discovery(rec, pool, inputs, followed, taste, now, &[page], attempt)
                         .await;
                 }
-                Some(Err(())) => attempt.failed = true,
+                Some(Err(_)) => attempt.failed = true,
                 None => break,
             }
         }

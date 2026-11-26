@@ -10,8 +10,8 @@ use sqlx::SqlitePool;
 use tokio::sync::Semaphore;
 use tokio::time::timeout;
 
-use super::cache;
 use super::card::Card;
+use super::{NETWORK_FAILED, cache};
 use crate::api::innertube::extractors::channel::VIDEOS_TAB_PARAMS;
 use crate::api::innertube::renderers::lockup::related_to_video;
 use crate::commands::youtube::populate_video_durations;
@@ -52,7 +52,7 @@ async fn search(
     token: Option<String>,
     upload_date: Option<&'static str>,
     now_ms: u64,
-) -> Result<(Vec<Card>, Option<String>), ()> {
+) -> Result<(Vec<Card>, Option<String>), &'static str> {
     let request = SearchVideosRequest {
         query: query.to_string(),
         page_token: token,
@@ -68,7 +68,8 @@ async fn search(
                 .collect(),
             response.next_page_token.filter(|t| !t.is_empty()),
         )),
-        _ => Err(()),
+        Ok(Err(error)) => Err(error.kind()),
+        Err(_) => Err(NETWORK_FAILED),
     }
 }
 
@@ -107,7 +108,7 @@ impl SearchPages {
         query: &str,
         token: Option<String>,
         now_ms: u64,
-    ) -> Result<Vec<Card>, ()> {
+    ) -> Result<Vec<Card>, &'static str> {
         let key = format!("{query}\u{0}{}", token.as_deref().unwrap_or(""));
         let cached = {
             let state = self.state.lock().unwrap();
@@ -124,12 +125,15 @@ impl SearchPages {
             return Ok(cards);
         }
         let upload_date = self.state.lock().unwrap().upload_date;
-        let Ok((cards, next)) = search(yt, query, token.clone(), upload_date, now_ms).await else {
-            // The next page was spent on this request; keep it for another try.
-            if token.is_some() {
-                self.remember(query, token);
+        let (cards, next) = match search(yt, query, token.clone(), upload_date, now_ms).await {
+            Ok(found) => found,
+            Err(kind) => {
+                // The next page was spent on this request; keep it for another try.
+                if token.is_some() {
+                    self.remember(query, token);
+                }
+                return Err(kind);
             }
-            return Err(());
         };
         if !cards.is_empty() {
             let mut state = self.state.lock().unwrap();
@@ -155,7 +159,7 @@ impl SearchPages {
         yt: &YoutubeService,
         query: &str,
         now_ms: u64,
-    ) -> Result<Vec<Card>, ()> {
+    ) -> Result<Vec<Card>, &'static str> {
         self.fetch(yt, query, None, now_ms).await
     }
 
@@ -165,7 +169,7 @@ impl SearchPages {
         yt: &YoutubeService,
         cards_by_query: &HashMap<String, usize>,
         now_ms: u64,
-    ) -> Option<Result<(String, Vec<Card>), ()>> {
+    ) -> Option<Result<(String, Vec<Card>), &'static str>> {
         let (query, token) = {
             let mut state = self.state.lock().unwrap();
             let query = cards_by_query
@@ -190,7 +194,7 @@ impl SearchPages {
         &self,
         yt: &YoutubeService,
         now_ms: u64,
-    ) -> Option<Result<(String, Vec<Card>), ()>> {
+    ) -> Option<Result<(String, Vec<Card>), &'static str>> {
         let (query, token) = {
             let mut state = self.state.lock().unwrap();
             if state.next_page.is_empty() {

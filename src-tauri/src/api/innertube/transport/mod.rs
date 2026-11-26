@@ -2,6 +2,7 @@
 //! the context, the visitor identity, timeouts, retries and error kinds, so no
 //! endpoint can drift from the others.
 
+pub mod block;
 pub mod error;
 pub mod request;
 pub mod send;

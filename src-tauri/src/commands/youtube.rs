@@ -6,6 +6,7 @@ use tracing::{debug, info};
 
 use crate::api::innertube::core::clients;
 use crate::api::innertube::extractors::resolve::ResolvedEndpoint;
+use crate::api::innertube::transport::block::in_background;
 use crate::errors::ErrorResponse;
 use crate::models::channel::{ChannelAbout, ChannelDetails, ChannelPage, ChannelTabResponse};
 use crate::models::comment::{Comment, CommentsResponse};
@@ -482,6 +483,7 @@ pub fn link_resolver(youtube_service: YoutubeService) -> LinkResolver {
 pub async fn get_stream_info(
     video_id: String,
     refresh: Option<bool>,
+    background: Option<bool>,
     youtube_service: State<'_, YoutubeService>,
     streaming_manager: State<'_, StreamingManager>,
     pool: State<'_, sqlx::SqlitePool>,
@@ -489,8 +491,15 @@ pub async fn get_stream_info(
     validate_video_id(&video_id).map_err(ErrorResponse::from)?;
 
     let refresh = refresh.unwrap_or(false);
+    let resolve = youtube_service.get_stream_info(&video_id, refresh);
+    // A prefetch or hover preview waits out a network block; a play does not.
+    let resolved = if background.unwrap_or(false) {
+        in_background(resolve).await
+    } else {
+        resolve.await
+    };
     // Feeds stop offering a video refused for good, and offer it again once it plays.
-    let mut stream_info = match youtube_service.get_stream_info(&video_id, refresh).await {
+    let mut stream_info = match resolved {
         Ok(info) => {
             let _ = crate::db::unplayable_videos::clear(&pool, &video_id).await;
             info

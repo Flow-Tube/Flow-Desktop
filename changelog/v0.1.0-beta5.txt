@@ -150,6 +150,7 @@ DESKTOP
 - Flow starts with a smaller first script: Settings, Sync, Recap, your Persona, Extensions, Diagnostics, Import, Support and the welcome screens now load when they are first opened.
 - Cards and panels across the app no longer have an outline. They sit on the same fill as the settings rows, so pages like Your taste, Taste and Appearance look lighter. Dialogs, menus and dividers keep a softer line, and chips, fields and outlined buttons keep theirs.
 - On Linux and Windows, Settings > Appearance > Window buttons can move the minimize, maximize and close buttons into the top bar, which removes the title bar and lets the empty part of the top bar move the window, or hide them for tiling window managers. Onboarding and the full music player keep the title bar when the buttons are in the top bar.
+- On macOS 26 and later, the Flow icon now sits on its own white rounded square instead of the gray plate macOS added behind it, in the Dock, Finder and Launchpad. Windows and Linux keep the logo on its own.
 
 DOWNLOADS
 - The Downloads page no longer redraws every saved video and song four times a second while something is downloading.

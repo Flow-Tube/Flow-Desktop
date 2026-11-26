@@ -7,6 +7,8 @@ use std::time::Duration;
 
 use reqwest::StatusCode;
 
+use crate::api::innertube::transport::block;
+use crate::api::innertube::transport::error::is_unusual_traffic_page;
 use crate::models::video::VideoSummary;
 
 const DEFAULT_RETRY_DELAY: Duration = Duration::from_millis(1_500);
@@ -220,6 +222,12 @@ enum Attempt {
 }
 
 async fn attempt(client: &reqwest::Client, url: &str) -> Attempt {
+    if block::holds_request() {
+        return Attempt::Failed {
+            reason: "waiting while Google blocks this network".into(),
+            retry_after: None,
+        };
+    }
     let response = match client.get(url).send().await {
         Ok(response) => response,
         Err(error) => {
@@ -234,12 +242,23 @@ async fn attempt(client: &reqwest::Client, url: &str) -> Attempt {
         let retry_after = response
             .headers()
             .get(reqwest::header::RETRY_AFTER)
-            .and_then(|value| value.to_str().ok());
+            .and_then(|value| value.to_str().ok())
+            .map(ToOwned::to_owned);
+        let final_url = response.url().to_string();
+        let body = response.text().await.unwrap_or_default();
+        if is_unusual_traffic_page(status.as_u16(), &final_url, &body) {
+            block::record_block();
+            return Attempt::Failed {
+                reason: "Google flagged unusual traffic from this network".into(),
+                retry_after: None,
+            };
+        }
         return Attempt::Failed {
             reason: format!("HTTP {status}"),
-            retry_after: retry_delay(Some(status), retry_after),
+            retry_after: retry_delay(Some(status), retry_after.as_deref()),
         };
     }
+    block::record_answer();
     match response.text().await {
         Ok(body) if !body.trim().is_empty() => Attempt::Feed(body),
         Ok(_) => Attempt::Failed {

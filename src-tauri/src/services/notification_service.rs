@@ -5,6 +5,7 @@ use tauri::{AppHandle, Emitter, Manager};
 #[cfg(not(windows))]
 use tauri_plugin_notification::NotificationExt;
 
+use crate::api::innertube::transport::block::in_background;
 use crate::db;
 use crate::errors::AppResult;
 use crate::models::video::VideoSummary;
@@ -339,7 +340,7 @@ pub fn spawn_poll_loop(app: AppHandle, pool: sqlx::SqlitePool) {
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(Duration::from_secs(STARTUP_DELAY_SECS)).await;
         loop {
-            match poll_subscriptions(&app, &pool).await {
+            match in_background(poll_subscriptions(&app, &pool)).await {
                 Ok(count) if count > 0 => {
                     tracing::info!("Subscription poll created {count} notification(s)");
                 }

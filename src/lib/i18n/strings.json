@@ -3483,7 +3483,7 @@
   "player_error_members_only_title": "Members-only video",
   "player_error_members_only_hint": "Only the channel's members can watch this video.",
   "player_error_network_wall_title": "YouTube is blocking this network",
-  "player_error_network_wall_hint": "The bot check held even with a new identity. Try again later or from another network.",
+  "player_error_network_wall_hint": "YouTube flagged unusual traffic from this network. This usually clears within a few hours. A VPN, proxy or shared network makes it more likely, and another network usually works right away.",
   "player_error_upcoming_title": "Not started yet",
   "player_error_upcoming_hint": "This premiere or live stream hasn't started. Flow will start it when it goes live.",
   "player_error_upcoming_starts_in": "Starts in %s",

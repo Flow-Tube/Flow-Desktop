@@ -1239,6 +1239,16 @@ enum ClientOutcome {
     /// No answer, or an `OK` with nothing fetchable (ciphered-only formats, an
     /// unsolvable `n`, a missing PO token).
     Unusable,
+    /// Google's unusual-traffic page. Every client shares the blocked address.
+    Blocked(String),
+}
+
+/// What a failed `player` request means for the client that sent it.
+fn failed_request(error: AppError) -> ClientOutcome {
+    match error {
+        AppError::NetworkWall(message) => ClientOutcome::Blocked(message),
+        _ => ClientOutcome::Unusable,
+    }
 }
 
 /// Whether a direct-URL response carries a stream the proxy can fetch as is:
@@ -1614,10 +1624,12 @@ impl InnertubeClient {
                     );
                     let ends = ends_the_ladder(&refusal);
                     if is_better_report(
-                        deferred_restriction.as_ref().map(|report| &report.refusal),
+                        deferred_restriction
+                            .as_ref()
+                            .and_then(LadderReport::refusal),
                         &refusal,
                     ) {
-                        *deferred_restriction = Some(LadderReport {
+                        *deferred_restriction = Some(LadderReport::Refused {
                             refusal,
                             fresh_identity_walled,
                         });
@@ -1625,6 +1637,11 @@ impl InnertubeClient {
                     if ends {
                         return None;
                     }
+                }
+                ClientOutcome::Blocked(message) => {
+                    warn!(video_id = %video_id, client = client.name, "Google is blocking this network; ending the ladder");
+                    *deferred_restriction = Some(LadderReport::Blocked(message));
+                    return None;
                 }
                 ClientOutcome::Unusable => {}
             }
@@ -1666,36 +1683,17 @@ impl InnertubeClient {
         };
         let cpn = web_client.then(new_cpn);
         let mut response = match self
-            .request_player(
+            .first_player_request(
                 video_id,
                 client,
                 visitor_data,
                 po_token.as_deref(),
-                None,
                 cpn.as_deref(),
             )
             .await
         {
-            Some(value) => value,
-            // The lead client gets one more try: a cold DNS/TLS handshake can eat
-            // the whole first budget.
-            None if std::ptr::eq(client, PLAYER_CLIENT_LADDER[0]) => {
-                match self
-                    .request_player(
-                        video_id,
-                        client,
-                        visitor_data,
-                        po_token.as_deref(),
-                        None,
-                        cpn.as_deref(),
-                    )
-                    .await
-                {
-                    Some(value) => value,
-                    None => return ClientOutcome::Unusable,
-                }
-            }
-            None => return ClientOutcome::Unusable,
+            Ok(value) => value,
+            Err(error) => return failed_request(error),
         };
 
         // A `needs reload` response clears if the request looks like it came
@@ -1713,8 +1711,8 @@ impl InnertubeClient {
                 )
                 .await
             {
-                Some(retry) => response = retry,
-                None => return ClientOutcome::Unusable,
+                Ok(retry) => response = retry,
+                Err(error) => return failed_request(error),
             }
         }
 
@@ -1753,6 +1751,31 @@ impl InnertubeClient {
             po_token,
             visitor_data: visitor_data.map(ToOwned::to_owned),
         })
+    }
+
+    /// [`Self::request_player`], sent twice for the lead client: a cold DNS/TLS
+    /// handshake can eat the whole first budget. A block page is not asked again.
+    async fn first_player_request(
+        &self,
+        video_id: &str,
+        client: &'static clients::YouTubeClient,
+        visitor_data: Option<&str>,
+        po_token: Option<&str>,
+        cpn: Option<&str>,
+    ) -> AppResult<Value> {
+        let first = self
+            .request_player(video_id, client, visitor_data, po_token, None, cpn)
+            .await;
+        match first {
+            Err(error)
+                if !matches!(error, AppError::NetworkWall(_))
+                    && std::ptr::eq(client, PLAYER_CLIENT_LADDER[0]) =>
+            {
+                self.request_player(video_id, client, visitor_data, po_token, None, cpn)
+                    .await
+            }
+            result => result,
+        }
     }
 
     /// A web client's response is SABR-only: playable once its SABR endpoint
@@ -1798,7 +1821,7 @@ impl InnertubeClient {
         po_token: Option<&str>,
         referer: Option<&str>,
         cpn: Option<&str>,
-    ) -> Option<Value> {
+    ) -> AppResult<Value> {
         let mut payload = client.player_body(video_id, visitor_data, po_token);
         if client.use_signature_timestamp {
             // A remote-signed client's signatures are solved against the
@@ -1850,14 +1873,17 @@ impl InnertubeClient {
             PER_CLIENT_TIMEOUT
         };
         match tokio::time::timeout(budget, self.post_player(client, &mut payload, referer)).await {
-            Ok(Ok(value)) => Some(value),
+            Ok(Ok(value)) => Ok(value),
             Ok(Err(error)) => {
                 warn!(video_id = %video_id, client = client.name, %error, "Player request failed");
-                None
+                Err(error)
             }
             Err(_) => {
                 warn!(video_id = %video_id, client = client.name, "Player request timed out");
-                None
+                Err(AppError::Network(format!(
+                    "player request as {} timed out",
+                    client.name
+                )))
             }
         }
     }
@@ -2917,6 +2943,7 @@ mod ladder_live {
                     format!("refused: {}", map_playability_error(&refusal.playability))
                 }
                 ClientOutcome::Unusable => "unusable".to_string(),
+                ClientOutcome::Blocked(message) => format!("blocked: {message}"),
             };
             println!("{:<16} {:<9} {verdict}", candidate.name, candidate.version);
 

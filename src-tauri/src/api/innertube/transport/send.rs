@@ -5,6 +5,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde_json::Value;
 
+use super::block;
 use super::error::{TransportError, is_unusual_traffic_page, parse_retry_after, snippet};
 use super::request::RequestSpec;
 
@@ -30,6 +31,9 @@ pub async fn send_once(
     payload: &Value,
     visitor: Option<&str>,
 ) -> Result<Value, TransportError> {
+    if block::holds_request() {
+        return Err(TransportError::Blocked);
+    }
     let mut request = http.post(spec.url()).timeout(REQUEST_TIMEOUT).json(payload);
     for (name, value) in spec.headers(visitor) {
         request = request.header(name, value);
@@ -49,7 +53,17 @@ pub async fn send_once(
         Err(_) if status == 429 => String::new(),
         Err(error) => return Err(classify(&error)),
     };
-    read_answer(status, &final_url, retry_after, &body)
+    let answer = read_answer(status, &final_url, retry_after, &body);
+    match &answer {
+        Err(TransportError::Blocked) => block::record_block(),
+        // Any answer from YouTube itself, even a refusal, means the address
+        // is not blocked.
+        Ok(_) | Err(TransportError::Status { .. } | TransportError::NotJson(_)) => {
+            block::record_answer();
+        }
+        Err(_) => {}
+    }
+    answer
 }
 
 /// What a response that arrived in full means.

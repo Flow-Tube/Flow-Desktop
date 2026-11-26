@@ -19,7 +19,6 @@ type SettingsValues = Partial<Record<SettingKey, string>>;
 interface AppSettingsState {
   values: SettingsValues;
   loaded: boolean;
-  loading: boolean;
   lastError: string | null;
   loadSettings: () => Promise<void>;
   /** Adopts values another window already read and validated, so a window that
@@ -50,47 +49,50 @@ const showInvalidValueToast = () => {
   });
 };
 
-export const useAppSettingsStore = create<AppSettingsState>((set, get) => ({
+let pendingLoad: Promise<void> | null = null;
+
+export const useAppSettingsStore = create<AppSettingsState>((set) => ({
   values: defaultValues(),
   loaded: false,
-  loading: false,
   lastError: null,
 
-  loadSettings: async () => {
-    if (get().loading) return;
+  loadSettings: () => {
+    // A caller arriving mid-load waits for it; returning early would let it read defaults.
+    pendingLoad ??= (async () => {
+      set({ lastError: null });
+      try {
+        const entries = await Promise.all(
+          SETTING_DEFINITIONS.map(async (definition) => {
+            const stored = await getSetting(definition.key);
+            const parsed = normalizeSettingValue(definition, stored);
+            if (parsed.usedFallback) {
+              console.warn("Invalid persisted setting; using default", {
+                key: definition.key,
+                reason: parsed.reason,
+                stored,
+              });
+            }
+            return [definition.key, parsed.value] as const;
+          }),
+        );
 
-    set({ loading: true, lastError: null });
-    try {
-      const entries = await Promise.all(
-        SETTING_DEFINITIONS.map(async (definition) => {
-          const stored = await getSetting(definition.key);
-          const parsed = normalizeSettingValue(definition, stored);
-          if (parsed.usedFallback) {
-            console.warn("Invalid persisted setting; using default", {
-              key: definition.key,
-              reason: parsed.reason,
-              stored,
-            });
-          }
-          return [definition.key, parsed.value] as const;
-        }),
-      );
-
-      set({
-        values: Object.fromEntries(entries) as SettingsValues,
-        loaded: true,
-        loading: false,
-        lastError: null,
-      });
-    } catch (error) {
-      console.warn("Failed to load app settings", error);
-      set({
-        values: defaultValues(),
-        loaded: true,
-        loading: false,
-        lastError: error instanceof Error ? error.message : String(error),
-      });
-    }
+        set({
+          values: Object.fromEntries(entries) as SettingsValues,
+          loaded: true,
+          lastError: null,
+        });
+      } catch (error) {
+        console.warn("Failed to load app settings", error);
+        set({
+          values: defaultValues(),
+          loaded: true,
+          lastError: error instanceof Error ? error.message : String(error),
+        });
+      }
+    })().finally(() => {
+      pendingLoad = null;
+    });
+    return pendingLoad;
   },
 
   hydrateSettings: (values) => {

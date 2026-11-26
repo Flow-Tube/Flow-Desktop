@@ -28,7 +28,10 @@ import { useSubscriptionChannelDetails, useSubscriptionFeed } from "../lib/useSu
 import { useBoolPref, usePreference } from "../lib/usePreference";
 import { useShortsEnabled } from "../lib/useShortsContent";
 import { isVideoOfChannel } from "../lib/subscriptionFeedMerge";
-import { sortSubscriptions, type SubscriptionSortMode } from "../lib/subscriptionSort";
+import { channelsByNewestUpload, sortSubscriptions } from "../lib/subscriptionSort";
+import { pinnedFirst } from "../lib/subscriptionPins";
+import { useSubscriptionOrder } from "../lib/useSubscriptionOrder";
+import { useChannelWatchCountsStore } from "../store/useChannelWatchCountsStore";
 import { useUnplayableVideoIds } from "../lib/useUnplayableVideoIds";
 import { useFinishedShortIds, useSubscriptionsHiddenFilter } from "../lib/useWatchedFilter";
 import { splitSubscriptionFeed } from "../lib/subscriptionFeedSplit";
@@ -226,18 +229,29 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
     return visibleChannels.filter((channel) => groupChannelIds.has(channel.id));
   }, [selectedGroup, visibleChannels]);
 
-  const [sortMode, setSortMode] = usePreference(SETTINGS.SUBS_SORT_MODE);
+  const { sortMode, setSortMode, pins, togglePin, reorderPins, manualOrder, reorderManual } = useSubscriptionOrder();
   // Posts is a view of its own beside the groups, which still pick whose posts show, as on Android.
   const [showPostsChip] = useBoolPref(SETTINGS.SUBS_POSTS_CHIP);
   const [showPosts, setShowPosts] = useState(false);
   const postsShown = showPostsChip && showPosts;
+  const newestFirst = useMemo(() => channelsByNewestUpload(videos), [videos]);
+  const watchCounts = useChannelWatchCountsStore((state) => state.counts);
+  // Read again each time the page opens, so videos watched since count.
+  useEffect(() => {
+    if (sortMode === "watched") void useChannelWatchCountsStore.getState().load();
+  }, [sortMode]);
+  const orderSources = useMemo(
+    () => ({ newestFirst, manualOrder, watchCounts: watchCounts ?? undefined }),
+    [newestFirst, manualOrder, watchCounts],
+  );
   const sortedFeedChannels = useMemo(
-    () => sortSubscriptions(feedChannels, sortMode as SubscriptionSortMode, videos),
-    [feedChannels, sortMode, videos],
+    // The channel row puts pins first, as Android's Quick access does.
+    () => pinnedFirst(sortSubscriptions(feedChannels, sortMode, orderSources), pins).channels,
+    [feedChannels, sortMode, orderSources, pins],
   );
   const sortedManageChannels = useMemo(
-    () => sortSubscriptions(visibleChannels, sortMode as SubscriptionSortMode, videos),
-    [visibleChannels, sortMode, videos],
+    () => sortSubscriptions(visibleChannels, sortMode, orderSources),
+    [visibleChannels, sortMode, orderSources],
   );
 
   const channelsWithNewVideos = useMemo(() => {
@@ -472,8 +486,12 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
               <SubscriptionsManage
                 channels={sortedManageChannels}
                 channelDetails={channelDetails}
-                sortMode={sortMode as SubscriptionSortMode}
+                sortMode={sortMode}
                 onSortChange={setSortMode}
+                pins={pins}
+                onTogglePin={togglePin}
+                onReorderPins={reorderPins}
+                onReorderManual={reorderManual}
                 channelNotifications={channelNotifications}
                 onSetNotification={setChannelNotification}
                 onOpenChannel={(channelId) => navigate(`/channel/${channelId}`)}

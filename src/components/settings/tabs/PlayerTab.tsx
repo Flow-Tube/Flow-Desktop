@@ -108,7 +108,7 @@ export function PlayerTab() {
             { value: String(seconds), label: seconds === 0 ? getString('settings_autoplay_delay_none') : getPlural('settings_autoplay_delay_seconds', seconds) }
           ))} />
         </SettingItem>
-        <SettingItem title={getString('settings_loop_video')} description={getString('settings_loop_video_desc')}>
+        <SettingItem title={getString('settings_loop_every_video')} description={getString('settings_loop_every_video_desc')}>
           <ToggleSwitch checked={loop} onChange={setLoop} />
         </SettingItem>
         <SettingItem title={getString('settings_stable_volume')} description={getString('settings_stable_volume_desc')}>

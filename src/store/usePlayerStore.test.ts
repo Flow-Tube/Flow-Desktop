@@ -31,6 +31,17 @@ describe("video fullscreen", () => {
   });
 });
 
+describe("player loop", () => {
+  it("ends when the player is dismissed, as Android clears its player loop", () => {
+    usePlayerStore.getState().setCurrentVideo(video("loop"));
+    usePlayerStore.getState().setRepeatMode("one");
+
+    usePlayerStore.getState().dismissVideoPlayer();
+
+    expect(usePlayerStore.getState().repeatMode).toBe("none");
+  });
+});
+
 describe("enrichCurrentVideo", () => {
   it("keeps the same video object when the patch changes nothing", () => {
     usePlayerStore.getState().setQueue([{ id: "stub", title: "", channelName: "" }], 0);

@@ -1,31 +1,77 @@
-import { useMemo, useState } from "react";
-import { BellOff, BellRing, User } from "lucide-react";
-import { getString } from "../../lib/i18n/index";
+import { useMemo, useState, type ReactNode } from "react";
+import { User } from "lucide-react";
+import { DndContext, closestCenter, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { getString, type StringKey } from "../../lib/i18n/index";
+import { resolveDragMove, useListDragSensors } from "../../lib/sortableList";
+import { pinnedFirst } from "../../lib/subscriptionPins";
 import { channelsOfKind, type SubscriptionKind, type SubscriptionSortMode } from "../../lib/subscriptionSort";
 import type { SubscribedChannel } from "../../store/useSubscriptionStore";
 import type { ChannelDetails } from "../../types/video";
-import { Button } from "../ui/Button";
 import { Chip } from "../ui/Chip";
 import { FilterSelect } from "../ui/FilterSelect";
-import { ChannelAvatarImage, getAvatarUrl } from "./ChannelAvatarImage";
+import { SubscriptionManageRow } from "./SubscriptionManageRow";
 
 interface SubscriptionsManageProps {
+  /** In the chosen sort, pins not yet moved to the top. */
   channels: SubscribedChannel[];
   channelDetails: Record<string, ChannelDetails>;
   sortMode: SubscriptionSortMode;
   onSortChange: (mode: SubscriptionSortMode) => void;
+  pins: string[];
+  onTogglePin: (channelId: string) => void;
+  /** The shown pins in their new order. */
+  onReorderPins: (shown: string[]) => void;
+  /** The shown channels in their new order, while the sort is the viewer's own order. */
+  onReorderManual: (shown: string[]) => void;
   channelNotifications: Record<string, boolean>;
   onSetNotification: (channelId: string, enabled: boolean) => void;
   onOpenChannel: (channelId: string) => void;
   onUnsubscribe: (channelId: string) => void;
 }
 
-/** The followed channels as a list to manage, video channels and music artists apart. */
+const SORT_OPTIONS: Array<{ value: SubscriptionSortMode; label: StringKey }> = [
+  { value: "", label: "subscriptions_sort_default" },
+  { value: "name", label: "subscriptions_sort_name" },
+  { value: "recent", label: "subscriptions_sort_recent" },
+  { value: "watched", label: "subscriptions_sort_most_watched" },
+  { value: "manual", label: "subscriptions_sort_manual" },
+];
+
+/** A run of rows that drag into a new order. */
+function SortableRows({
+  ids,
+  onReorder,
+  children,
+}: {
+  ids: string[];
+  onReorder: (ids: string[]) => void;
+  children: ReactNode;
+}) {
+  const sensors = useListDragSensors();
+  const handleDragEnd = (event: DragEndEvent) => {
+    const move = resolveDragMove(event, ids);
+    if (move) onReorder(arrayMove(ids, move[0], move[1]));
+  };
+  return (
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+        {children}
+      </SortableContext>
+    </DndContext>
+  );
+}
+
+/** The followed channels as a list to manage, video channels and music artists apart, pins on top. */
 export function SubscriptionsManage({
   channels,
   channelDetails,
   sortMode,
   onSortChange,
+  pins,
+  onTogglePin,
+  onReorderPins,
+  onReorderManual,
   channelNotifications,
   onSetNotification,
   onOpenChannel,
@@ -33,6 +79,30 @@ export function SubscriptionsManage({
 }: SubscriptionsManageProps) {
   const [kind, setKind] = useState<SubscriptionKind>("video");
   const shown = useMemo(() => channelsOfKind(channels, kind), [channels, kind]);
+  const { pinned, rest } = useMemo(() => {
+    const ordered = pinnedFirst(shown, pins);
+    return { pinned: ordered.channels.slice(0, ordered.pinnedCount), rest: ordered.channels.slice(ordered.pinnedCount) };
+  }, [shown, pins]);
+  const manual = sortMode === "manual";
+
+  const row = (channel: SubscribedChannel, isPinned: boolean, draggable: boolean) => (
+    <SubscriptionManageRow
+      key={channel.id}
+      channel={channel}
+      details={channelDetails[channel.id]}
+      pinned={isPinned}
+      draggable={draggable}
+      notificationsOn={channelNotifications[channel.id] !== false}
+      onTogglePin={onTogglePin}
+      onSetNotification={onSetNotification}
+      onOpenChannel={onOpenChannel}
+      onUnsubscribe={onUnsubscribe}
+    />
+  );
+
+  const subhead = (label: string) => (
+    <h3 className="mb-2 mt-4 px-1 text-xs font-semibold uppercase tracking-[0.12em] text-chrome-neutral-400">{label}</h3>
+  );
 
   return (
     <section className="pt-2">
@@ -52,68 +122,39 @@ export function SubscriptionsManage({
             label={getString("subscriptions_sort_label")}
             value={sortMode}
             onChange={onSortChange}
-            options={[
-              { value: "", label: getString("subscriptions_sort_default") },
-              { value: "name", label: getString("subscriptions_sort_name") },
-              { value: "recent", label: getString("subscriptions_sort_recent") },
-            ]}
+            options={SORT_OPTIONS.map((option) => ({ value: option.value, label: getString(option.label) }))}
           />
         </div>
       </div>
 
       {shown.length > 0 ? (
-        <div className="divide-y divide-outline-soft rounded-2xl surface-panel">
-          {shown.map((channel) => {
-            const details = channelDetails[channel.id];
-            const avatarUrl = getAvatarUrl(channel.avatarUrl) || getAvatarUrl(details?.avatarUrl);
-            const notifOn = channelNotifications[channel.id] !== false;
-            return (
-              <div
-                key={channel.id}
-                className="flex items-center gap-4 px-4 py-3 transition-colors duration-200 ease-out hover:bg-surface-container"
-              >
-                <button
-                  type="button"
-                  onClick={() => onOpenChannel(channel.id)}
-                  className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-container-high text-sm font-semibold text-chrome-neutral-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                >
-                  {avatarUrl ? <ChannelAvatarImage src={avatarUrl} name={channel.name} /> : channel.name.charAt(0).toUpperCase()}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => onOpenChannel(channel.id)}
-                  className="min-w-0 flex-1 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                >
-                  <div dir="auto" className="line-clamp-1 text-sm font-medium text-chrome-neutral-100">{channel.name}</div>
-                  <div className="line-clamp-1 text-xs text-chrome-neutral-400">
-                    {channel.subscriberCountText || details?.subscriberCountText || getString("subscriptions_subscribers_unavailable")}
-                  </div>
-                </button>
-
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  title={getString(notifOn ? "subscription_notifications_on" : "subscription_notifications_off")}
-                  aria-pressed={notifOn}
-                  className={notifOn ? "text-[var(--color-primary)]" : "text-chrome-neutral-400"}
-                  onClick={() => onSetNotification(channel.id, !notifOn)}
-                >
-                  {notifOn ? <BellRing size={16} /> : <BellOff size={16} />}
-                </Button>
-
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-chrome-red-400 hover:bg-chrome-red-950/30"
-                  onClick={() => onUnsubscribe(channel.id)}
-                >
-                  {getString("subscriptions_unsubscribe")}
-                </Button>
+        <>
+          {pinned.length > 0 && (
+            <>
+              {subhead(getString("subscriptions_pinned"))}
+              <div className="divide-y divide-outline-soft rounded-2xl surface-panel">
+                <SortableRows ids={pinned.map((channel) => channel.id)} onReorder={onReorderPins}>
+                  {pinned.map((channel) => row(channel, true, pinned.length > 1))}
+                </SortableRows>
               </div>
-            );
-          })}
-        </div>
+              {rest.length > 0 && subhead(getString("subscriptions_all_channels"))}
+            </>
+          )}
+          {rest.length > 0 && (
+            <div className="divide-y divide-outline-soft rounded-2xl surface-panel">
+              {manual ? (
+                <SortableRows ids={rest.map((channel) => channel.id)} onReorder={onReorderManual}>
+                  {rest.map((channel) => row(channel, false, rest.length > 1))}
+                </SortableRows>
+              ) : (
+                rest.map((channel) => row(channel, false, false))
+              )}
+            </div>
+          )}
+          {manual && rest.length > 1 && (
+            <p className="mt-3 px-1 text-xs text-chrome-neutral-400">{getString("subscriptions_manual_hint")}</p>
+          )}
+        </>
       ) : (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-chrome-neutral-800 bg-surface-container-low p-8 text-center">
           <User className="mb-3 text-chrome-neutral-600" size={36} />

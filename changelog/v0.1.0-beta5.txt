@@ -22,6 +22,8 @@ LINUX
 - The video no longer goes black for a moment when you seek or change the speed (#696). Flow keeps the last picture on screen, zoomed as it was, until the new one is ready.
 - The Device rows in Settings > About, such as Graphics and Video decoders, can be selected and copied.
 - Settings > About now names the graphics path in use (GPU, GPU through shared memory, or no GPU) and why. The Linux help page explains what each one costs.
+- Settings > Appearance > Paint the page on the processor (Automatic, Processor, Graphics card) lets you choose where the page is drawn without starting Flow from a terminal, including in the Flatpak. Try Processor if pictures go black or flicker while the text stays. Automatic keeps doing it on NVIDIA driver 580 only.
+- The Graphics line in Settings > About and in bug reports says when the page is painted on the processor and names the GPUs Flow can draw with, so a hybrid laptop shows as, for example, GPU amd + nvidia.
 
 HOME AND RECOMMENDATIONS
 - Home no longer redraws every card each time the feed loads more or changes state. Loading a page sends only its new videos, where it used to resend the whole feed at least three times.
@@ -45,6 +47,10 @@ SUBSCRIPTIONS AND CHANNELS
 - Channel pictures on cards, in the side menu and in lists are loaded at the size they are shown, not at 512 pixels each.
 - Cards look up their DeArrow title and channel picture only once they come near the screen, and no longer ask the backend for an image they never show.
 - A post that shares a playlist now shows the playlist as a card you can open, as on Flow for Android. Such posts used to show only their text.
+- The channels in the side rail follow the order chosen in Subscriptions > Manage (by name or by latest upload) instead of the order you followed them in.
+- Pin channels to the top with the pin button in Subscriptions > Manage, by right clicking a channel in the side rail, or from the Subscribed menu on a channel. Pinned channels lead the side rail and the channel row on Subscriptions, always show even past the first seven, and drag into the order you want. Pins sync with Flow for Android.
+- A new Your order sort in Subscriptions > Manage lets you drag every channel into your own order, and the side rail follows it. Channels you follow later go at the end.
+- Subscriptions > Manage has a Most watched sort, as in Flow for Android: the channels you have watched the most videos from come first, in Manage and in the side rail.
 
 CARDS
 - Upload dates on cards, such as "3 days ago", now follow the app's language instead of the computer's, and "Streamed" and "Premiered" can be translated.
@@ -86,6 +92,7 @@ PLAYER
 - Space and Enter on a button you reached with Tab now press that button instead of pausing the video, and the arrow keys on a focused slider or seek bar no longer also seek or change the volume. A button clicked with the mouse still leaves Space to the player, and the same now holds in Shorts and the music player.
 - The buffering circle waits a fifth of a second before it shows, so a short refill after a seek or speed change no longer flashes it.
 - The backings behind the player's buttons, time and chapter pills are darker, so they stay readable over a bright video. Standard goes to 35%, Light to 45% and Off to 55%.
+- Loop in the player (right click, the R key, and a new switch in the gear menu) now repeats the video until you turn it off or close the player, as in Flow for Android. It used to turn on the saved Loop every video setting, which then looped every later video and reached your phone through sync. Loop every video stays in Settings > Player.
 
 COMMENTS
 - Oldest now starts from the oldest comment. YouTube has no oldest-first order, so Flow reads the Newest order to its end, up to about 500 comments on big videos, and turns it around. Past that it says how far it reached.
@@ -135,12 +142,14 @@ SYNC
 - A WebDAV folder address that the server redirects, doesn't have, or doesn't allow writing to now gets its own message, and each failed request is written to the log.
 - When two linked devices share a name, the device list and the remove confirmation add the start of each device id, and each device offered for removal shows when it last synced, so removing one no longer risks removing its twin (#2184).
 - A device removed on the local network now finds out straight away when it is reachable, instead of staying Linked until it next reaches a member. The devices left in the group get the removal at once too.
+- Pinned channels sync between Flow Desktop and Flow for Android. Your own channel order syncs between desktops.
 
 DESKTOP
 - The update dialog lists only what changed since the version you have. Skipped a release? You see each one since yours, newest first. A nightly shows just the runs after the one you have, merged into one list, instead of everything since the last release.
 - The update dialog is redesigned like Flow for Android's update page: the new version and what it replaces, the release date, the notes in sections, and the download running inside the main button. Skip this version and View on GitHub sit in its menu.
 - Flow starts with a smaller first script: Settings, Sync, Recap, your Persona, Extensions, Diagnostics, Import, Support and the welcome screens now load when they are first opened.
 - Cards and panels across the app no longer have an outline. They sit on the same fill as the settings rows, so pages like Your taste, Taste and Appearance look lighter. Dialogs, menus and dividers keep a softer line, and chips, fields and outlined buttons keep theirs.
+- On Linux and Windows, Settings > Appearance > Window buttons can move the minimize, maximize and close buttons into the top bar, which removes the title bar and lets the empty part of the top bar move the window, or hide them for tiling window managers. Onboarding and the full music player keep the title bar when the buttons are in the top bar.
 
 DOWNLOADS
 - The Downloads page no longer redraws every saved video and song four times a second while something is downloading.

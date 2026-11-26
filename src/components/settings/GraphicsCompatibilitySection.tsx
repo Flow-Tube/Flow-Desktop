@@ -6,12 +6,13 @@ import { SettingsGroup } from './SettingsGroup';
 import { getString } from '../../lib/i18n/index';
 import { getGraphicsReport } from '../../lib/graphicsReport';
 import { startGraphicsTrial } from '../../lib/graphicsTrial';
-import { useGraphicsMode, type GraphicsMode } from '../../lib/useGraphicsMode';
+import { useGraphicsMode, usePagePainting, type GraphicsMode, type PagePainting } from '../../lib/useGraphicsMode';
 import { useUiStore } from '../../store/useUiStore';
 
 /** Linux-only: the floor for the startup GPU workarounds (linux_startup.rs), and a way back down from them. */
 export function GraphicsCompatibilitySection() {
   const { mode, setMode, loading } = useGraphicsMode();
+  const painting = usePagePainting();
   const showToast = useUiStore((s) => s.showToast);
   const [canTryFaster, setCanTryFaster] = useState(false);
 
@@ -27,6 +28,11 @@ export function GraphicsCompatibilitySection() {
 
   const handleChange = async (value: string) => {
     const saved = await setMode(value as GraphicsMode);
+    if (!saved) showToast({ variant: 'error', message: getString('settings_graphics_save_failed') });
+  };
+
+  const handlePaintingChange = async (value: string) => {
+    const saved = await painting.setChoice(value as PagePainting);
     if (!saved) showToast({ variant: 'error', message: getString('settings_graphics_save_failed') });
   };
 
@@ -48,6 +54,19 @@ export function GraphicsCompatibilitySection() {
               { value: 'automatic', label: getString('settings_graphics_automatic') },
               { value: 'compatible', label: getString('settings_graphics_compatible') },
               { value: 'safe', label: getString('settings_graphics_safe') },
+            ]}
+          />
+        </SettingItem>
+        <SettingItem title={getString('settings_page_painting')} description={getString('settings_page_painting_desc')}>
+          <Select
+            className="w-44"
+            value={painting.choice}
+            disabled={painting.loading}
+            onChange={(value) => void handlePaintingChange(value)}
+            options={[
+              { value: 'automatic', label: getString('settings_graphics_automatic') },
+              { value: 'processor', label: getString('settings_page_painting_processor') },
+              { value: 'gpu', label: getString('settings_page_painting_gpu') },
             ]}
           />
         </SettingItem>

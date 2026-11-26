@@ -63,11 +63,13 @@ describe("bugReportUrl", () => {
         packaging: "rpm",
         webkitgtk: "2.50.1",
         decoders: "system: H.264 absent, VP9 present",
+        processorPainting: false,
+        gpus: ["amd", "nvidia"],
       }),
     );
     expect(url.searchParams.get("webview")).toBe("WebKitGTK 2.50.1");
     expect(url.searchParams.get("graphics")).toBe(
-      "Tier 1 (NVIDIA on Wayland), GPU through shared memory, Automatic mode, wayland, rpm, WebKitGTK 2.50.1; system: H.264 absent, VP9 present",
+      "Tier 1 (NVIDIA on Wayland), GPU through shared memory, Automatic mode, wayland, rpm, WebKitGTK 2.50.1, GPU amd + nvidia; system: H.264 absent, VP9 present",
     );
   });
 });

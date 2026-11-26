@@ -13,6 +13,9 @@ import { NotificationsBell } from '../notifications/NotificationsBell';
 import { activeTab, useTabsStore } from '../../store/useTabsStore';
 import { ProfileMenuButton } from '../profiles/ProfileMenuButton';
 import { useSidebarDrawer } from '../../lib/useSidebarDrawer';
+import { IS_MACOS_RUNTIME } from '../../lib/platform';
+import { useWindowButtonsPlace } from '../../lib/windowButtons';
+import { WindowButtons } from './WindowButtons';
 
 /** PageWrapper returns focus here when Escape closes the drawer. */
 export const SIDEBAR_MENU_BUTTON_ID = 'sidebar-menu-button';
@@ -38,15 +41,19 @@ export function Topbar() {
     const tab = activeTab(state);
     return tab.index < tab.entries.length - 1;
   });
+  const windowButtons = useWindowButtonsPlace();
+  // Without the title bar, the top bar's empty space moves the window, and a double click maximizes it.
+  const dragRegion = !IS_MACOS_RUNTIME && windowButtons !== 'titlebar' ? { 'data-tauri-drag-region': true } : {};
 
   return (
     <header
+      {...dragRegion}
       className={`sticky top-0 z-40 flex h-14 items-center justify-between border-b border-transparent px-3 ${
         seeThrough ? 'bg-transparent transition-colors duration-200 ease-out' : 'bg-background'
       }`}
     >
       {/* Left */}
-      <div className="flex min-w-0 items-center gap-2">
+      <div {...dragRegion} className="flex min-w-0 items-center gap-2">
         <IconButton
           id={SIDEBAR_MENU_BUTTON_ID}
           aria-label={getString('sidebar_menu')}
@@ -94,12 +101,12 @@ export function Topbar() {
       </div>
 
       {/* Center - Search */}
-      <div className="flex max-w-[720px] flex-1 items-center justify-center px-4 md:px-8">
+      <div {...dragRegion} className="flex max-w-[720px] flex-1 items-center justify-center px-4 md:px-8">
         <TopbarSearch />
       </div>
 
       {/* Right */}
-      <div className="flex items-center gap-2">
+      <div {...dragRegion} className="flex items-center gap-2">
         <NotificationsBell />
         <IconButton
           onClick={() => {
@@ -115,6 +122,11 @@ export function Topbar() {
           <Settings />
         </IconButton>
         <ProfileMenuButton />
+        {!IS_MACOS_RUNTIME && windowButtons === 'topbar' && (
+          <div className="ms-1 border-s border-outline-soft ps-2">
+            <WindowButtons variant="topbar" />
+          </div>
+        )}
       </div>
     </header>
   );

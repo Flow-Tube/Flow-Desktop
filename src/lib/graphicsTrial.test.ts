@@ -13,6 +13,8 @@ const report: GraphicsReport = {
   packaging: "rpm",
   webkitgtk: "2.54.2",
   decoders: null,
+  processorPainting: false,
+  gpus: [],
 };
 
 describe("shouldShowSlowGraphicsNotice", () => {

@@ -16,6 +16,8 @@ type SidebarItemProps = {
   collapsed?: boolean;
   /** Middle-click or Cmd/Ctrl-click on a link: open its page in a background tab. Returns false when none opened. */
   onOpenInNewTab?: (to: string) => boolean;
+  /** Right-click: the point to open a menu at. */
+  onContextMenu?: (point: { x: number; y: number }) => void;
 };
 
 const baseClasses =
@@ -46,6 +48,7 @@ export function SidebarItem({
   rightElement,
   collapsed = false,
   onOpenInNewTab,
+  onContextMenu,
 }: SidebarItemProps) {
   const [tooltipAnchor, setTooltipAnchor] = useState<DOMRect | null>(null);
   const tooltipHandlers = collapsed
@@ -58,6 +61,14 @@ export function SidebarItem({
     }
     : {};
   const tooltip = collapsed && tooltipAnchor ? <RailTooltip label={label} anchor={tooltipAnchor} /> : null;
+  const contextMenuHandler = onContextMenu
+    ? {
+      onContextMenu: (event: React.MouseEvent<HTMLElement>) => {
+        event.preventDefault();
+        onContextMenu({ x: event.clientX, y: event.clientY });
+      },
+    }
+    : {};
 
   if (to) {
     return (
@@ -78,6 +89,7 @@ export function SidebarItem({
           }}
           className={({ isActive: navActive }) => `${baseClasses} ${(isActive ?? navActive) ? activeClasses : idleClasses}`}
           {...tooltipHandlers}
+          {...contextMenuHandler}
         >
           {({ isActive: navActive }) => {
             const active = isActive ?? navActive;

@@ -113,6 +113,19 @@ export async function getWatchProgress(): Promise<WatchProgressRow[]> {
   return invokeBackend<WatchProgressRow[]>("get_watch_progress");
 }
 
+/** Videos and songs watched per channel id, as Flow for Android counts them for Most watched. */
+export async function getWatchedCountByChannel(): Promise<Record<string, number>> {
+  if (!(await isTauriEnv())) {
+    const counts: Record<string, number> = {};
+    for (const record of await getWatchHistory(10000, 0)) {
+      if (record.channelId) counts[record.channelId] = (counts[record.channelId] ?? 0) + 1;
+    }
+    return counts;
+  }
+  const rows = await invokeBackend<Array<[string, number]>>("get_watched_count_by_channel");
+  return Object.fromEntries(rows);
+}
+
 /** The years anything was watched in, newest first. */
 export async function getWatchHistoryYears(): Promise<number[]> {
   if (!(await isTauriEnv())) return [];

@@ -9,6 +9,7 @@ import {
   Monitor,
   Scaling,
   Pause,
+  Repeat1,
   Sliders,
   SlidersHorizontal,
   SunDim,
@@ -120,6 +121,8 @@ interface PlayerSettingsMenuProps {
   onSelectPlaybackRate: (rate: PlaybackRate) => void;
   /** The 360 view of the playing video, or null where the player can't show one (the mini player). */
   spherical?: { shown: boolean; onToggle: (shown: boolean) => void } | null;
+  /** The player's session loop; null where a video can't loop (live streams). */
+  loop?: { on: boolean; onToggle: () => void } | null;
 }
 
 export function PlayerSettingsMenu({
@@ -143,6 +146,7 @@ export function PlayerSettingsMenu({
   playbackRate,
   onSelectPlaybackRate,
   spherical = null,
+  loop = null,
 }: PlayerSettingsMenuProps) {
   const [lookSpeed, setLookSpeed] = useLookSpeed();
   const eqActive = useEqActive();
@@ -298,6 +302,7 @@ export function PlayerSettingsMenu({
               <AudioLines size={18} />,
               () => onPaneChange("audio"),
             )}
+            {loop && toggleRow(getString("player_settings_loop"), loop.on, <Repeat1 size={18} />, loop.onToggle)}
             {settingRow(getString("player_menu_resize"), getString(VIDEO_FIT_LABELS[videoFit]), <Scaling size={18} />, () => onPaneChange("resize"))}
             {settingRow(getString("sleep_timer"), <SleepTimerLabel />, <Pause size={18} />, () => onPaneChange("sleep"))}
             {eqEditorHosted &&

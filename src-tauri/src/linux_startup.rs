@@ -271,6 +271,8 @@ struct StartupState {
     trial: Option<Trial>,
     trial_failed: Option<FailedTrial>,
     schema: u8,
+    /// Settings > Appearance > Paint the page on the processor.
+    painting: crate::linux_nvidia::PagePainting,
 }
 
 /// What this machine and this launch ask for, read once before GTK starts.
@@ -1084,6 +1086,25 @@ pub fn set_graphics_mode(identifier: &str, mode: GraphicsMode) -> std::io::Resul
         .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "no data directory"))?;
     let mut state = load_state(&dir);
     state.mode = mode;
+    write_state(&dir, &state)
+}
+
+/// The page painting choice for this launch, read before the web view exists.
+#[cfg(target_os = "linux")]
+pub fn page_painting(identifier: &str) -> crate::linux_nvidia::PagePainting {
+    data_dir(identifier).map_or_else(Default::default, |dir| load_state(&dir).painting)
+}
+
+/// Takes effect on the next launch: the web view reads it once at start.
+#[cfg(target_os = "linux")]
+pub fn set_page_painting(
+    identifier: &str,
+    painting: crate::linux_nvidia::PagePainting,
+) -> std::io::Result<()> {
+    let dir = data_dir(identifier)
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "no data directory"))?;
+    let mut state = load_state(&dir);
+    state.painting = painting;
     write_state(&dir, &state)
 }
 

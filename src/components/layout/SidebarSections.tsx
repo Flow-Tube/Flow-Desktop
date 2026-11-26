@@ -1,8 +1,11 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { ChevronDown, ChevronRight, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronRight, ChevronUp, Pin, PinOff } from 'lucide-react';
 import type { SubscribedChannel } from '../../store/useSubscriptionStore';
 import { SidebarItem } from '../ui/SidebarItem';
+import { AnchoredPortalMenu, type MenuAnchor } from '../ui/AnchoredPortalMenu';
+import { growFromPoint } from '../../lib/direction';
+import { useSubscriptionOrder } from '../../lib/useSubscriptionOrder';
 import { getString } from '../../lib/i18n/index';
 import { openInNewTab } from '../../lib/openTarget';
 import { upgradeAvatarUrl, avatarSize } from '../../lib/thumbnails';
@@ -93,47 +96,79 @@ export function SectionHeader({
 
 export function SubscriptionsNav({
   subscriptions,
+  pinnedCount,
   subsExpanded,
   onToggleExpanded,
   closeOverlay,
 }: {
   subscriptions: SubscribedChannel[];
+  /** How many of `subscriptions`, from the start, are pinned. Pins always show. */
+  pinnedCount: number;
   subsExpanded: boolean;
   onToggleExpanded: () => void;
   closeOverlay?: () => void;
 }) {
+  const { togglePin } = useSubscriptionOrder();
+  const [menu, setMenu] = useState<{ channelId: string; pinned: boolean; anchor: MenuAnchor } | null>(null);
+  const limit = Math.max(SUBS_DEFAULT_LIMIT, pinnedCount);
   const visibleSubs = useMemo(
-    () => (subsExpanded ? subscriptions : subscriptions.slice(0, SUBS_DEFAULT_LIMIT)),
-    [subscriptions, subsExpanded],
+    () => (subsExpanded ? subscriptions : subscriptions.slice(0, limit)),
+    [subscriptions, subsExpanded, limit],
   );
   useSubscriptionAvatarHydration(visibleSubs);
 
   return (
     <nav className="mt-1 flex flex-col gap-1.5">
       <div className={`flex flex-col gap-1.5 ${subsExpanded ? 'max-h-[45vh] overflow-y-auto' : ''}`}>
-        {visibleSubs.map((channel) => (
-          <SidebarItem
-            key={channel.id}
-            to={`/channel/${channel.id}`}
-            icon={
-              channel.avatarUrl ? (
-                <SidebarAvatar src={channel.avatarUrl} />
-              ) : (
-                <div className="w-6 h-6 rounded-full bg-surface-container-high" />
-              )
-            }
-            label={channel.name}
-            onClick={closeOverlay}
-            onOpenInNewTab={openInNewTab}
-          />
-        ))}
+        {visibleSubs.map((channel, index) => {
+          const pinned = index < pinnedCount;
+          return (
+            <SidebarItem
+              key={channel.id}
+              to={`/channel/${channel.id}`}
+              icon={
+                channel.avatarUrl ? (
+                  <SidebarAvatar src={channel.avatarUrl} />
+                ) : (
+                  <div className="w-6 h-6 rounded-full bg-surface-container-high" />
+                )
+              }
+              label={channel.name}
+              rightElement={pinned ? <Pin aria-label={getString('subscriptions_pinned')} className="h-3.5 w-3.5 text-chrome-neutral-400" /> : undefined}
+              onClick={closeOverlay}
+              onOpenInNewTab={openInNewTab}
+              onContextMenu={(point) => setMenu({ channelId: channel.id, pinned, anchor: { top: point.y, ...growFromPoint(point.x) } })}
+            />
+          );
+        })}
       </div>
-      {subscriptions.length > SUBS_DEFAULT_LIMIT && (
+      {subscriptions.length > limit && (
         <SidebarItem
           icon={subsExpanded ? <ChevronUp className="h-5 w-5 shrink-0" /> : <ChevronDown className="h-5 w-5 shrink-0" />}
           label={subsExpanded ? getString('sidebar_show_less') : getString('sidebar_show_more')}
           onClick={onToggleExpanded}
         />
+      )}
+      {menu && (
+        <AnchoredPortalMenu
+          anchor={menu.anchor}
+          onClose={() => setMenu(null)}
+          className="z-[70] w-56 overflow-hidden rounded-xl border border-outline-soft bg-surface-container-high py-1.5"
+        >
+          <button
+            type="button"
+            onClick={() => {
+              setMenu(null);
+              togglePin(menu.channelId);
+            }}
+            className="flex w-full items-center gap-3 px-3.5 py-2.5 text-start text-sm text-chrome-zinc-300 transition-colors duration-200 ease-out hover:bg-chrome-zinc-800 hover:text-chrome-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+          >
+            <span className="grid h-4 w-4 shrink-0 place-items-center text-chrome-neutral-400">
+              {menu.pinned ? <PinOff size={16} /> : <Pin size={16} />}
+            </span>
+            <span className="min-w-0 flex-1 truncate">{getString(menu.pinned ? 'subscriptions_unpin' : 'subscriptions_pin')}</span>
+          </button>
+        </AnchoredPortalMenu>
       )}
     </nav>
   );

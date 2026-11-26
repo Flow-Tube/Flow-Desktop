@@ -133,6 +133,46 @@ describe("prefetchStreamInfo", () => {
 
     await expect(mod.resolveStreamInfo("a")).rejects.toThrow(/age-restricted/);
   });
+
+  it("asks as background work, which a network block holds", async () => {
+    const getStreamInfo = vi.fn().mockResolvedValue(makeInfo("a"));
+    const mod = await loadModule(getStreamInfo);
+
+    mod.prefetchStreamInfo("a");
+    await mod.resolveStreamInfo("a");
+
+    expect(getStreamInfo).toHaveBeenCalledWith("a", false, true);
+  });
+
+  it("still asks once for the player when a joined prefetch was held", async () => {
+    const held = deferred<StreamInfo>();
+    const getStreamInfo = vi
+      .fn()
+      .mockReturnValueOnce(held.promise)
+      .mockResolvedValueOnce(makeInfo("a"));
+    const mod = await loadModule(getStreamInfo);
+
+    mod.prefetchStreamInfo("a");
+    const play = mod.resolveStreamInfo("a");
+    held.reject({ kind: "networkWall", message: "player: Google flagged unusual traffic from this network" });
+
+    await expect(play).resolves.toEqual(makeInfo("a"));
+    expect(getStreamInfo).toHaveBeenCalledTimes(2);
+    expect(getStreamInfo).toHaveBeenLastCalledWith("a");
+  });
+
+  it("passes on any other failure of a joined prefetch", async () => {
+    const failed = deferred<StreamInfo>();
+    const getStreamInfo = vi.fn().mockReturnValueOnce(failed.promise);
+    const mod = await loadModule(getStreamInfo);
+
+    mod.prefetchStreamInfo("a");
+    const play = mod.resolveStreamInfo("a");
+    failed.reject({ kind: "ageRestricted", message: "Sign in to confirm your age" });
+
+    await expect(play).rejects.toMatchObject({ kind: "ageRestricted" });
+    expect(getStreamInfo).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("cross-window stream priming", () => {

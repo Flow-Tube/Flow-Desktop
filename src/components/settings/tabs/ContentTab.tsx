@@ -10,6 +10,7 @@ import { GRID_COLUMN_OPTIONS, GRID_COLUMNS_DEFAULT } from '../../../lib/useGridC
 import { useHideWatched } from '../../../lib/useWatchedFilter';
 import { BlockedKeywordsPanel } from '../BlockedKeywordsPanel';
 import { LibrarySectionsGroup } from '../LibrarySectionsGroup';
+import { YouTubeLinksGroup } from '../YouTubeLinksGroup';
 import { startPageChoices, startPagePath, START_PAGES } from '../../../lib/startPage';
 import { HOVER_PREVIEW_MODES, HOVER_PREVIEW_MODE_LABELS, useHoverPreviewMode } from '../../../lib/hoverPreviewMode';
 
@@ -177,6 +178,8 @@ export function ContentTab() {
       <SettingsGroup title={getString('music')}>
         <SettingItem title={getString('settings_show_music_content')} description={getString('settings_show_music_content_desc')}><ToggleSwitch checked={musicContent} onChange={setMusicContent} /></SettingItem>
       </SettingsGroup>
+
+      <YouTubeLinksGroup />
 
       <LibrarySectionsGroup />
 

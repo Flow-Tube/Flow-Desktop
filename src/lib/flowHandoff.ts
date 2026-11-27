@@ -14,6 +14,25 @@ export type Handoff =
   | { action: "page"; route: string }
   | { action: "channel"; url: string; music: boolean };
 
+/** YouTube's start times: `90`, `90s`, `1m30s`, `1h2m3s`. */
+const START_TIME = /^(?:(\d{1,4})h)?(?:(\d{1,5})m)?(?:(\d{1,9})s?)?$/;
+
+/** The second a YouTube link starts at (`t=`, or `start=` on an embed), if it names one. */
+export function linkStartSeconds(link: string): number | undefined {
+  let params: URLSearchParams;
+  try {
+    params = new URL(link).searchParams;
+  } catch {
+    return undefined;
+  }
+  const raw = params.get("t") ?? params.get("start");
+  const match = raw ? START_TIME.exec(raw) : null;
+  if (!match) return undefined;
+  const [, hours = "0", minutes = "0", seconds = "0"] = match;
+  const total = Number(hours) * 3600 + Number(minutes) * 60 + Number(seconds);
+  return total > 0 ? total : undefined;
+}
+
 /** Where a `flow://open?url=` link leads, or null for any link Flow has no page for. */
 function openHandoff(link: string): Handoff | null {
   if (!WEB_LINK.test(link)) return null;
@@ -22,7 +41,7 @@ function openHandoff(link: string): Handoff | null {
   if (!destination) return null;
   switch (destination.kind) {
     case "video":
-      return { action: "watch", v: destination.videoId, list: destination.playlistId ?? undefined };
+      return { action: "watch", v: destination.videoId, t: linkStartSeconds(link), list: destination.playlistId ?? undefined };
     case "music":
       return { action: "music", v: destination.videoId, list: destination.playlistId ?? undefined };
     case "page":

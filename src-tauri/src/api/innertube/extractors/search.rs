@@ -429,6 +429,9 @@ fn suggest_url(query: &str, region: Option<&str>, language: &str) -> String {
     )
 }
 
+/// The suggest host answers HTTP 400 to anything longer (tested 2026-11-27), so Flow doesn't ask.
+pub(crate) const MAX_SUGGEST_CHARS: usize = 100;
+
 /// How long a suggestion request may take. Past this the user has typed on, and
 /// the rows already on screen are better than a late answer.
 pub(crate) const SUGGESTION_TIMEOUT: Duration = Duration::from_secs(2);
@@ -470,6 +473,9 @@ impl InnertubeClient {
         query: &str,
         region: Option<&str>,
     ) -> AppResult<Vec<SearchSuggestion>> {
+        if query.chars().count() > MAX_SUGGEST_CHARS {
+            return Ok(Vec::new());
+        }
         let url = suggest_url(query, region, &content_language());
         let started = Instant::now();
 

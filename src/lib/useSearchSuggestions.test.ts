@@ -64,6 +64,19 @@ describe("useSearchSuggestions", () => {
     expect(latest?.musicItems).toEqual([]);
   });
 
+  it("stops asking YouTube past 100 characters, which it refuses, and keeps asking YouTube Music", async () => {
+    await suggest(true, "a".repeat(100));
+    expect(api.getSearchSuggestions).toHaveBeenCalledTimes(1);
+    expect(latest?.suggestions).toHaveLength(1);
+
+    const question = "a".repeat(101);
+    await suggest(true, question);
+    expect(api.getSearchSuggestions).toHaveBeenCalledTimes(1);
+    expect(api.getMusicSearchSuggestions).toHaveBeenCalledWith(question);
+    expect(latest?.suggestions).toEqual([]);
+    expect(latest?.musicItems).toHaveLength(1);
+  });
+
   it("keeps the request for a word when only a trailing space is typed", async () => {
     let answer: (rows: unknown[]) => void = () => undefined;
     api.getSearchSuggestions.mockReset().mockReturnValue(new Promise((resolve) => (answer = resolve)));

@@ -42,6 +42,8 @@ SEARCH
 - Clear all beside your recent searches, in the search box and on the search page, now asks first, as Settings already did. One click used to remove every saved search with its filters.
 - Search, channels, Explore, Home and the music pages load again by themselves when the connection comes back, once per reconnect. They used to stay on their error until you clicked Retry.
 - The music pages say when you are offline, rate limited or stopped by a bot check, instead of showing the error text from YouTube's servers.
+- Long searches work, such as a full homework question pasted into the search box (#778). Flow refused anything over 200 characters. YouTube searches now take up to 3,000 characters and YouTube Music searches up to 5,000, and any text past that is left out instead of showing an error.
+- Search suggestions stop after 100 characters, where YouTube's suggestion server stops answering, instead of asking it on every key.
 
 SUBSCRIPTIONS AND CHANNELS
 - Subscriptions opens on its first 120 videos and adds more as you scroll, instead of drawing up to 1500 cards at once. Coming back to the page returns to where you were.

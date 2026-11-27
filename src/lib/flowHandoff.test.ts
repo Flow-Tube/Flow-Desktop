@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { handoffToOpen, parseFlowUrl } from "./flowHandoff";
+import { handoffToOpen, linkStartSeconds, parseFlowUrl } from "./flowHandoff";
 import { SETTINGS } from "./settings/schema";
 import { useAppSettingsStore } from "../store/useAppSettingsStore";
 
@@ -11,6 +11,12 @@ describe("flow://open", () => {
   it("opens a video", () => {
     expect(open(`https://www.youtube.com/watch?v=${VIDEO}`)).toEqual({ action: "watch", v: VIDEO, list: undefined });
     expect(open(`https://youtu.be/${VIDEO}`)).toEqual({ action: "watch", v: VIDEO, list: undefined });
+  });
+
+  it("starts a video at the time its link names", () => {
+    expect(open(`https://youtu.be/${VIDEO}?t=42`)).toEqual({ action: "watch", v: VIDEO, t: 42 });
+    expect(open(`https://www.youtube.com/watch?v=${VIDEO}&t=1m30s&list=PLabcdefghij`)).toEqual({ action: "watch", v: VIDEO, t: 90, list: "PLabcdefghij" });
+    expect(open(`https://www.youtube.com/embed/${VIDEO}?start=75`)).toEqual({ action: "watch", v: VIDEO, t: 75 });
   });
 
   it("plays a video in the playlist its link names", () => {
@@ -135,5 +141,26 @@ describe("the older verbs", () => {
     expect(parseFlowUrl(`flow://watch?v=${VIDEO}&list=bad!list`)).toMatchObject({ list: undefined });
     expect(parseFlowUrl(`flow://watch?v=${VIDEO}&t=abc`)).toMatchObject({ t: undefined });
     expect(parseFlowUrl("flow://watch?v=bad")).toBeNull();
+  });
+});
+
+describe("linkStartSeconds", () => {
+  const at = (t: string) => linkStartSeconds(`https://www.youtube.com/watch?v=${VIDEO}&t=${t}`);
+
+  it("reads every form YouTube writes", () => {
+    expect(at("90")).toBe(90);
+    expect(at("90s")).toBe(90);
+    expect(at("1m30s")).toBe(90);
+    expect(at("2m")).toBe(120);
+    expect(at("1h2m3s")).toBe(3723);
+    expect(at("1h")).toBe(3600);
+  });
+
+  it("ignores a start of zero and anything that isn't a time", () => {
+    for (const t of ["0", "0s", "", "abc", "1x", "-5", "1.5", "s", "1m30s;", "12345678901"]) {
+      expect(at(t), t).toBeUndefined();
+    }
+    expect(linkStartSeconds(`https://www.youtube.com/watch?v=${VIDEO}`)).toBeUndefined();
+    expect(linkStartSeconds("not a link")).toBeUndefined();
   });
 });

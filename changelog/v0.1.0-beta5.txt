@@ -157,6 +157,9 @@ DESKTOP
 - On Linux and Windows, Settings > Appearance > Window buttons can move the minimize, maximize and close buttons into the top bar, which removes the title bar and lets the empty part of the top bar move the window, or hide them for tiling window managers. Onboarding and the full music player keep the title bar when the buttons are in the top bar.
 - On macOS 26 and later, the Flow icon now sits on its own white rounded square instead of the gray plate macOS added behind it, in the Dock, Finder and Launchpad. Windows and Linux keep the logo on its own.
 - Flow Nightly has its own icon, as on Flow for Android: the logo with a moon badge, on an indigo square on macOS. Its Windows notifications show that icon too. Flow and Flow Beta keep the usual one.
+- YouTube links you click in your browser can open in Flow (#777). Turn on Open YouTube links in Flow in the Flow browser extension: videos, Shorts and songs then open here, the window comes to the front, and the browser tab goes back to where you were. Settings > Content > Links has the download link.
+- For Safari and other browsers without the extension, Settings > Content > Links has an Open in Flow bookmark that sends the YouTube page you are on to Flow.
+- A YouTube link opened in Flow now starts at the time it points to, such as youtu.be/...?t=90 or &t=1m30s.
 
 DOWNLOADS
 - The Downloads page no longer redraws every saved video and song four times a second while something is downloading.

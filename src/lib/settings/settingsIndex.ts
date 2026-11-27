@@ -232,6 +232,8 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     { title: "settings_shorts_playback_mode", summary: "settings_shorts_playback_mode_desc" },
     { title: "settings_shorts_auto_scroll_seconds" },
     { title: "settings_show_music_content", summary: "settings_show_music_content_desc", keywords: ["hide music", "no music", "youtube music"] },
+    { title: "settings_open_links", summary: "settings_open_links_desc", keywords: ["links", "browser", "extension", "default", "url"] },
+    { title: "settings_open_in_flow_bookmark", summary: "settings_open_in_flow_bookmark_desc", keywords: ["bookmarklet", "safari", "links", "browser"] },
     { title: "settings_group_library_sections", keywords: ["library", "hide", "history", "playlists", "albums", "likes", "downloads"] },
     { title: "settings_start_page", summary: "settings_start_page_desc" },
     { title: "settings_tabs_enabled", summary: "settings_tabs_enabled_desc" },

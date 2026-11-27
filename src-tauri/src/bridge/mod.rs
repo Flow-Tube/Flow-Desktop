@@ -4,7 +4,8 @@
 //! video off to a *running* Flow instance silently (no OS "Open Flow?" prompt)
 //! and detect whether Flow is installed at all (`/flow/ping`). It is the
 //! sibling of the `flow://` deep link: the deep link *launches* Flow when it is
-//! closed; this server serves it while it is already open.
+//! closed; this server serves it while it is already open. `/flow/open` takes a
+//! whole `YouTube` link, sent while the extension's link switch is on.
 //!
 //! Both transports converge on the same frontend handler — this server just
 //! translates a validated request into the equivalent `flow://…` URL and emits
@@ -21,6 +22,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tracing::{debug, info, warn};
 
 use crate::security::validation::{validate_playlist_id, validate_video_id};
+use crate::services::shell_pages::open_link_handoff;
 
 /// Ports probed in order — must match `BRIDGE_PORTS` in the extension.
 const BRIDGE_PORTS: [u16; 3] = [47893, 47894, 47895];
@@ -111,12 +113,20 @@ async fn handle_connection(mut socket: TcpStream, app: &AppHandle) -> std::io::R
 
     match req.path.as_str() {
         "/flow/ping" => {
+            // `open` tells the extension this Flow takes whole links on `/flow/open`.
             let body = format!(
-                r#"{{"app":"flow","version":"{}"}}"#,
+                r#"{{"app":"flow","version":"{}","open":true}}"#,
                 env!("CARGO_PKG_VERSION")
             );
             write_response(&mut socket, 200, "OK", cors, &body).await
         }
+        "/flow/open" => match open_url_from_query(&req.query) {
+            Some(url) => {
+                dispatch(app, url);
+                write_response(&mut socket, 200, "OK", cors, r#"{"ok":true}"#).await
+            }
+            None => write_response(&mut socket, 400, "Bad Request", cors, r#"{"ok":false}"#).await,
+        },
         "/flow/watch" | "/flow/download" | "/flow/music" | "/flow/music-download" => {
             let action = &req.path["/flow/".len()..];
             match build_handoff_url(action, &req.query) {
@@ -182,6 +192,13 @@ fn build_handoff_url(action: &str, query: &str) -> Option<String> {
         }
     }
     Some(url)
+}
+
+/// The `flow://open` link for the `url` a `/flow/open` request carries, when it is a `YouTube`
+/// link Flow opens.
+fn open_url_from_query(query: &str) -> Option<String> {
+    let (_, link) = query_pairs(query).find(|(key, _)| *key == "url")?;
+    open_link_handoff(&link)
 }
 
 fn query_pairs(query: &str) -> impl Iterator<Item = (&str, String)> {
@@ -342,6 +359,43 @@ mod tests {
             build_handoff_url("music-download", "v=dQw4w9WgXcQ").unwrap(),
             "flow://music-download?v=dQw4w9WgXcQ"
         );
+    }
+
+    #[test]
+    fn opens_a_whole_youtube_link() {
+        let url = open_url_from_query(
+            "url=https%3A%2F%2Fwww.youtube.com%2Fshorts%2FdQw4w9WgXcQ%3Ffeature%3Dshare",
+        )
+        .unwrap();
+        let parsed = reqwest::Url::parse(&url).unwrap();
+        assert_eq!(parsed.scheme(), "flow");
+        assert_eq!(parsed.host_str(), Some("open"));
+        assert_eq!(
+            parsed.query_pairs().next().unwrap().1,
+            "https://www.youtube.com/shorts/dQw4w9WgXcQ?feature=share"
+        );
+        assert!(
+            open_url_from_query("url=https%3A%2F%2Fmusic.youtube.com%2Fwatch%3Fv%3DdQw4w9WgXcQ")
+                .is_some()
+        );
+        assert!(open_url_from_query("url=https%3A%2F%2Fyoutu.be%2FdQw4w9WgXcQ%3Ft%3D42").is_some());
+    }
+
+    #[test]
+    fn refuses_links_flow_does_not_open() {
+        for query in [
+            "",
+            "url=",
+            "v=dQw4w9WgXcQ",
+            "url=https%3A%2F%2Fevil.example%2Fwatch%3Fv%3DdQw4w9WgXcQ",
+            "url=https%3A%2F%2Fwww.youtube.com.evil.example%2Fwatch",
+            "url=https%3A%2F%2Fuser%3Apass%40youtube.com%2Fwatch",
+            "url=javascript%3Aalert(1)",
+            "url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3Da%20b",
+            "url=https%253A%252F%252Fwww.youtube.com%252Fwatch",
+        ] {
+            assert!(open_url_from_query(query).is_none(), "{query}");
+        }
     }
 
     #[test]

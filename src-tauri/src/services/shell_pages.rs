@@ -106,11 +106,18 @@ pub fn route_from_args<S: AsRef<str>>(args: impl IntoIterator<Item = S>) -> Opti
 /// The first link among the arguments Flow would open, as the `flow://open` link the frontend's
 /// handoff reads. Anything else on the command line is ignored.
 pub fn link_from_args<S: AsRef<str>>(args: impl IntoIterator<Item = S>) -> Option<String> {
-    let link = args
-        .into_iter()
-        .find(|arg| is_openable_link(arg.as_ref()))?;
+    args.into_iter()
+        .find_map(|arg| open_link_handoff(arg.as_ref()))
+}
+
+/// The `flow://open` link the frontend's handoff reads for `link`, or `None` for a link Flow
+/// doesn't open. The command line and the browser extension's bridge both hand links over this way.
+pub fn open_link_handoff(link: &str) -> Option<String> {
+    if !is_openable_link(link) {
+        return None;
+    }
     let mut handoff = reqwest::Url::parse("flow://open").ok()?;
-    handoff.query_pairs_mut().append_pair("url", link.as_ref());
+    handoff.query_pairs_mut().append_pair("url", link);
     Some(handoff.into())
 }
 

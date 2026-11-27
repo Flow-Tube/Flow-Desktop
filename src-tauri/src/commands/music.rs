@@ -27,7 +27,7 @@ use crate::models::music_pages::{
 };
 use crate::models::music_stream::{MusicAudioQuality, MusicStreamInfo};
 use crate::music_brain::store::MusicBrainStore;
-use crate::security::validation::{validate_search_query, validate_video_id};
+use crate::security::validation::{MAX_MUSIC_SEARCH_CHARS, search_query, validate_video_id};
 use crate::services::music_service::{Freshness, MusicService};
 use crate::streaming::hls;
 use crate::streaming::images::{image_content_type, is_local_host, proxyable_image_url};
@@ -166,7 +166,7 @@ pub async fn search_music_typed(
     filter: String,
     music: State<'_, MusicService>,
 ) -> CmdResult<MusicSearchResponse> {
-    validate_search_query(&query).map_err(ErrorResponse::from)?;
+    let query = search_query(&query, MAX_MUSIC_SEARCH_CHARS).map_err(ErrorResponse::from)?;
     music
         .search(&query, &filter)
         .await
@@ -189,7 +189,7 @@ pub async fn get_music_search_summary(
     query: String,
     music: State<'_, MusicService>,
 ) -> CmdResult<SearchSummaryPage> {
-    validate_search_query(&query).map_err(ErrorResponse::from)?;
+    let query = search_query(&query, MAX_MUSIC_SEARCH_CHARS).map_err(ErrorResponse::from)?;
     music
         .search_summary(&query)
         .await

@@ -18,8 +18,8 @@ use crate::models::video::{
     VideoMetadata, VideoSummary,
 };
 use crate::security::validation::{
-    validate_browse_id, validate_channel_id, validate_page_token, validate_playlist_id,
-    validate_search_query, validate_video_id,
+    MAX_SEARCH_CHARS, search_query, validate_browse_id, validate_channel_id, validate_page_token,
+    validate_playlist_id, validate_video_id,
 };
 use crate::services::recommendation_service::RecommendationService;
 use crate::services::subscription_feed::{self, SubscriptionRssFeed};
@@ -302,14 +302,15 @@ pub fn build_synthetic_dash_manifest(stream_info: &StreamInfo) -> Option<String>
 
 #[tauri::command]
 pub async fn search_videos(
-    request: SearchVideosRequest,
+    mut request: SearchVideosRequest,
     youtube_service: State<'_, YoutubeService>,
     pool: State<'_, sqlx::SqlitePool>,
 ) -> Result<SearchVideosResponse, ErrorResponse> {
     if let Some(page_token) = request.page_token.as_deref() {
         validate_page_token(page_token).map_err(ErrorResponse::from)?;
     } else {
-        validate_search_query(&request.query).map_err(ErrorResponse::from)?;
+        request.query =
+            search_query(&request.query, MAX_SEARCH_CHARS).map_err(ErrorResponse::from)?;
     }
 
     let response = youtube_service
@@ -757,9 +758,10 @@ pub async fn get_channel_tab(
     if let Some(token) = page_token.as_deref() {
         validate_page_token(token).map_err(ErrorResponse::from)?;
     }
-    if let Some(ref q) = query {
-        validate_search_query(q).map_err(ErrorResponse::from)?;
-    }
+    let query = query
+        .map(|q| search_query(&q, MAX_SEARCH_CHARS))
+        .transpose()
+        .map_err(ErrorResponse::from)?;
 
     youtube_service
         .get_channel_tab(&channel_id, params, page_token, query)

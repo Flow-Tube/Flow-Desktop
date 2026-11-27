@@ -2,20 +2,23 @@ use std::path::{Path, PathBuf};
 
 use crate::errors::{AppError, AppResult};
 
-pub fn validate_search_query(query: &str) -> AppResult<()> {
-    let trimmed = query.trim();
+/// The longest search Flow sends to `YouTube`, which answered 3,000 characters in testing (2026-11-27).
+pub const MAX_SEARCH_CHARS: usize = 3000;
+/// The longest `YouTube` Music search Flow sends. It answered 5,000 characters in the same test.
+pub const MAX_MUSIC_SEARCH_CHARS: usize = 5000;
 
+/// The search to send for `query`: trimmed, and cut to `max_chars` rather than refused, so a
+/// long question still finds results.
+pub fn search_query(query: &str, max_chars: usize) -> AppResult<String> {
+    let trimmed = query.trim();
     if trimmed.is_empty() {
         return Err(AppError::Validation("Search query cannot be empty".into()));
     }
-
-    if trimmed.chars().count() > 200 {
-        return Err(AppError::Validation(
-            "Search query cannot exceed 200 characters".into(),
-        ));
-    }
-
-    Ok(())
+    let end = trimmed
+        .char_indices()
+        .nth(max_chars)
+        .map_or(trimmed.len(), |(index, _)| index);
+    Ok(trimmed[..end].trim_end().to_owned())
 }
 
 pub fn validate_video_id(video_id: &str) -> AppResult<()> {
@@ -229,11 +232,39 @@ pub fn validate_local_media_id(id: &str) -> AppResult<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        is_openable_link, validate_app_route, validate_external_url, validate_library_file,
-        validate_library_folder, validate_local_media_id,
+        is_openable_link, search_query, validate_app_route, validate_external_url,
+        validate_library_file, validate_library_folder, validate_local_media_id,
     };
     use crate::errors::AppResult;
     use std::path::{Path, PathBuf};
+
+    #[test]
+    fn a_long_search_is_cut_instead_of_refused() {
+        let question = "a".repeat(3001);
+        assert_eq!(search_query(&question, 3000).unwrap().chars().count(), 3000);
+        assert_eq!(
+            search_query(&"a".repeat(3000), 3000).unwrap(),
+            "a".repeat(3000)
+        );
+        assert_eq!(search_query("  lofi beats \n", 3000).unwrap(), "lofi beats");
+        assert_eq!(search_query("ab   cd", 3).unwrap(), "ab");
+    }
+
+    #[test]
+    fn a_search_is_cut_between_characters() {
+        let text = "\u{444}\u{44b}\u{432}\u{1F600}\u{6F22}\u{5B57}";
+        assert_eq!(
+            search_query(text, 4).unwrap(),
+            "\u{444}\u{44b}\u{432}\u{1F600}"
+        );
+        assert_eq!(search_query(text, 6).unwrap(), text);
+    }
+
+    #[test]
+    fn an_empty_search_is_refused() {
+        assert!(search_query("", 3000).is_err());
+        assert!(search_query(" \t\n", 3000).is_err());
+    }
 
     #[test]
     fn only_youtube_and_its_front_ends_are_openable_links() {

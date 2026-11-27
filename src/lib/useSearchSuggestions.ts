@@ -3,6 +3,7 @@ import { getSearchSuggestions, warmSearchSuggestions } from "./api/youtube";
 import { getMusicSearchSuggestions } from "./api/music";
 import type { SearchSuggestion } from "../types/video";
 import type { YTItem } from "../types/music";
+import { MAX_SUGGEST_CHARS, searchLength } from "./searchQuery";
 
 const DEBOUNCE_MS = 250;
 const MIN_QUERY_LENGTH = 2;
@@ -52,12 +53,16 @@ export function useSearchSuggestions(
     if (!musicEnabled) setMusicItems([]);
     // A failed request leaves the rows on screen: they are closer to the text than an
     // empty list, and the next keystroke asks again.
+    const asksYoutube = searchLength(q) <= MAX_SUGGEST_CHARS;
+    if (!asksYoutube) setSuggestions([]);
     const timer = setTimeout(() => {
-      getSearchSuggestions(q, region)
-        .then((results) => {
-          if (current) setSuggestions(results);
-        })
-        .catch((error) => console.warn("Suggestions error", error));
+      if (asksYoutube) {
+        getSearchSuggestions(q, region)
+          .then((results) => {
+            if (current) setSuggestions(results);
+          })
+          .catch((error) => console.warn("Suggestions error", error));
+      }
       if (!musicEnabled) return;
       getMusicSearchSuggestions(q)
         .then((results) => {

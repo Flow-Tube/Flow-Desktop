@@ -25,8 +25,8 @@ export function SearchEmptyState({
   return (
     <div className="flex flex-col items-center justify-center gap-1 rounded-3xl border border-dashed border-outline-variant px-6 py-20 text-center">
       <Icon className={cx('mb-3', tone === 'error' ? 'text-chrome-red-400/70' : 'text-chrome-neutral-700')} size={48} />
-      <h3 className="font-semibold text-chrome-neutral-200">{title}</h3>
-      <p className="max-w-sm text-sm text-chrome-neutral-500">{body}</p>
+      <h3 className="line-clamp-2 max-w-2xl break-words font-semibold text-chrome-neutral-200">{title}</h3>
+      <p className="line-clamp-4 max-w-sm break-words text-sm text-chrome-neutral-500">{body}</p>
       {children && <div className="mt-4 flex flex-wrap items-center justify-center gap-2">{children}</div>}
     </div>
   );

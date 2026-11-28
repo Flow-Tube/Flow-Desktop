@@ -31,13 +31,26 @@ describe("SearchHistoryGroup", () => {
     host.remove();
   });
 
-  it("forgets the recap's stored searches when saving them is turned off", async () => {
-    await act(async () => root.render(createElement(SearchHistoryGroup)));
-    const label = getString("settings_save_search_history");
+  const switchFor = (key: "settings_pause_watch_history" | "settings_pause_search_history" | "settings_pause_search_suggestions") => {
+    const label = getString(key);
     const row = [...host.querySelectorAll<HTMLElement>("*")].filter((element) => element.textContent?.includes(label) && element.querySelector("button, [role='switch'], input")).pop()!;
-    const toggle = row.querySelector<HTMLElement>("button, [role='switch'], input")!;
+    return row.querySelector<HTMLElement>("button, [role='switch'], input")!;
+  };
+  const isOn = (toggle: HTMLElement) => toggle.getAttribute("aria-checked") === "true";
+
+  it("starts with all three pause switches off", async () => {
+    await act(async () => root.render(createElement(SearchHistoryGroup)));
+    expect(isOn(switchFor("settings_pause_watch_history"))).toBe(false);
+    expect(isOn(switchFor("settings_pause_search_history"))).toBe(false);
+    expect(isOn(switchFor("settings_pause_search_suggestions"))).toBe(false);
+  });
+
+  it("forgets the recap's stored searches when search history is paused", async () => {
+    await act(async () => root.render(createElement(SearchHistoryGroup)));
+    const toggle = switchFor("settings_pause_search_history");
 
     await act(async () => toggle.click());
+    expect(isOn(switchFor("settings_pause_search_history"))).toBe(true);
     expect(recapQueriesCleared).toHaveBeenCalledTimes(1);
     await act(async () => toggle.click());
     expect(recapQueriesCleared).toHaveBeenCalledTimes(1);

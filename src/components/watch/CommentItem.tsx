@@ -1,8 +1,10 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useContext, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { Heart, Pin, ThumbsUp } from "lucide-react";
 import { ChannelLabel } from "../video/CardMeta";
 import { LinkedText } from "./LinkedText";
+import { CommentSearchTerms } from "./commentSearchTerms";
+import { foundRanges } from "../../lib/commentSearch";
 import { formatCount } from "../../lib/utils";
 import { getString } from "../../lib/i18n/index";
 import { upgradeAvatarUrl } from "../../lib/thumbnails";
@@ -24,7 +26,7 @@ function CommentAvatar({ src, author }: { src: string | null | undefined; author
 /**
  * The comment's text, clamped at four lines until it is read in full. "Read more" shows only when
  * the text really runs past them, and a click on its plain text opens it too; links keep working
- * while it is clamped.
+ * while it is clamped. A comment the search found something in shows in full, with the finds marked.
  */
 function CommentText({
   comment,
@@ -39,29 +41,32 @@ function CommentText({
 }) {
   const textRef = useRef<HTMLDivElement>(null);
   const [overflowing, setOverflowing] = useState(false);
+  const terms = useContext(CommentSearchTerms);
+  const found = useMemo(() => foundRanges(comment.text, terms), [comment.text, terms]);
+  const open = expanded || found.length > 0;
   useLayoutEffect(() => {
     const element = textRef.current;
-    if (!element || expanded) return;
+    if (!element || open) return;
     const measure = () => setOverflowing(element.scrollHeight > element.clientHeight + 1);
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(element);
     return () => observer.disconnect();
-  }, [expanded, comment.text]);
+  }, [open, comment.text]);
 
   const text = comment.text;
   if (!text) return null;
-  const clamped = !expanded && overflowing;
+  const clamped = !open && overflowing;
   return (
     <>
       <div
         ref={textRef}
         // From the text itself: dir="auto" would skip the text, which sets its own direction.
         dir={isRtlText(text) ? "rtl" : "ltr"}
-        className={`${className} ${expanded ? "" : "line-clamp-4"} ${clamped ? "cursor-pointer" : ""}`}
+        className={`${className} ${open ? "" : "line-clamp-4"} ${clamped ? "cursor-pointer" : ""}`}
         onClick={clamped ? onExpand : undefined}
       >
-        <LinkedText text={text} rich={comment.richText} />
+        <LinkedText text={text} rich={comment.richText} found={found} />
       </div>
       {clamped && (
         <button

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { linkifyPlain, richSegments, sliceRich } from "./richText";
+import { linkifyPlain, markFound, richSegments, sliceRich } from "./richText";
+import type { RichText as RichTextValue } from "../types/video";
 
 describe("linkifyPlain", () => {
   it("links web addresses, timestamps and hashtags", () => {
@@ -105,5 +106,33 @@ describe("inserted icons and highlights", () => {
   it("slices runs with the text", () => {
     const rich = { text: "ab #tag cd", spans: [{ start: 3, length: 4, target: { kind: "hashtag" as const, tag: "#tag" } }], emojis: [] };
     expect(sliceRich(rich, 3, 10).spans).toEqual([{ start: 0, length: 4, target: { kind: "hashtag", tag: "#tag" } }]);
+  });
+});
+
+describe("markFound", () => {
+  const rich = (text: string, spans: RichTextValue["spans"] = []): RichTextValue => ({ text, spans, emojis: [] });
+  const marked = (value: RichTextValue, ranges: { start: number; end: number }[]) =>
+    markFound(richSegments(value), ranges).map((piece) => [piece.text, Boolean(piece.found), Boolean(piece.target)]);
+
+  it("marks the found stretch and cuts the text around it", () => {
+    expect(marked(rich("the name is Jinwoo"), [{ start: 12, end: 18 }])).toEqual([
+      ["the name is ", false, false],
+      ["Jinwoo", true, false],
+    ]);
+  });
+
+  it("keeps a link working across a find that starts inside it", () => {
+    const value = rich("watch 1:23 now", [{ start: 6, length: 4, target: { kind: "timestamp", seconds: 83 } }]);
+    expect(marked(value, [{ start: 8, end: 14 }])).toEqual([
+      ["watch ", false, false],
+      ["1:", false, true],
+      ["23", true, true],
+      [" now", true, false],
+    ]);
+  });
+
+  it("leaves the pieces alone without finds", () => {
+    const value = rich("plain");
+    expect(markFound(richSegments(value), [])).toEqual(richSegments(value));
   });
 });

@@ -116,6 +116,8 @@ COMMENTS
 - Timed now opens with YouTube's own Timed list in one request, about a third of a second in a test, where it used to read up to 16 pages. Each comment sits at the time YouTube gives it. Videos without such a list still read pages as before.
 - Shorts comments now load from the Short's own comment panel instead of its full watch page, as Flow for Android does. A Short without that panel still loads through the watch page.
 - More comments load as you scroll to the end of the list, with Retry if a page fails. Timed keeps its Load more button.
+- Comments can now be searched (#782). Type in the field above the list to keep only the comments whose text or author has every word, with what was found marked. Case and accents don't matter, and "quoted words" are found together. A comment with a matching reply you opened stays too.
+- YouTube has no comment search, so Flow searches the comments it has loaded. Keep searching reads up to 25 more pages, about 500 comments, and stops early once it finds 20 more.
 
 MUSIC
 - Fixed the full music player sliding under the title bar on Windows and Linux and leaving a coloured strip along the bottom of the window (#693). It now opens just below the title bar and fills the rest of the window.

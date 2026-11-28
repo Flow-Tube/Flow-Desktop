@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getComments } from "../lib/api/youtube";
 import { commentSourceKey, readToTheEnd, useCommentsStore, type CommentSource } from "./useCommentsStore";
 import { OLDEST_PAGE_LIMIT } from "../lib/commentFilters";
+import { SEARCH_PAGE_LIMIT } from "../lib/commentSearch";
 import type { Comment, CommentsResponse } from "../types/video";
 
 vi.mock("../lib/api/youtube", () => ({ getComments: vi.fn(), getPostComments: vi.fn() }));
@@ -120,5 +121,61 @@ describe("the shared comment list", () => {
     }
     const kept = Object.keys(useCommentsStore.getState().entries).sort();
     expect(kept).toEqual(["video:shown", "video:v2", "video:v3", "video:v4", "video:v5"]);
+  });
+});
+
+describe("keep searching", () => {
+  const fetchMock = vi.mocked(getComments);
+  const store = () => useCommentsStore.getState();
+  const matchesName = (comment: Comment) => comment.text.includes("name");
+
+  beforeEach(() => {
+    for (const key of Object.keys(store().entries)) {
+      for (let i = 0; i < 8; i++) store().close(key);
+    }
+    useCommentsStore.setState({ entries: {}, recent: [] });
+    fetchMock.mockReset();
+  });
+
+  it("reads pages until enough comments match", async () => {
+    let next = 0;
+    fetchMock.mockImplementation(async () => {
+      next += 1;
+      return page(Array.from({ length: 20 }, (_, i) => `p${next}c${i}${i < 7 ? " name" : ""}`), `t${next}`);
+    });
+    store().open(video("s1"));
+    await settle();
+    await store().searchMore("video:s1", matchesName, () => false);
+    // The first page, then three more: 7 + 7 + 7 reaches 20 matches.
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(store().entries["video:s1"]?.searching).toBe(false);
+  });
+
+  it("stops at the page limit when nothing matches", async () => {
+    fetchMock.mockImplementation(async (_id, token) => page([`c${token ?? "first"}`], `${token ?? ""}x`));
+    store().open(video("s2"));
+    await settle();
+    await store().searchMore("video:s2", matchesName, () => false);
+    expect(fetchMock).toHaveBeenCalledTimes(1 + SEARCH_PAGE_LIMIT);
+  });
+
+  it("stops at the end of the list and when the search changes", async () => {
+    fetchMock.mockResolvedValueOnce(page(["a"], "two")).mockResolvedValueOnce(page(["b"], null));
+    store().open(video("s3"));
+    await settle();
+    await store().searchMore("video:s3", matchesName, () => false);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValue(page(["c"], "more"));
+    store().open(video("s4"));
+    await settle();
+    let cancelled = false;
+    fetchMock.mockImplementation(async () => {
+      cancelled = true;
+      return page(["d"], "more");
+    });
+    await store().searchMore("video:s4", matchesName, () => cancelled);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

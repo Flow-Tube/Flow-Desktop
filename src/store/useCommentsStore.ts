@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { getComments, getPostComments, getShortComments } from "../lib/api/youtube";
 import { mergeCommentsById, OLDEST_PAGE_LIMIT } from "../lib/commentFilters";
+import { SEARCH_MATCH_TARGET, SEARCH_PAGE_LIMIT } from "../lib/commentSearch";
 import type { Comment, CommentSort, CommentsResponse } from "../types/video";
 
 /** Where a comment list comes from: a video's comment section, a Short's, or a community post's. */
@@ -29,6 +30,8 @@ export interface CommentsEntry {
   oldest: boolean;
   /** Oldest stopped at its page limit with older comments left unread. */
   oldestCapped: boolean;
+  /** Keep searching is reading more pages. */
+  searching: boolean;
   replies: Record<string, Comment[]>;
   repliesLoading: Record<string, boolean>;
   repliesNextToken: Record<string, string | null>;
@@ -96,6 +99,7 @@ function emptyEntry(source: CommentSource): CommentsEntry {
     sortToken: null,
     oldest: false,
     oldestCapped: false,
+    searching: false,
     replies: {},
     repliesLoading: {},
     repliesNextToken: {},
@@ -117,6 +121,12 @@ interface CommentsState {
   /** Reloads the list in the order `token` names; with `toOldest`, reads it to its end for Oldest. */
   selectSort: (key: string, token: string, toOldest?: boolean) => void;
   loadMore: (key: string) => Promise<void>;
+  /**
+   * Keep searching: reads up to [SEARCH_PAGE_LIMIT] more pages of the list's order, one at a time,
+   * until [SEARCH_MATCH_TARGET] more comments pass `matches`, the list ends, a page fails, the list
+   * is reloaded or `cancelled` says the search changed.
+   */
+  searchMore: (key: string, matches: (comment: Comment) => boolean, cancelled: () => boolean) => Promise<void>;
   /** Opens or closes a thread, loading its first replies the first time. */
   toggleReplies: (key: string, commentId: string, token: string | null | undefined) => Promise<void>;
   loadReplies: (key: string, commentId: string, token: string) => Promise<void>;
@@ -219,6 +229,23 @@ export const useCommentsStore = create<CommentsState>((set, get) => {
         console.error("Failed to load more comments", error);
         patch(key, generation, () => ({ loadingMore: false, loadMoreFailed: true }));
       }
+    },
+
+    searchMore: async (key, matches, cancelled) => {
+      const entry = get().entries[key];
+      if (!entry?.nextPageToken || entry.loading || entry.loadingMore || entry.searching) return;
+      const { generation } = entry;
+      patch(key, generation, () => ({ searching: true }));
+      let found = 0;
+      for (let pages = 0; pages < SEARCH_PAGE_LIMIT && found < SEARCH_MATCH_TARGET && !cancelled(); pages++) {
+        const before = get().entries[key]?.comments.length ?? 0;
+        await get().loadMore(key);
+        const current = get().entries[key];
+        if (!current || current.generation !== generation || current.loadMoreFailed) break;
+        found += current.comments.slice(before).filter(matches).length;
+        if (!current.nextPageToken) break;
+      }
+      patch(key, generation, () => ({ searching: false }));
     },
 
     loadReplies: async (key, commentId, token) => {

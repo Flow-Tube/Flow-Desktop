@@ -315,7 +315,7 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   ]),
   ...rows("language", [
     { title: "settings_region_picker", summary: "settings_region_picker_desc" },
-    { title: "settings_trending_region", summary: "settings_trending_region_desc", keywords: ["region", "location", "gl"] },
+    { title: "settings_trending_region", summary: "settings_content_country_desc", keywords: ["region", "location", "gl", "trending", "explore"] },
     { title: "settings_app_language", summary: "settings_app_language_desc", keywords: ["translation", "locale"] },
     { title: "settings_content_language", summary: "settings_content_language_desc" },
     { title: "settings_original_titles", summary: "settings_original_titles_desc" },

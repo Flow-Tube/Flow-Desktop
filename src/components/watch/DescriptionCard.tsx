@@ -12,6 +12,7 @@ import { useUiStore } from "../../store/useUiStore";
 import { IconButton } from "../ui/IconButton";
 import { DescriptionBody } from "./DescriptionBody";
 import { DescriptionExtras } from "./DescriptionExtras";
+import { DescriptionSummary } from "./DescriptionSummary";
 import { DescriptionTags } from "./DescriptionTags";
 import { linkifyPlain } from "../../lib/richText";
 import { useOriginalTitlesEnabled } from "../../lib/useOriginalTitle";
@@ -59,6 +60,7 @@ function surfaceVariables(tint: Rgb | null): CSSProperties {
 export function DescriptionCard({ currentVideo, videoData }: DescriptionCardProps) {
   const [expanded, setExpanded] = useState(false);
   const tintEnabled = useAppSettingsStore((s) => s.values[SETTINGS.DESCRIPTION_TINT_ENABLED] === "true");
+  const summariesEnabled = useAppSettingsStore((s) => s.values[SETTINGS.AI_SUMMARIES_ENABLED] === "true");
   const thumbnail = useProxiedImageUrl(tintEnabled ? currentVideo.thumbnailUrl ?? videoData?.thumbnailUrl ?? null : null);
   const tint = useDominantColor(thumbnail);
 
@@ -75,6 +77,7 @@ export function DescriptionCard({ currentVideo, videoData }: DescriptionCardProp
   const published = videoData?.publishedText || currentVideo.publishedText || "";
   const factoids = videoData?.descriptionExtras?.factoids ?? [];
   const showFactoids = expanded && factoids.length > 0;
+  const summary = summariesEnabled ? videoData?.descriptionExtras?.summary : null;
 
   return (
     <div
@@ -110,6 +113,8 @@ export function DescriptionCard({ currentVideo, videoData }: DescriptionCardProp
           {expanded && description && <CopyButton description={description} />}
         </div>
       )}
+
+      {summary && summary.paragraphs.length > 0 && <DescriptionSummary summary={summary} expanded={expanded} />}
 
       {description ? (
         <DescriptionBody value={value} videoId={currentVideo.id} expanded={expanded} />

@@ -138,6 +138,21 @@ pub struct DescriptionExtras {
     pub channel: Option<DescriptionChannel>,
     /// "How this was made": the note on altered or synthetic content.
     pub disclosure: Option<Disclosure>,
+    /// The site's own AI summary of the video, which only some videos have.
+    pub summary: Option<AiSummary>,
+}
+
+/// The summary of a video the site writes with its AI, with the words it shows around it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiSummary {
+    /// "Summary".
+    pub label: Option<String>,
+    /// "AI-generated video summary".
+    pub title: Option<String>,
+    /// "AI can make mistakes, so double-check it."
+    pub disclaimer: Option<String>,
+    pub paragraphs: Vec<String>,
 }
 
 /// The channel card the description panel ends with.

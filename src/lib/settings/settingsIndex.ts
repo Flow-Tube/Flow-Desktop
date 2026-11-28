@@ -116,6 +116,7 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     { title: "settings_adaptive_player", summary: "settings_adaptive_player_desc" },
     { title: "settings_paid_promotion", summary: "settings_paid_promotion_desc" },
     { title: "settings_description_tint", summary: "settings_description_tint_desc", keywords: ["color", "colour", "thumbnail"] },
+    { title: "settings_ai_summaries", summary: "settings_ai_summaries_desc", keywords: ["ai", "gemini", "summary", "description"] },
     { title: "settings_idle_progress", summary: "settings_idle_progress_desc" },
     { title: "settings_frame_step", summary: "settings_frame_step_desc" },
     { title: "settings_button_next_previous", summary: "settings_button_next_previous_desc", keywords: ["player bar", "hide"] },

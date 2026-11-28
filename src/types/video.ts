@@ -138,6 +138,19 @@ export interface DescriptionExtras {
   channel?: { name: string; subtitle?: string | null; avatarUrl?: string | null; channelId?: string | null } | null;
   /** "How this was made": YouTube's note on altered or synthetic content. */
   disclosure?: { title?: string | null; header?: string | null; body?: RichText | null } | null;
+  /** YouTube's own AI summary of the video, which only some videos have. */
+  summary?: AiSummary | null;
+}
+
+/** The summary of a video YouTube writes with its AI, with the words it shows around it. */
+export interface AiSummary {
+  /** "Summary". */
+  label?: string | null;
+  /** "AI-generated video summary". */
+  title?: string | null;
+  /** "AI can make mistakes, so double-check it." */
+  disclaimer?: string | null;
+  paragraphs: string[];
 }
 
 /** One slice of the "most replayed" graph, with how often it is replayed from 0 to 1. */

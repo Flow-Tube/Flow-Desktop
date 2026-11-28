@@ -11,7 +11,7 @@ use crate::sync2::actions::{leave_if_linked, reset_local_data};
 use crate::sync2::profile_actions::{edits_sync, syncs_link};
 use crate::sync2::push::push_soon;
 use sqlx::SqlitePool;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
 #[tauri::command]
 pub async fn get_watch_history(
@@ -230,11 +230,24 @@ pub async fn set_setting(
             push_soon(&app);
         }
     }
+    let previous = settings::get_setting(&pool, &key).await.ok().flatten();
     settings::set_setting(&pool, &key, &value)
         .await
         .map_err(ErrorResponse::from)?;
     apply_backend_setting(&key, Some(&value));
+    if previous.as_deref() != Some(value.as_str()) {
+        after_backend_setting_changed(&app, &key);
+    }
     Ok(())
+}
+
+/// What a changed setting leaves out of date. Home's searches and chips were asked for in the old
+/// country.
+fn after_backend_setting_changed(app: &AppHandle, key: &str) {
+    if key == locale::CONTENT_COUNTRY_SETTING {
+        app.state::<crate::services::home_feed::HomeFeedService>()
+            .forget_country_pages();
+    }
 }
 
 /// Settings the backend acts on itself, applied at startup and whenever saved.

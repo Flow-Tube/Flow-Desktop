@@ -416,7 +416,7 @@ impl HomeFeedService {
             return;
         }
         let all: Vec<SeedInput> = seeds.into_iter().chain(long_term).collect();
-        let candidates: Vec<_> = related_graph(self, yt, rec, pool, &all, &ids, now)
+        let candidates: Vec<_> = related_graph(self, yt, rec, pool, &all, &ids, now, false)
             .await
             .into_iter()
             .filter(|g| {

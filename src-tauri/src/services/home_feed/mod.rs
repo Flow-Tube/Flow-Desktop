@@ -57,6 +57,9 @@ pub async fn remember_subscription_feed(
 
 /// A feed shown this recently comes back without a reload.
 const FRESH_FEED_MS: u64 = 30 * 60_000;
+/// The viewer's refreshes fetch new related lists at most this often, so clicking Refresh again
+/// and again cannot run into the site's rate limit; one in between reorders what is held.
+const DEEP_REFRESH_GAP_MS: u64 = 60_000;
 const PREFETCH_AHEAD: usize = 24;
 const PREFETCH_TRIGGER_REMAINING: usize = 8;
 const EVENT: &str = "home-feed";
@@ -233,6 +236,8 @@ struct Inner {
     chips: Mutex<Vec<crate::flow_neuro::interest_chips::InterestChip>>,
     /// Each chip's result with when it was fetched.
     chip_results: Mutex<HashMap<String, (chips::ChipFeed, u64)>>,
+    /// When the viewer's last refresh fetched new related lists.
+    deep_refreshed_at: Mutex<u64>,
 }
 
 /// The Home feed service; cheap to clone into background work.
@@ -373,20 +378,34 @@ impl HomeFeedService {
                 feed.snapshot.origins = origins;
             }
         }
-        self.start_load(app);
+        self.start_load(app, false);
         self.snapshot()
     }
 
-    /// The viewer's refresh; a load already running is the refresh.
+    /// The viewer's refresh; a load already running is the refresh. Once a minute it also fetches
+    /// new related lists and forgets the chips' pages.
     pub fn refresh(&self, app: &AppHandle) -> HomeSnapshot {
         if !self.inner.feed.lock().unwrap().snapshot.loading {
             self.inner.feed.lock().unwrap().loaded_at = 0;
-            self.start_load(app);
+            let deep = self.take_deep_refresh(now_ms());
+            if deep {
+                self.inner.chip_results.lock().unwrap().clear();
+            }
+            self.start_load(app, deep);
         }
         self.snapshot()
     }
 
-    fn start_load(&self, app: &AppHandle) {
+    fn take_deep_refresh(&self, now: u64) -> bool {
+        let mut at = self.inner.deep_refreshed_at.lock().unwrap();
+        let deep = *at == 0 || now.saturating_sub(*at) >= DEEP_REFRESH_GAP_MS;
+        if deep {
+            *at = now;
+        }
+        deep
+    }
+
+    fn start_load(&self, app: &AppHandle, deep: bool) {
         let generation = {
             let mut feed = self.inner.feed.lock().unwrap();
             feed.snapshot.generation += 1;
@@ -403,7 +422,7 @@ impl HomeFeedService {
         let service = self.clone();
         let app = app.clone();
         tauri::async_runtime::spawn(async move {
-            service.load(&app, generation).await;
+            service.load(&app, generation, deep).await;
         });
     }
 
@@ -545,6 +564,15 @@ mod tests {
             },
             published_at_ms: 0,
         }
+    }
+
+    #[test]
+    fn a_refresh_fetches_new_related_lists_at_most_once_a_minute() {
+        let home = HomeFeedService::new();
+        assert!(home.take_deep_refresh(1_000));
+        assert!(!home.take_deep_refresh(30_000));
+        assert!(!home.take_deep_refresh(60_999));
+        assert!(home.take_deep_refresh(61_000));
     }
 
     fn feed_of(ids: &[&str]) -> HomeSnapshot {

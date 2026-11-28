@@ -71,6 +71,7 @@ CARDS
 - See all, Show all and View all on every shelf are now a rounded button, as on the Library page. More like this in a card's menu has a thumbs up icon instead of sparkles.
 
 PLAYER
+- Show YouTube's AI summaries, in Settings > Player and off by default, puts the summary YouTube writes for some videos at the top of the description, marked as AI-written with YouTube's own warning (#779). It comes with the video's page, so nothing more is sent to YouTube or anyone else.
 - The description is laid out like Flow for Android's: the likes, views and date as three tiles, the text with YouTube's own formatting, links to other videos as cards, then hashtags, credited songs, how the video was made, Chapters and Transcript rows that open their panel, the channel with its links, and the tags.
 - Links in descriptions and comments look like Android's: channel and site links sit on rounded chips with the site's icon, moments and hashtags are bold, and web links are underlined.
 - Settings > Player > Tint the description colors the description's cards and links from the video's thumbnail. It is off by default.

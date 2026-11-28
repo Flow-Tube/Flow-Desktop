@@ -53,13 +53,12 @@ const maxSize = (raw: string | undefined): number => {
   return Number.isFinite(size) && size > 0 ? size : SEARCH_HISTORY_DEFAULT_LIMIT;
 };
 
-/** What the viewer's settings let the list show: nothing when saving is off, and nothing past its age or size. */
+/** What the viewer's settings let the list show: nothing past its age or size. Pausing only stops new searches being kept. */
 export function visibleSearchEntries(
   entries: SearchHistoryEntry[],
   values: Record<string, string | undefined>,
   now: number,
 ): SearchHistoryEntry[] {
-  if (values[SETTINGS.SEARCH_HISTORY_ENABLED] === "false") return [];
   const days = Number(values[SETTINGS.SEARCH_HISTORY_RETENTION_DAYS] ?? SEARCH_HISTORY_DEFAULT_RETENTION_DAYS);
   const oldest = values[SETTINGS.AUTO_DELETE_SEARCH_HISTORY] === "true" && days > 0 ? now - days * DAY_MS : 0;
   return entries

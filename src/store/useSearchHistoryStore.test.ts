@@ -116,8 +116,8 @@ describe("visibleSearchEntries", () => {
     expect(shown({})).toEqual(["new", "old"]);
   });
 
-  it("shows nothing while saving is off", () => {
-    expect(shown({ [SETTINGS.SEARCH_HISTORY_ENABLED]: "false" })).toEqual([]);
+  it("keeps showing past searches while search history is paused", () => {
+    expect(shown({ [SETTINGS.SEARCH_HISTORY_ENABLED]: "false" })).toEqual(["new", "old"]);
   });
 
   it("hides what's past its age only with auto-delete on", () => {

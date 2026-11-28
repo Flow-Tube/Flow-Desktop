@@ -34,9 +34,10 @@ export function SearchHistoryGroup() {
     trimTo(Number(value));
   };
 
-  const handleSaveSearches = (next: boolean) => {
-    setSaveSearches(next);
-    if (!next) recapQueriesCleared();
+  // Both switches pause what the stored settings turn on, so the keys Flow for Android reads stay as they are.
+  const handlePauseSearches = (paused: boolean) => {
+    setSaveSearches(!paused);
+    if (paused) recapQueriesCleared();
   };
 
   return (
@@ -44,11 +45,11 @@ export function SearchHistoryGroup() {
       <SettingItem title={getString('settings_pause_watch_history')} description={getString('settings_pause_watch_history_desc')}>
         <ToggleSwitch checked={pausedHistory} onChange={setPausedHistory} />
       </SettingItem>
-      <SettingItem title={getString('settings_save_search_history')} description={getString('settings_save_search_history_desc')}>
-        <ToggleSwitch checked={saveSearches} onChange={handleSaveSearches} />
+      <SettingItem title={getString('settings_pause_search_history')} description={getString('settings_pause_search_history_desc')}>
+        <ToggleSwitch checked={!saveSearches} onChange={handlePauseSearches} />
       </SettingItem>
-      <SettingItem title={getString('settings_search_suggestions')} description={getString('settings_search_suggestions_desc')}>
-        <ToggleSwitch checked={suggestions} onChange={setSuggestions} />
+      <SettingItem title={getString('settings_pause_search_suggestions')} description={getString('settings_pause_search_suggestions_desc')}>
+        <ToggleSwitch checked={!suggestions} onChange={(paused) => setSuggestions(!paused)} />
       </SettingItem>
       <SettingItem title={getString('settings_search_history_size')} disabled={!saveSearches}>
         <Select

@@ -150,6 +150,17 @@ export function useExplore(initialDestination: ExploreDestinationId = 'live') {
     setSeeAll(null);
   }, []);
 
+  // A tab and a See all grid were read out of the old country's page, so a new country starts at
+  // the destination itself.
+  const selectRegion = useCallback(
+    (next: string) => {
+      setTab(null);
+      setSeeAll(null);
+      setRegion(next);
+    },
+    [setRegion],
+  );
+
   const refresh = useCallback(() => {
     pageCache.delete(key);
     setNonce((value) => value + 1);
@@ -161,7 +172,7 @@ export function useExplore(initialDestination: ExploreDestinationId = 'live') {
     activeTabTitle: tab?.title ?? page?.tabs.find((t) => t.selected)?.title ?? null,
     selectTab,
     region,
-    setRegion,
+    setRegion: selectRegion,
     showRegionPicker,
     page,
     loading,

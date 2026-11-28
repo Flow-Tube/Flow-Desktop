@@ -176,6 +176,9 @@ FIXES
 - Undoing a deleted note now always wins over the deletion, even when both happen in the same instant.
 - Fixed a possible freeze after hours of use when Flow was started by a launcher that never reads its output.
 - Extension settings such as Discord presence, SponsorBlock and DeArrow now start with their saved values at launch and after a sync. A second load that started while the first was still running used to read the defaults (#763).
+- Changing the content country now builds Home again with searches in the new country, instead of showing the feed from before for up to half an hour (#786). Its description now says what it changes: Explore and charts follow it, while YouTube picks related videos and search results from your connection's location.
+- Changing the country in Explore now reloads the destination you are on, instead of keeping a tab or See all list from the old country.
+- Changing the proxy now starts a new anonymous visitor identity, since the old one carries the country of the network it was made on.
 
 UNDER THE HOOD
 - The check for a video's paid promotion label now asks YouTube for only the two fields it reads, as it was meant to. A missing separator in the request address made YouTube send the whole player answer, about 238 KB, where 37 bytes do.

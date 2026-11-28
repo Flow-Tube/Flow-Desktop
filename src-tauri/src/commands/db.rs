@@ -242,11 +242,16 @@ pub async fn set_setting(
 }
 
 /// What a changed setting leaves out of date. Home's searches and chips were asked for in the old
-/// country.
+/// country. A visitor identity carries the country of the network it was made on, so a new proxy
+/// route starts a new one.
 fn after_backend_setting_changed(app: &AppHandle, key: &str) {
     if key == locale::CONTENT_COUNTRY_SETTING {
         app.state::<crate::services::home_feed::HomeFeedService>()
             .forget_country_pages();
+    } else if app_proxy::changes_route(key) {
+        app.state::<std::sync::Arc<crate::api::innertube::InnertubeClient>>()
+            .reset_visitor_identity();
+        tracing::info!(key, "visitor identity reset after a proxy change");
     }
 }
 

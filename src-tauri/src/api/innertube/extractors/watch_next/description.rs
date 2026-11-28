@@ -10,7 +10,7 @@ use crate::api::innertube::json::text::text_of;
 use crate::api::innertube::json::thumbnail::largest_url;
 use crate::models::rich_text::RichText;
 use crate::models::video::{
-    CreatorLink, DescriptionChannel, DescriptionExtras, Disclosure, Factoid, MusicCard,
+    AiSummary, CreatorLink, DescriptionChannel, DescriptionExtras, Disclosure, Factoid, MusicCard,
 };
 
 /// The description as the watch page formats it: its links, the site icons
@@ -70,7 +70,38 @@ pub fn description_extras(next: &Value, video_id: &str) -> DescriptionExtras {
         disclosure: items
             .iter()
             .find_map(|item| disclosure(&item["howThisWasMadeSectionViewModel"], video_id)),
+        summary: items
+            .iter()
+            .find_map(|item| ai_summary(&item["expandableMetadataRenderer"])),
     }
+}
+
+/// The AI summary the panel offers on some videos, signed out too: its paragraphs, and the short
+/// text the header shows folded when none came.
+fn ai_summary(section: &Value) -> Option<AiSummary> {
+    let header = &section["header"];
+    let mut paragraphs: Vec<String> =
+        section["expandedContent"]["videoSummaryContentViewModel"]["paragraphs"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|p| p["videoSummaryParagraphViewModel"]["text"]["content"].as_str())
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+            .map(str::to_string)
+            .collect();
+    if paragraphs.is_empty() {
+        paragraphs.extend(text_of(&header["collapsedTitle"]));
+    }
+    if paragraphs.is_empty() {
+        return None;
+    }
+    Some(AiSummary {
+        label: text_of(&header["collapsedLabel"]),
+        title: text_of(&header["expandedTitle"]),
+        disclaimer: text_of(&header["expandedSubtitle"]),
+        paragraphs,
+    })
 }
 
 fn channel_card(section: &Value) -> Option<DescriptionChannel> {
@@ -234,6 +265,46 @@ mod tests {
         assert_eq!(
             disclosure.body.map(|body| body.text).as_deref(),
             Some("Sound or visuals were altered.")
+        );
+    }
+
+    #[test]
+    fn the_ai_summary_is_read_with_its_label_and_warning() {
+        let next = with_panel(&json!([{ "expandableMetadataRenderer": {
+            "header": {
+                "collapsedTitle": { "simpleText": "Short version." },
+                "collapsedLabel": { "simpleText": "Summary" },
+                "expandedTitle": { "simpleText": "AI-generated video summary" },
+                "expandedSubtitle": { "simpleText": "AI can make mistakes, so double-check it." }
+            },
+            "expandedContent": { "videoSummaryContentViewModel": { "paragraphs": [
+                { "videoSummaryParagraphViewModel": { "text": { "content": "First part. " } } },
+                { "videoSummaryParagraphViewModel": { "text": { "content": "Second part." } } }
+            ] } }
+        } }]));
+        let summary = description_extras(&next, "v").summary.unwrap();
+        assert_eq!(summary.label.as_deref(), Some("Summary"));
+        assert_eq!(summary.title.as_deref(), Some("AI-generated video summary"));
+        assert_eq!(
+            summary.disclaimer.as_deref(),
+            Some("AI can make mistakes, so double-check it.")
+        );
+        assert_eq!(summary.paragraphs, ["First part.", "Second part."]);
+    }
+
+    #[test]
+    fn a_summary_without_paragraphs_falls_back_to_its_folded_text_and_none_is_none() {
+        let folded = with_panel(&json!([{ "expandableMetadataRenderer": {
+            "header": { "collapsedTitle": { "simpleText": "Only this." } }
+        } }]));
+        assert_eq!(
+            description_extras(&folded, "v").summary.unwrap().paragraphs,
+            ["Only this."]
+        );
+        assert!(
+            description_extras(&with_panel(&json!([])), "v")
+                .summary
+                .is_none()
         );
     }
 

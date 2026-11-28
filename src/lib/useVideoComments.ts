@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo } from "react";
 import { commentSourceKey, useCommentsStore, type CommentFlag, type CommentSource } from "../store/useCommentsStore";
+import type { Comment } from "../types/video";
 
 interface UseVideoCommentsOptions {
   /** The video is a Short, whose comments come from its reel's own panel. */
@@ -35,6 +36,10 @@ export function useVideoComments(videoId: string | undefined, options: UseVideoC
 
   const selectSort = useCallback((token: string, toOldest = false) => store().selectSort(key, token, toOldest), [key, store]);
   const loadMore = useCallback(() => store().loadMore(key), [key, store]);
+  const searchMore = useCallback(
+    (matches: (comment: Comment) => boolean, cancelled: () => boolean) => store().searchMore(key, matches, cancelled),
+    [key, store],
+  );
   const toggleReplies = useCallback(
     (commentId: string, token: string | null | undefined) => store().toggleReplies(key, commentId, token),
     [key, store],
@@ -60,6 +65,7 @@ export function useVideoComments(videoId: string | undefined, options: UseVideoC
     nextPageToken: entry?.nextPageToken ?? null,
     loadingMore: entry?.loadingMore ?? false,
     loadMoreFailed: entry?.loadMoreFailed ?? false,
+    searching: entry?.searching ?? false,
     replies: entry?.replies ?? {},
     repliesLoading: entry?.repliesLoading ?? {},
     repliesNextToken: entry?.repliesNextToken ?? {},
@@ -68,6 +74,7 @@ export function useVideoComments(videoId: string | undefined, options: UseVideoC
     textExpanded: entry?.flags.textExpanded ?? NO_FLAGS,
     selectSort,
     loadMore,
+    searchMore,
     toggleReplies,
     loadReplies,
     toggleFlag,

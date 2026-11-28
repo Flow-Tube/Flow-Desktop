@@ -103,12 +103,14 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
     [setQueue, navigate],
   );
   const [refreshing, setRefreshing] = useState(false);
+  const [refreshCount, setRefreshCount] = useState(0);
   const [backOnline, setBackOnline] = useState(false);
   const gridStyle = useGridStyle();
 
   const handleRefresh = useCallback(() => {
     setBackOnline(false);
     setRefreshing(true);
+    setRefreshCount((count) => count + 1);
     void refresh().finally(() => setRefreshing(false));
   }, [refresh]);
   usePageRefresh(handleRefresh);
@@ -170,7 +172,10 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
   );
   const shortsShelvesEnabled = useAppSettingsStore((state) => state.values[SETTINGS.SHORTS_SHELF_ENABLED] !== "false");
   const shortsEnabled = useShortsEnabled();
-  const homeShorts = useHomeShortsShelf(homeFeedEnabled && homeShortsEnabled && shortsShelvesEnabled && shortsEnabled);
+  const homeShorts = useHomeShortsShelf(
+    homeFeedEnabled && homeShortsEnabled && shortsShelvesEnabled && shortsEnabled,
+    refreshCount,
+  );
   const shelfVideos = useMemo(
     () => continueWatching.videos.filter((video) => !isHidden(video)),
     [continueWatching.videos, isHidden],

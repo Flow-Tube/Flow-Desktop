@@ -58,16 +58,19 @@ export function usePlaybackStartSpeed(
   const channelSpeed = perChannel && channelId ? parseChannelSpeeds(speedsRaw)[channelId] ?? null : null;
   const override = startSpeedOverride({ channelSpeed, isMusic, musicAtNormalSpeed });
 
-  const appliedRef = useRef<{ identity: string; hadOverride: boolean; picked: boolean } | null>(null);
+  const appliedRef = useRef<{ identity: string; defaultRate: PlaybackRate; hadOverride: boolean; picked: boolean } | null>(null);
   useEffect(() => {
     if (!mediaIdentity) return;
     const applied = appliedRef.current;
     if (applied?.identity !== mediaIdentity) {
-      appliedRef.current = { identity: mediaIdentity, hadOverride: override !== null, picked: false };
+      appliedRef.current = { identity: mediaIdentity, defaultRate, hadOverride: override !== null, picked: false };
       setPlaybackRate(override ?? defaultRate);
-    } else if (override !== null && !applied.hadOverride && !applied.picked) {
+    } else if (!applied.picked && !applied.hadOverride && override !== null) {
       applied.hadOverride = true;
       setPlaybackRate(override);
+    } else if (!applied.picked && !applied.hadOverride && applied.defaultRate !== defaultRate) {
+      applied.defaultRate = defaultRate;
+      setPlaybackRate(defaultRate);
     }
   }, [defaultRate, mediaIdentity, override, setPlaybackRate]);
 

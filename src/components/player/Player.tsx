@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as dashjs from "dashjs";
 import Hls from "hls.js";
-import { Loader2, RotateCcw } from "lucide-react";
+import { Gauge, Loader2, RotateCcw } from "lucide-react";
+
 import { PlayerErrorState } from "../ui/PlayerErrorState";
 import { CurrentVideoReminderButton } from "../watch/UpcomingReminderButton";
 import type { PlayerErrorInfo } from "../../lib/playerError";
@@ -370,6 +371,9 @@ export const Player: React.FC<PlayerProps> = ({
   loudnessDb,
 }) => {
   const [activeQualityLabel, setActiveQualityLabel] = useState<string | null>(null);
+  const [speedFeedback, setSpeedFeedback] = useState<number | null>(null);
+  const speedFeedbackTimerRef = useRef<number | undefined>(undefined);
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -1077,12 +1081,24 @@ export const Player: React.FC<PlayerProps> = ({
 
   const selectPlaybackRate = useCallback((nextRate: number) => {
     const normalizedRate = normalizePlaybackRate(nextRate);
+    if (normalizedRate !== usePlayerStore.getState().playbackRate) {
+      setSpeedFeedback(normalizedRate);
+      clearTimeout(speedFeedbackTimerRef.current);
+      speedFeedbackTimerRef.current = window.setTimeout(() => {
+        setSpeedFeedback(null);
+        speedFeedbackTimerRef.current = undefined;
+      }, 1400);
+    }
     setPlaybackRate(normalizedRate);
     notePickedSpeed(normalizedRate);
     if (rememberPlaybackSpeed) {
       void setSettingValue(SETTINGS.PLAYBACK_SPEED, formatPlaybackRate(normalizedRate));
     }
   }, [notePickedSpeed, rememberPlaybackSpeed, setPlaybackRate]);
+
+  useEffect(() => () => {
+    clearTimeout(speedFeedbackTimerRef.current);
+  }, []);
 
   const toggleLoop = useCallback(() => {
     const { repeatMode, setRepeatMode } = usePlayerStore.getState();
@@ -2293,6 +2309,10 @@ export const Player: React.FC<PlayerProps> = ({
     const audio = audioRef.current;
     if (!audio || !video || !usesExternalAudio || isSourceSwitching) return;
 
+    if (audio.defaultPlaybackRate !== playbackRate) {
+      audio.defaultPlaybackRate = playbackRate;
+    }
+
     if (Math.abs(audio.playbackRate - playbackRate) > 0.001) {
       audio.playbackRate = playbackRate;
     }
@@ -2345,6 +2365,9 @@ export const Player: React.FC<PlayerProps> = ({
     const video = videoRef.current;
     const audio = audioRef.current;
     if (video) {
+      if (video.defaultPlaybackRate !== playbackRate) {
+        video.defaultPlaybackRate = playbackRate;
+      }
       if (Math.abs(video.playbackRate - playbackRate) > 0.001) {
         frameHold.around({ kind: "rate" }, () => {
           video.playbackRate = playbackRate;
@@ -2353,6 +2376,9 @@ export const Player: React.FC<PlayerProps> = ({
       }
     }
     if (audio) {
+      if (audio.defaultPlaybackRate !== playbackRate) {
+        audio.defaultPlaybackRate = playbackRate;
+      }
       if (Math.abs(audio.playbackRate - playbackRate) > 0.001) {
         audio.playbackRate = playbackRate;
         audio.preservesPitch = true;
@@ -2512,7 +2538,7 @@ export const Player: React.FC<PlayerProps> = ({
           toggleStats();
           break;
         case "normal-speed":
-          setPlaybackRate(1);
+          selectPlaybackRate(1);
           break;
         case "toggle-chapters": {
           const { isChaptersPanelOpen, setIsChaptersPanelOpen } = usePlayerStore.getState();
@@ -2576,7 +2602,7 @@ export const Player: React.FC<PlayerProps> = ({
     toggleLoop,
     title,
     toggleStats,
-    setPlaybackRate,
+    selectPlaybackRate,
   ]);
 
   const handleLoadedMetadata = () => {
@@ -2873,6 +2899,13 @@ export const Player: React.FC<PlayerProps> = ({
           onError={handleAudioError}
           className="hidden"
         />
+      )}
+
+      {speedFeedback !== null && (
+        <div className="pointer-events-none absolute left-1/2 top-8 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full bg-chrome-black/60 px-4 py-2 text-sm font-bold text-chrome-white animate-fade-in" role="status" aria-live="polite">
+          <Gauge size={18} aria-hidden="true" />
+          {speedFeedback}x
+        </div>
       )}
 
       <PlayerGestureOverlay

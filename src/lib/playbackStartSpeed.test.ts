@@ -40,12 +40,13 @@ describe("startSpeedOverride", () => {
 describe("usePlaybackStartSpeed", () => {
   let root: Root;
   let pick: (rate: number) => void;
-  function Probe({ id, category }: { id: string; category?: string }) {
-    pick = usePlaybackStartSpeed(id, 1.25, category);
+  function Probe({ id, category, defaultRate = 1.25 }: { id: string; category?: string; defaultRate?: number }) {
+    pick = usePlaybackStartSpeed(id, defaultRate as 1.25, category);
     return null;
   }
   const settings = (values: Record<string, string>) =>
-    useAppSettingsStore.setState((s) => ({ values: { ...s.values, ...values } }));
+    useAppSettingsStore.setState((s) => ({ values: { ...s.values, ...values }, loaded: true }));
+
   const video = (channelId?: string) =>
     usePlayerStore.setState({ currentVideo: { id: "v", title: "t", channelName: "c", channelId } });
 
@@ -67,6 +68,36 @@ describe("usePlaybackStartSpeed", () => {
     video("other");
     act(() => root.render(createElement(Probe, { id: "b" })));
     expect(usePlayerStore.getState().playbackRate).toBe(1.25);
+  });
+  it("applies the hydrated default after the source starts", () => {
+    useAppSettingsStore.setState({ loaded: false });
+    video("other");
+    act(() => root.render(createElement(Probe, { id: "a" })));
+    expect(usePlayerStore.getState().playbackRate).toBe(1.25);
+    act(() => settings({ [SETTINGS.PLAYBACK_SPEED]: "1.5" }));
+    act(() => root.render(createElement(Probe, { id: "a", defaultRate: 1.5 })));
+    expect(usePlayerStore.getState().playbackRate).toBe(1.5);
+  });
+
+  it("does not replace a hydrated default after a manual selection", () => {
+    useAppSettingsStore.setState({ loaded: false });
+    video("other");
+    act(() => root.render(createElement(Probe, { id: "a" })));
+    act(() => {
+      usePlayerStore.setState({ playbackRate: 2 });
+      pick(2);
+    });
+    act(() => settings({ [SETTINGS.PLAYBACK_SPEED]: "1.5" }));
+    act(() => root.render(createElement(Probe, { id: "a", defaultRate: 1.5 })));
+    expect(usePlayerStore.getState().playbackRate).toBe(2);
+  });
+
+  it("keeps a late channel override ahead of a hydrated default", () => {
+    video(undefined);
+    act(() => root.render(createElement(Probe, { id: "a" })));
+    act(() => root.render(createElement(Probe, { id: "a", defaultRate: 1.5 })));
+    act(() => video("known"));
+    expect(usePlayerStore.getState().playbackRate).toBe(1.75);
   });
 
   it("applies a channel or category that arrives after the start", () => {

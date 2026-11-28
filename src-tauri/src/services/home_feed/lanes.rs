@@ -353,8 +353,16 @@ pub struct Mix {
     pub subs_backlog: Vec<Card>,
 }
 
+/// `cards` with those on screen moved behind the rest, each part in its own order.
+fn shown_last(cards: &[Card], on_screen: &HashSet<String>) -> Vec<Card> {
+    let (shown, new): (Vec<&Card>, Vec<&Card>) =
+        cards.iter().partition(|c| on_screen.contains(c.id()));
+    new.into_iter().chain(shown).cloned().collect()
+}
+
 /// Pinned fresh uploads first, then the quota blend. Cards on screen are left out so a refresh
-/// looks different, while the lanes could still fill half the page without them.
+/// looks different, while the lanes could still fill half the page without them; otherwise each
+/// lane offers them only after its new cards.
 #[must_use]
 pub fn assemble(
     lanes: &Lanes,
@@ -363,6 +371,7 @@ pub fn assemble(
     total_interactions: i32,
 ) -> Mix {
     let mut page = Page::default();
+    let mut shown_go_last = false;
     if !on_screen.is_empty() {
         let fresh: HashSet<&str> = lanes
             .fresh_candidates()
@@ -371,8 +380,17 @@ pub fn assemble(
             .collect();
         if fresh.len() >= HOME_TARGET_SIZE / 2 {
             page.used_ids.extend(on_screen.iter().cloned());
+        } else {
+            shown_go_last = true;
         }
     }
+    let lane = |cards: &[Card]| {
+        if shown_go_last {
+            shown_last(cards, on_screen)
+        } else {
+            cards.to_vec()
+        }
+    };
     let mut source_of = HashMap::new();
     let mut fresh_added = 0;
     for card in &lanes.pinned_fresh {
@@ -397,11 +415,11 @@ pub fn assemble(
         .cloned()
         .collect();
     let lane_map = HashMap::from([
-        (FeedSource::Subs, subs_lane),
-        (FeedSource::Related, lanes.best_related.clone()),
-        (FeedSource::Discovery, lanes.best_discovery.clone()),
-        (FeedSource::ChannelMemory, lanes.best_memory.clone()),
-        (FeedSource::Neighbours, lanes.best_neighbours.clone()),
+        (FeedSource::Subs, lane(&subs_lane)),
+        (FeedSource::Related, lane(&lanes.best_related)),
+        (FeedSource::Discovery, lane(&lanes.best_discovery)),
+        (FeedSource::ChannelMemory, lane(&lanes.best_memory)),
+        (FeedSource::Neighbours, lane(&lanes.best_neighbours)),
     ]);
     let single: HashSet<String> = lanes
         .best_memory
@@ -427,5 +445,32 @@ pub fn assemble(
         fresh_added,
         memory_quota: quotas.get(&FeedSource::ChannelMemory).copied().unwrap_or(0),
         subs_backlog,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::video::VideoSummary;
+
+    fn card(id: &str) -> Card {
+        Card {
+            video: VideoSummary {
+                id: id.to_string(),
+                ..VideoSummary::default()
+            },
+            published_at_ms: 0,
+        }
+    }
+
+    #[test]
+    fn cards_on_screen_move_behind_the_new_ones_in_order() {
+        let cards: Vec<Card> = ["a", "b", "c", "d", "e"].into_iter().map(card).collect();
+        let on_screen: HashSet<String> = ["a", "c"].into_iter().map(str::to_string).collect();
+        let ids: Vec<String> = shown_last(&cards, &on_screen)
+            .iter()
+            .map(|c| c.id().to_string())
+            .collect();
+        assert_eq!(ids, ["b", "d", "e", "a", "c"]);
     }
 }

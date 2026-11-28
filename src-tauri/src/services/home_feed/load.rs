@@ -49,7 +49,8 @@ const PRIORITY_RETRY_MS: u64 = 30 * 60_000;
 const REFRESH_CONCURRENCY: usize = 3;
 
 /// The related lists of `seed_ids`, merged into graph candidates. A watched or liked seed's list
-/// also teaches co-watch.
+/// also teaches co-watch. `fresh` asks the site anew instead of using the lists held.
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn related_graph(
     service: &HomeFeedService,
     yt: &YoutubeService,
@@ -58,6 +59,7 @@ pub(super) async fn related_graph(
     seeds: &[SeedInput],
     seed_ids: &[String],
     now: u64,
+    fresh: bool,
 ) -> Vec<GraphCandidate> {
     let by_id: HashMap<&str, &SeedInput> =
         seeds
@@ -73,10 +75,13 @@ pub(super) async fn related_graph(
                 map
             });
     let lists = join_all(seed_ids.iter().map(|seed_id| async move {
-        (
-            seed_id,
-            service.inner.related.get(yt, pool, seed_id, now).await,
-        )
+        let related = &service.inner.related;
+        let cards = if fresh {
+            related.get_fresh(yt, pool, seed_id, now).await
+        } else {
+            related.get(yt, pool, seed_id, now).await
+        };
+        (seed_id, cards)
     }))
     .await;
     let mut candidates = Vec::new();
@@ -164,7 +169,8 @@ impl HomeFeedService {
         (searches, failure)
     }
 
-    pub(super) async fn load(&self, app: &AppHandle, generation: u64) {
+    /// `deep` is a refresh the viewer asked for, which fetches the related lists anew.
+    pub(super) async fn load(&self, app: &AppHandle, generation: u64, deep: bool) {
         let yt = app.state::<YoutubeService>();
         let rec = app.state::<RecommendationService>();
         let pool = app.state::<SqlitePool>();
@@ -189,7 +195,7 @@ impl HomeFeedService {
         }
         let ((searches, searches_failure), (related_seeds, related)) = tokio::join!(
             self.search_all(&yt, &wave1, now),
-            self.related_lane(&yt, &rec, &pool, &inputs, now)
+            self.related_lane(&yt, &rec, &pool, &inputs, now, deep)
         );
         let nothing_reached = searches_failure.filter(|_| related.is_empty());
         report_searches(&rec, &searches).await;
@@ -310,6 +316,7 @@ impl HomeFeedService {
         pool: &SqlitePool,
         inputs: &Inputs,
         now: u64,
+        deep: bool,
     ) -> (Vec<SeedInput>, Vec<GraphCandidate>) {
         let disliked = inputs_disliked(inputs);
         let recent = inputs.recent_seeds(&disliked);
@@ -318,7 +325,7 @@ impl HomeFeedService {
             .select_related_seeds(&recent, MAX_RELATED_SEEDS, &long_term)
             .await;
         let all: Vec<SeedInput> = recent.into_iter().chain(long_term).collect();
-        let graph = related_graph(self, yt, rec, pool, &all, &ids, now).await;
+        let graph = related_graph(self, yt, rec, pool, &all, &ids, now, deep).await;
         (all, graph)
     }
 
@@ -532,19 +539,20 @@ impl HomeFeedService {
             .iter()
             .map(|c| c.id().to_string())
             .collect();
-        let candidates: Vec<GraphCandidate> = related_graph(self, yt, rec, pool, &all, &ids, now)
-            .await
-            .into_iter()
-            .filter(|g| {
-                g.card.is_valid()
-                    && !after.inputs.watched.contains(g.card.id())
-                    && !after.inputs.exclusions.hides(&g.card)
-            })
-            .filter(|g| {
-                super::filters::is_recent_suggestion(&g.card, now)
-                    && !on_screen.contains(g.card.id())
-            })
-            .collect();
+        let candidates: Vec<GraphCandidate> =
+            related_graph(self, yt, rec, pool, &all, &ids, now, false)
+                .await
+                .into_iter()
+                .filter(|g| {
+                    g.card.is_valid()
+                        && !after.inputs.watched.contains(g.card.id())
+                        && !after.inputs.exclusions.hides(&g.card)
+                })
+                .filter(|g| {
+                    super::filters::is_recent_suggestion(&g.card, now)
+                        && !on_screen.contains(g.card.id())
+                })
+                .collect();
         let enriched: Vec<Card> = lanes::rank_related(rec, &candidates, followed, &after.taste)
             .await
             .into_iter()

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAppSettingsStore } from "../store/useAppSettingsStore";
 import { shortItemToSummary } from "./shortsQueue";
 import { fetchFeedShorts, visibleFetchedShorts } from "./useShortsFeed";
@@ -22,17 +22,25 @@ function loadShelf(): Promise<ShortVideoSummary[]> {
   return request;
 }
 
-/** The Shorts on Home. It only adds to the page, so a failed load shows nothing. */
-export function useHomeShortsShelf(enabled: boolean): ShortVideoSummary[] {
+/**
+ * The Shorts on Home. It only adds to the page, so a failed load shows nothing. A new
+ * `refreshCount` is Home's refresh: the shelf asks for a new feed and keeps the old one until then.
+ */
+export function useHomeShortsShelf(enabled: boolean, refreshCount = 0): ShortVideoSummary[] {
   const [shorts, setShorts] = useState<ShortVideoSummary[]>([]);
   // Every switch reads as on until settings load, which would fetch a shelf that was turned off.
   const settingsLoaded = useAppSettingsStore((s) => s.loaded);
   const wanted = enabled && settingsLoaded;
+  const loadedForRef = useRef(refreshCount);
 
   useEffect(() => {
     if (!wanted) {
       setShorts([]);
       return;
+    }
+    if (loadedForRef.current !== refreshCount) {
+      loadedForRef.current = refreshCount;
+      forgetHomeShortsShelf();
     }
     let cancelled = false;
     void Promise.all([loadShelf(), loadFinishedShortIds()])
@@ -43,7 +51,7 @@ export function useHomeShortsShelf(enabled: boolean): ShortVideoSummary[] {
     return () => {
       cancelled = true;
     };
-  }, [wanted]);
+  }, [wanted, refreshCount]);
 
   return shorts;
 }

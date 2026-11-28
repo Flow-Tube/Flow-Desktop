@@ -263,20 +263,52 @@ impl RelatedLists {
         seed_id: &str,
         now_ms: u64,
     ) -> Vec<Card> {
+        if let Some(held) = self.held(pool, seed_id, now_ms).await {
+            return held;
+        }
+        self.fetch(yt, pool, seed_id, now_ms).await
+    }
+
+    /// A new list from the site, which answers each request with a different mix; one that times
+    /// out falls back to the list held, so a slow network does not blank the seed's lane.
+    pub async fn get_fresh(
+        &self,
+        yt: &YoutubeService,
+        pool: &SqlitePool,
+        seed_id: &str,
+        now_ms: u64,
+    ) -> Vec<Card> {
+        let fetched = self.fetch(yt, pool, seed_id, now_ms).await;
+        if !fetched.is_empty() {
+            return fetched;
+        }
+        self.held(pool, seed_id, now_ms).await.unwrap_or_default()
+    }
+
+    async fn held(&self, pool: &SqlitePool, seed_id: &str, now_ms: u64) -> Option<Vec<Card>> {
         if let Some((cards, at)) = self.memory.lock().unwrap().get(seed_id)
             && now_ms.saturating_sub(*at) < RELATED_MEMORY_TTL_MS
         {
-            return cards.clone();
+            return Some(cards.clone());
         }
-        if let Ok(stored) = cache::load_related(pool, seed_id, now_ms).await
-            && !stored.is_empty()
-        {
-            self.memory
-                .lock()
-                .unwrap()
-                .insert(seed_id.to_string(), (stored.clone(), now_ms));
-            return stored;
-        }
+        let stored = cache::load_related(pool, seed_id, now_ms)
+            .await
+            .ok()
+            .filter(|stored| !stored.is_empty())?;
+        self.memory
+            .lock()
+            .unwrap()
+            .insert(seed_id.to_string(), (stored.clone(), now_ms));
+        Some(stored)
+    }
+
+    async fn fetch(
+        &self,
+        yt: &YoutubeService,
+        pool: &SqlitePool,
+        seed_id: &str,
+        now_ms: u64,
+    ) -> Vec<Card> {
         let Ok(_permit) = self.permits.acquire().await else {
             return Vec::new();
         };

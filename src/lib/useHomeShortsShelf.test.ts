@@ -23,11 +23,12 @@ const { useAppSettingsStore } = await import("../store/useAppSettingsStore");
 const item = (id: string) => ({ id, title: id, channelName: "c", channelId: null, thumbnailUrl: "" });
 let shelf: ReturnType<typeof useHomeShortsShelf>;
 let root: Root;
-function Probe({ enabled }: { enabled: boolean }) {
-  shelf = useHomeShortsShelf(enabled);
+function Probe({ enabled, refreshCount = 0 }: { enabled: boolean; refreshCount?: number }) {
+  shelf = useHomeShortsShelf(enabled, refreshCount);
   return null;
 }
-const render = (enabled: boolean) => act(async () => root.render(createElement(Probe, { enabled })));
+const render = (enabled: boolean, refreshCount = 0) =>
+  act(async () => root.render(createElement(Probe, { enabled, refreshCount })));
 
 beforeEach(() => {
   forgetHomeShortsShelf();
@@ -75,5 +76,18 @@ describe("useHomeShortsShelf", () => {
     await render(true);
     expect(shelf.map((s) => s.id)).toEqual(["a"]);
     warn.mockRestore();
+  });
+
+  it("asks for a new shelf on Home's refresh and keeps the old one until it comes", async () => {
+    getShortsFeed.mockResolvedValueOnce({ items: [item("old")], continuation: null });
+    await render(true);
+    expect(shelf.map((s) => s.id)).toEqual(["old"]);
+    let answer: (feed: unknown) => void = () => {};
+    getShortsFeed.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
+    await render(true, 1);
+    expect(getShortsFeed).toHaveBeenCalledTimes(2);
+    expect(shelf.map((s) => s.id)).toEqual(["old"]);
+    await act(async () => answer({ items: [item("new")], continuation: null }));
+    expect(shelf.map((s) => s.id)).toEqual(["new"]);
   });
 });

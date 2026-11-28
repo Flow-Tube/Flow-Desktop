@@ -44,6 +44,8 @@ SEARCH
 - The music pages say when you are offline, rate limited or stopped by a bot check, instead of showing the error text from YouTube's servers.
 - Long searches work, such as a full homework question pasted into the search box (#778). Flow refused anything over 200 characters. YouTube searches now take up to 3,000 characters and YouTube Music searches up to 5,000, and any text past that is left out instead of showing an error.
 - Search suggestions stop after 100 characters, where YouTube's suggestion server stops answering, instead of asking it on every key.
+- Settings > Search and history now has three pause switches, all off by default: Pause watch history, Pause search history and Pause search suggestions (#784). They replace Save search history and Search suggestions, and your choices carry over.
+- Pausing search history now stops new searches being saved and keeps your past searches listed until you clear them. Turning saving off used to hide them all.
 
 SUBSCRIPTIONS AND CHANNELS
 - Subscriptions opens on its first 120 videos and adds more as you scroll, instead of drawing up to 1500 cards at once. Coming back to the page returns to where you were.

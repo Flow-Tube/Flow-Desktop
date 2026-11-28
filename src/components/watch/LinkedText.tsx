@@ -10,15 +10,27 @@ function linkedValue(text: string, rich?: RichTextValue | null): RichTextValue {
   return rich && rich.text === text ? rich : linkifyPlain(text);
 }
 
+type FoundRanges = readonly { start: number; end: number }[];
+
 /** `text` with its links: YouTube's own when given, else the ones found in the text itself. */
-export function LinkedText({ text, rich, className }: { text: string; rich?: RichTextValue | null; className?: string }) {
+export function LinkedText({
+  text,
+  rich,
+  found,
+  className,
+}: {
+  text: string;
+  rich?: RichTextValue | null;
+  found?: FoundRanges;
+  className?: string;
+}) {
   const value = useMemo(() => linkedValue(text, rich), [rich, text]);
-  return <RichValue value={value} className={className} />;
+  return <RichValue value={value} found={found} className={className} />;
 }
 
 /** Rich text whose links open and whose emoji load the way the rest of the watch page does. */
-export function RichValue({ value, className }: { value: RichTextValue; className?: string }) {
+export function RichValue({ value, found, className }: { value: RichTextValue; found?: FoundRanges; className?: string }) {
   const onActivate = useRichTargetHandler();
   const imageSrc = useProxyImageSrc();
-  return <RichText value={value} onActivate={onActivate} imageSrc={imageSrc} className={className} />;
+  return <RichText value={value} onActivate={onActivate} imageSrc={imageSrc} found={found} className={className} />;
 }

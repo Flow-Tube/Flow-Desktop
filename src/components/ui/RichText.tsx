@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { richSegments, type RichSegment } from "../../lib/richText";
+import { markFound, richSegments, type RichSegment } from "../../lib/richText";
 import type { RichTarget, RichText as RichTextValue } from "../../types/video";
 
 export interface RichTextProps {
@@ -9,6 +9,8 @@ export interface RichTextProps {
   onActivate: (target: RichTarget) => void;
   /** The source to load a custom emoji's picture from. */
   imageSrc: (url: string) => string;
+  /** Stretches of the text a search found, as offsets into it, drawn marked. */
+  found?: readonly { start: number; end: number }[];
   className?: string;
 }
 
@@ -32,7 +34,12 @@ function linkClass(target: RichTarget, onChip: boolean): string {
   return `${weight} ${underline} ${target.kind === "url" ? "break-all" : ""}`;
 }
 
-function Piece({ segment, onActivate, imageSrc }: { segment: RichSegment; onActivate: RichTextProps["onActivate"]; imageSrc: RichTextProps["imageSrc"] }) {
+function Piece(props: { segment: RichSegment; onActivate: RichTextProps["onActivate"]; imageSrc: RichTextProps["imageSrc"] }) {
+  const piece = <Unmarked {...props} />;
+  return props.segment.found ? <mark className="rounded-sm bg-primary/30 text-inherit">{piece}</mark> : piece;
+}
+
+function Unmarked({ segment, onActivate, imageSrc }: { segment: RichSegment; onActivate: RichTextProps["onActivate"]; imageSrc: RichTextProps["imageSrc"] }) {
   if (segment.emoji) {
     // An icon inserted before a link sits in a one-em box; a custom emoji is drawn a little larger.
     const inserted = segment.emoji.length === 0;
@@ -70,8 +77,8 @@ function Piece({ segment, onActivate, imageSrc }: { segment: RichSegment; onActi
  * Text with its links, custom emoji, inserted link icons, chips and bold, italic or struck-through
  * stretches. Line breaks are kept.
  */
-export function RichText({ value, onActivate, imageSrc, className }: RichTextProps) {
-  const segments = richSegments(value);
+export function RichText({ value, onActivate, imageSrc, found, className }: RichTextProps) {
+  const segments = found?.length ? markFound(richSegments(value), found) : richSegments(value);
   const out: ReactNode[] = [];
   for (let index = 0; index < segments.length; ) {
     const segment = segments[index]!;

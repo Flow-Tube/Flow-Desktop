@@ -8,6 +8,8 @@ export interface RichSegment {
   style?: Pick<RichStyle, "bold" | "italic" | "strikethrough">;
   /** The index of the highlight chip the piece sits on; pieces of one chip are drawn as one. */
   highlight?: number;
+  /** The piece is part of what a search found. */
+  found?: boolean;
 }
 
 // Each pattern's first group is what may precede the match and the second the match itself.
@@ -125,6 +127,33 @@ function markHighlights(segments: RichSegment[], highlights: NonNullable<RichTex
       const piece: RichSegment = { ...segment, text: segment.text.slice(from - start, to - start) };
       const on = ranges.findIndex((range) => range.start <= from && range.end >= to);
       if (on >= 0) piece.highlight = on;
+      pieces.push(piece);
+    }
+  }
+  return pieces;
+}
+
+/** Cuts text and link pieces where a search's find starts or ends and marks the ones inside it; an emoji stays whole. */
+export function markFound(segments: RichSegment[], ranges: readonly { start: number; end: number }[]): RichSegment[] {
+  if (ranges.length === 0) return segments;
+  const pieces: RichSegment[] = [];
+  let offset = 0;
+  for (const segment of segments) {
+    const start = offset;
+    const end = offset + segment.text.length;
+    offset = end;
+    if (segment.emoji || start === end) {
+      pieces.push(segment);
+      continue;
+    }
+    const edges = new Set([start, end]);
+    for (const range of ranges) for (const edge of [range.start, range.end]) if (edge > start && edge < end) edges.add(edge);
+    const points = [...edges].sort((a, b) => a - b);
+    for (let index = 0; index < points.length - 1; index++) {
+      const from = points[index]!;
+      const to = points[index + 1]!;
+      const piece: RichSegment = { ...segment, text: segment.text.slice(from - start, to - start) };
+      if (ranges.some((range) => range.start <= from && range.end >= to)) piece.found = true;
       pieces.push(piece);
     }
   }

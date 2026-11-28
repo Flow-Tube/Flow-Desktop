@@ -3,13 +3,17 @@ import { Loader2, X } from "lucide-react";
 import { Button } from "../ui/Button";
 import { Chip } from "../ui/Chip";
 import { LoadMoreRow } from "../ui/LoadMoreRow";
+import { SearchInput } from "../ui/SearchInput";
 import { ToggleSwitch } from "../ui/ToggleSwitch";
 import { CommentItem } from "./CommentItem";
+import { CommentSearchTerms } from "./commentSearchTerms";
 import { RepliesToggle, ReplyThread, ThreadStem, threadContentStart, threadCreatorAvatar } from "./CommentThread";
 import { useVideoComments } from "../../lib/useVideoComments";
 import { useTimedComments } from "../../lib/useTimedComments";
 import { useTimedFollow } from "../../lib/useTimedFollow";
 import { useBoolPref } from "../../lib/usePreference";
+import { useDebounce } from "../../lib/useDebounce";
+import { commentMatches, parseCommentQuery, threadMatches } from "../../lib/commentSearch";
 import {
   COMMENT_FILTERS,
   commentSortFor,
@@ -55,7 +59,28 @@ export function CommentsSection({
     if (isTimed) return timedCommentsInOrder(timed.comments, duration);
     return filtersShown && filter === "oldest" ? oldestFirst(thread.comments) : thread.comments;
   }, [duration, filter, filtersShown, isTimed, thread.comments, timed.comments]);
-  const { anchorId, pauseForReading, pauseForReplies } = useTimedFollow(listRef, comments, isTimed && follow);
+
+  const [query, setQuery] = useState("");
+  useEffect(() => setQuery(""), [videoId, postId]);
+  const debouncedQuery = useDebounce(query, 200);
+  const terms = useMemo(() => parseCommentQuery(debouncedQuery), [debouncedQuery]);
+  const searching = terms.length > 0;
+  const shown = useMemo(
+    () => (searching ? comments.filter((c) => threadMatches(c, thread.replies[c.id], terms)) : comments),
+    [comments, searching, terms, thread.replies],
+  );
+  // Bumped whenever the search or the list changes, which stops a Keep searching still reading.
+  const searchRun = useRef(0);
+  useEffect(() => {
+    searchRun.current += 1;
+  }, [terms, videoId, postId, filter]);
+  useEffect(() => () => void (searchRun.current += 1), []);
+  const keepSearching = () => {
+    const run = ++searchRun.current;
+    void thread.searchMore((c) => commentMatches(c, terms), () => searchRun.current !== run);
+  };
+
+  const { anchorId, pauseForReading, pauseForReplies } = useTimedFollow(listRef, shown, isTimed && follow);
 
   const chooseFilter = (next: CommentFilter) => {
     setFilter(next);
@@ -74,6 +99,8 @@ export function CommentsSection({
   const hasMore = isTimed ? timed.hasMore : Boolean(thread.nextPageToken);
   const loadingMore = isTimed ? timed.loading : thread.loadingMore;
   const emptyText = isTimed ? getString("comments_no_timed") : getString("watch_no_comments");
+  // Oldest that stopped at its page limit already says how far it read.
+  const everyCommentRead = !thread.nextPageToken && !(filter === "oldest" && thread.oldestCapped);
   // The Timed list scrolls by itself, so following it never moves the page or the player.
   const listClass = fill ? "min-h-0 flex-1 overflow-y-auto pe-1" : isTimed ? "max-h-[70vh] overflow-y-auto pe-1" : "";
 
@@ -108,6 +135,28 @@ export function CommentsSection({
         </div>
       )}
 
+      {!loading && !thread.disabled && (comments.length > 0 || query) && (
+        <div className="space-y-2">
+          <SearchInput
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape" && query) {
+                event.stopPropagation();
+                setQuery("");
+              }
+            }}
+            placeholder={getString("comments_search_placeholder")}
+            aria-label={getString("comments_search_placeholder")}
+          />
+          {searching && (
+            <p className="text-xs text-chrome-neutral-400">
+              {getPlural("comments_search_matches", shown.length, comments.length)}
+            </p>
+          )}
+        </div>
+      )}
+
       {oldestNote && <p className="-mt-2 text-xs text-chrome-neutral-400">{oldestNote}</p>}
 
       {isTimed && (
@@ -124,102 +173,130 @@ export function CommentsSection({
       ) : comments.length === 0 && !(isTimed && hasMore) ? (
         <p className="text-sm text-chrome-neutral-500">{emptyText}</p>
       ) : (
-        <div
-          ref={listRef}
-          className={`space-y-6 ${listClass}`}
-          onWheel={pauseForReading}
-          onPointerDown={pauseForReading}
-        >
-          <div className="space-y-4">
-            {comments.map((c, idx) => (
-              <div
-                key={c.id || `comment-${idx}`}
-                data-comment-id={c.id}
-                className={`flex flex-col rounded-lg transition-colors duration-200 ease-out ${
-                  c.id === anchorId ? "bg-surface-container-high" : ""
-                }`}
-              >
-                <div className="relative">
-                  {thread.expanded[c.id] && Boolean(thread.replies[c.id]?.length) && <ThreadStem />}
-                  <CommentItem
-                    comment={c}
-                    textExpanded={Boolean(thread.textExpanded[c.id])}
-                    onExpandText={() => thread.toggleFlag("textExpanded", c.id)}
-                  >
-                    {/* YouTube's Timed list gives no way to load a comment's replies, so nothing to open. */}
-                    {(c.replyCount ?? 0) > 0 && (c.continuationToken || thread.replies[c.id]?.length) && (
-                      <RepliesToggle
-                        count={c.replyCount ?? 0}
-                        open={Boolean(thread.expanded[c.id])}
-                        loading={Boolean(thread.repliesLoading[c.id]) && !thread.replies[c.id]?.length}
-                        creatorAvatar={c.creatorReplyThumbnail}
-                        creatorName={c.creatorReplyName}
-                        onClick={() => {
-                          if (!thread.expanded[c.id]) pauseForReplies();
-                          void thread.toggleReplies(c.id, c.continuationToken);
+        <CommentSearchTerms.Provider value={terms}>
+          <div
+            ref={listRef}
+            className={`space-y-6 ${listClass}`}
+            onWheel={pauseForReading}
+            onPointerDown={pauseForReading}
+          >
+            {searching && shown.length === 0 && (
+              <div className="space-y-1 text-sm">
+                <p className="text-chrome-neutral-200">{getString("comments_search_none")}</p>
+                <p className="text-chrome-neutral-400">{getString("comments_search_note")}</p>
+              </div>
+            )}
+            <div className="space-y-4">
+              {shown.map((c, idx) => (
+                <div
+                  key={c.id || `comment-${idx}`}
+                  data-comment-id={c.id}
+                  className={`flex flex-col rounded-lg transition-colors duration-200 ease-out ${
+                    c.id === anchorId ? "bg-surface-container-high" : ""
+                  }`}
+                >
+                  <div className="relative">
+                    {thread.expanded[c.id] && Boolean(thread.replies[c.id]?.length) && <ThreadStem />}
+                    <CommentItem
+                      comment={c}
+                      textExpanded={Boolean(thread.textExpanded[c.id])}
+                      onExpandText={() => thread.toggleFlag("textExpanded", c.id)}
+                    >
+                      {/* YouTube's Timed list gives no way to load a comment's replies, so nothing to open. */}
+                      {(c.replyCount ?? 0) > 0 && (c.continuationToken || thread.replies[c.id]?.length) && (
+                        <RepliesToggle
+                          count={c.replyCount ?? 0}
+                          open={Boolean(thread.expanded[c.id])}
+                          loading={Boolean(thread.repliesLoading[c.id]) && !thread.replies[c.id]?.length}
+                          creatorAvatar={c.creatorReplyThumbnail}
+                          creatorName={c.creatorReplyName}
+                          onClick={() => {
+                            if (!thread.expanded[c.id]) pauseForReplies();
+                            void thread.toggleReplies(c.id, c.continuationToken);
+                          }}
+                        />
+                      )}
+                    </CommentItem>
+                  </div>
+
+                  {thread.expanded[c.id] &&
+                    (thread.replies[c.id]?.length ? (
+                      <ReplyThread
+                        replies={thread.replies[c.id]!}
+                        hasMore={Boolean(thread.repliesNextToken[c.id])}
+                        loadingMore={Boolean(thread.repliesLoading[c.id])}
+                        isUnfolded={(id) => Boolean(thread.unfolded[id])}
+                        onUnfold={(id) => thread.toggleFlag("unfolded", id)}
+                        onLoadMore={() => {
+                          const token = thread.repliesNextToken[c.id];
+                          if (token) void thread.loadReplies(c.id, token);
                         }}
+                        creatorAvatar={threadCreatorAvatar(c, thread.replies[c.id])}
+                        isTextExpanded={(id) => Boolean(thread.textExpanded[id])}
+                        onExpandText={(id) => thread.toggleFlag("textExpanded", id)}
                       />
-                    )}
-                  </CommentItem>
+                    ) : (
+                      thread.repliesLoading[c.id] && (
+                        <div
+                          className="flex items-center gap-2 py-2 text-xs text-chrome-neutral-400"
+                          style={{ paddingInlineStart: threadContentStart(1) }}
+                        >
+                          <Loader2 className="animate-spin text-chrome-neutral-400" size={14} />
+                          <span>{getString("watch_loading_replies")}</span>
+                        </div>
+                      )
+                    ))}
                 </div>
+              ))}
+            </div>
 
-                {thread.expanded[c.id] &&
-                  (thread.replies[c.id]?.length ? (
-                    <ReplyThread
-                      replies={thread.replies[c.id]!}
-                      hasMore={Boolean(thread.repliesNextToken[c.id])}
-                      loadingMore={Boolean(thread.repliesLoading[c.id])}
-                      isUnfolded={(id) => Boolean(thread.unfolded[id])}
-                      onUnfold={(id) => thread.toggleFlag("unfolded", id)}
-                      onLoadMore={() => {
-                        const token = thread.repliesNextToken[c.id];
-                        if (token) void thread.loadReplies(c.id, token);
-                      }}
-                      creatorAvatar={threadCreatorAvatar(c, thread.replies[c.id])}
-                      isTextExpanded={(id) => Boolean(thread.textExpanded[id])}
-                      onExpandText={(id) => thread.toggleFlag("textExpanded", id)}
-                    />
-                  ) : (
-                    thread.repliesLoading[c.id] && (
-                      <div
-                        className="flex items-center gap-2 py-2 text-xs text-chrome-neutral-400"
-                        style={{ paddingInlineStart: threadContentStart(1) }}
-                      >
-                        <Loader2 className="animate-spin text-chrome-neutral-400" size={14} />
-                        <span>{getString("watch_loading_replies")}</span>
-                      </div>
-                    )
-                  ))}
+            {searching && !isTimed ? (
+              <div className="flex flex-col items-center gap-2 pt-2 text-center">
+                {thread.searching || thread.loadingMore ? (
+                  <div className="flex items-center gap-2 text-sm text-chrome-neutral-400">
+                    <Loader2 className="animate-spin" size={16} />
+                    <span>{getString("comments_search_reading")}</span>
+                  </div>
+                ) : thread.nextPageToken ? (
+                  <>
+                    {thread.loadMoreFailed && (
+                      <p className="text-sm text-chrome-neutral-400">{getString("comments_load_more_failed")}</p>
+                    )}
+                    <Button variant="outline" onClick={keepSearching} className="px-6 font-semibold">
+                      {getString("comments_search_keep")}
+                    </Button>
+                  </>
+                ) : (
+                  everyCommentRead && <p className="text-sm text-chrome-neutral-400">{getString("comments_search_all_read")}</p>
+                )}
               </div>
-            ))}
+            ) : isTimed ? (
+              (hasMore || loadingMore) && (
+                <div className="flex justify-center pt-4">
+                  <Button variant="outline" onClick={timed.loadMore} disabled={loadingMore} className="px-6 font-semibold">
+                    {loadingMore ? (
+                      <>
+                        <Loader2 className="animate-spin text-chrome-neutral-400" size={16} />
+                        <span>{getString("watch_loading_more_comments")}</span>
+                      </>
+                    ) : (
+                      getString("watch_load_more_comments")
+                    )}
+                  </Button>
+                </div>
+              )
+            ) : (
+              <LoadMoreRow
+                hasMore={hasMore}
+                loading={loadingMore}
+                failed={thread.loadMoreFailed}
+                onLoadMore={() => void thread.loadMore()}
+                loadingText={getString("watch_loading_more_comments")}
+                failedText={getString("comments_load_more_failed")}
+              />
+            )}
           </div>
-
-          {isTimed ? (
-            (hasMore || loadingMore) && (
-              <div className="flex justify-center pt-4">
-                <Button variant="outline" onClick={timed.loadMore} disabled={loadingMore} className="px-6 font-semibold">
-                  {loadingMore ? (
-                    <>
-                      <Loader2 className="animate-spin text-chrome-neutral-400" size={16} />
-                      <span>{getString("watch_loading_more_comments")}</span>
-                    </>
-                  ) : (
-                    getString("watch_load_more_comments")
-                  )}
-                </Button>
-              </div>
-            )
-          ) : (
-            <LoadMoreRow
-              hasMore={hasMore}
-              loading={loadingMore}
-              failed={thread.loadMoreFailed}
-              onLoadMore={() => void thread.loadMore()}
-              loadingText={getString("watch_loading_more_comments")}
-              failedText={getString("comments_load_more_failed")}
-            />
-          )}
-        </div>
+        </CommentSearchTerms.Provider>
       )}
     </div>
   );

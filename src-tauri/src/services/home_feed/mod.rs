@@ -534,6 +534,15 @@ impl HomeFeedService {
         });
     }
 
+    /// The content country changed: the next open builds the feed anew, and its searches and chip
+    /// pages are asked for again in the new country. Related lists are kept, since the site picks
+    /// those by the network's location whatever country a request names.
+    pub fn forget_country_pages(&self) {
+        self.inner.feed.lock().unwrap().loaded_at = 0;
+        self.inner.search_pages.reset();
+        self.inner.chip_results.lock().unwrap().clear();
+    }
+
     /// Forgets the feed and its caches, as a taste reset does, so the next open is ranked anew.
     pub async fn clear(&self, app: &AppHandle) {
         {
@@ -646,5 +655,13 @@ mod tests {
         );
         assert_eq!(telling_failure(["extractor", "network"]), "network");
         assert_eq!(telling_failure([]), NETWORK_FAILED);
+    }
+
+    #[test]
+    fn a_new_content_country_builds_the_next_feed_anew() {
+        let home = HomeFeedService::new();
+        home.inner.feed.lock().unwrap().loaded_at = now_ms();
+        home.forget_country_pages();
+        assert_eq!(home.inner.feed.lock().unwrap().loaded_at, 0);
     }
 }

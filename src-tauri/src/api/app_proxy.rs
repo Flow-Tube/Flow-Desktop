@@ -41,6 +41,12 @@ const DEFAULT_PORT: u16 = 8080;
 static CONFIG: RwLock<Option<ProxyConfig>> = RwLock::new(None);
 static SYSTEM: LazyLock<Matcher> = LazyLock::new(Matcher::from_system);
 
+/// Whether `key` changes where requests leave from, as opposed to how they sign in.
+#[must_use]
+pub fn changes_route(key: &str) -> bool {
+    [ENABLED_SETTING, TYPE_SETTING, HOST_SETTING, PORT_SETTING].contains(&key)
+}
+
 /// Whether `key` is one of the proxy settings; if so, the new value is in force.
 pub fn apply_setting(key: &str, value: Option<&str>) -> bool {
     let mut config = CONFIG
@@ -165,6 +171,17 @@ fn is_local_host(host: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_the_route_settings_change_where_requests_leave_from() {
+        assert!(changes_route(ENABLED_SETTING));
+        assert!(changes_route(HOST_SETTING));
+        assert!(changes_route(PORT_SETTING));
+        assert!(changes_route(TYPE_SETTING));
+        assert!(!changes_route(USERNAME_SETTING));
+        assert!(!changes_route(PASSWORD_SETTING));
+        assert!(!changes_route("trending_region"));
+    }
 
     fn config(kind: &str, host: &str, port: &str) -> ProxyConfig {
         ProxyConfig {

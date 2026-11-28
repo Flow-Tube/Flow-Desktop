@@ -27,7 +27,7 @@ impl InnertubeClient {
         }
     }
 
-    /// Forget the identity in use, for the Diagnostics reset.
+    /// Forget the identity in use, for the Diagnostics reset and a new proxy route.
     pub fn reset_visitor_identity(&self) {
         self.identity.forget();
     }
